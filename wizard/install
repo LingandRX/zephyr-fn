@@ -1,0 +1,24 @@
+[
+  {
+    "stepTitle": "基本设置",
+    "items": [
+      {
+        "type": "tips",
+        "helpText": "订阅管理：记录订阅、费用与到期时间。数据保存在本机，支持每日自动备份到共享目录 subscription/backups。"
+      },
+      {
+        "type": "text",
+        "field": "wizard_reminder_days",
+        "label": "到期提醒提前天数",
+        "initValue": "7",
+        "rules": [
+          {
+            "required": true,
+            "pattern": "^[0-9]+$",
+            "message": "请输入数字"
+          }
+        ]
+      }
+    ]
+  }
+]

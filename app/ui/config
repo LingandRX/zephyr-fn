@@ -1,0 +1,14 @@
+{
+  ".url": {
+    "subscription.main": {
+      "title": "订阅管理",
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "protocol": "",
+      "gatewayPrefix": "/app/subscription",
+      "gatewaySocket": "app.sock",
+      "url": "/app/subscription/",
+      "allUsers": true
+    }
+  }
+}

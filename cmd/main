@@ -1,0 +1,55 @@
+#!/bin/bash
+# 订阅管理 - 服务生命周期控制 (start/stop/status)
+
+PYTHON_BIN="${PYTHON_BIN:-/var/apps/python312/target/bin/python3}"
+BACKEND_DIR="${TRIM_APPDEST}/backend"
+DATA_DIR="${TRIM_PKGVAR}"
+PID_FILE="${TRIM_PKGVAR}/server.pid"
+LOG_DIR="${TRIM_PKGVAR}/logs"
+ERR_LOG="${TRIM_TEMP_LOGFILE:-/tmp/subscription-error.log}"
+
+if [ ! -x "$PYTHON_BIN" ]; then
+  echo "Python 运行时不可用: $PYTHON_BIN (请确认 install_dep_apps=python312)" > "$ERR_LOG"
+  exit 1
+fi
+
+start_server() {
+  mkdir -p "$DATA_DIR" "$LOG_DIR"
+  if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+    echo "subscription already running"
+    exit 0
+  fi
+  cd "$BACKEND_DIR" || { echo "backend 目录不存在: $BACKEND_DIR" > "$ERR_LOG"; exit 1; }
+  nohup "$PYTHON_BIN" "$BACKEND_DIR/server.py" >> "$LOG_DIR/server.log" 2>&1 &
+  echo $! > "$PID_FILE"
+  # 等待统一网关 socket 出现
+  for _ in $(seq 1 30); do
+    [ -S "${TRIM_APPDEST}/app.sock" ] && break
+    sleep 0.5
+  done
+  [ -S "${TRIM_APPDEST}/app.sock" ] || echo "warning: app.sock 未在预期时间内创建, 请查看 $LOG_DIR/server.log" > "$ERR_LOG"
+}
+
+case "$1" in
+  start)
+    start_server
+    ;;
+  stop)
+    if [ -f "$PID_FILE" ]; then
+      kill "$(cat "$PID_FILE")" 2>/dev/null
+      rm -f "$PID_FILE"
+    fi
+    pkill -f "$BACKEND_DIR/server.py" 2>/dev/null
+    rm -f "${TRIM_APPDEST}/app.sock"
+    ;;
+  status)
+    if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+      exit 0
+    fi
+    exit 3
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|status}" > "$ERR_LOG"
+    exit 1
+    ;;
+esac

@@ -1,0 +1,7 @@
+#!/bin/bash
+# 升级完成后: 确保数据库 schema 为最新 (幂等)
+set -e
+PYTHON_BIN="/var/apps/python312/target/bin/python3"
+cd "${TRIM_APPDEST}/backend"
+"$PYTHON_BIN" server.py --init-db
+exit 0

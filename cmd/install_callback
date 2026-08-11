@@ -1,0 +1,8 @@
+#!/bin/bash
+# 安装完成后: 初始化数据目录与数据库 (幂等)
+set -e
+PYTHON_BIN="/var/apps/python312/target/bin/python3"
+mkdir -p "${TRIM_PKGVAR}/logs" "${TRIM_PKGVAR}/backups"
+cd "${TRIM_APPDEST}/backend"
+"$PYTHON_BIN" server.py --init-db
+exit 0
