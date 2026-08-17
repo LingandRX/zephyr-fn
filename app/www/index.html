@@ -8,24 +8,49 @@
 </head>
 <body>
 <div class="app">
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <span class="brand-logo">¥</span>
+      <img class="brand-logo" src="images/icon_64.png" alt="订阅管理" />
       <span class="brand-name">订阅管理</span>
     </div>
     <nav class="nav">
-      <button class="nav-item active" data-view="subscriptions">📋 订阅列表</button>
-      <button class="nav-item" data-view="calendar">📅 日历</button>
-      <button class="nav-item" data-view="statistics">📊 统计</button>
-      <button class="nav-item" data-view="settings">⚙️ 设置</button>
+      <button class="nav-item active" data-view="subscriptions" title="订阅列表">
+        <span class="nav-icon" aria-hidden="true">📋</span>
+        <span class="nav-label">订阅列表</span>
+      </button>
+      <button class="nav-item" data-view="calendar" title="日历">
+        <span class="nav-icon" aria-hidden="true">📅</span>
+        <span class="nav-label">日历</span>
+      </button>
+      <button class="nav-item" data-view="statistics" title="统计">
+        <span class="nav-icon" aria-hidden="true">📊</span>
+        <span class="nav-label">统计</span>
+      </button>
+      <button class="nav-item" data-view="settings" title="设置">
+        <span class="nav-icon" aria-hidden="true">⚙️</span>
+        <span class="nav-label">设置</span>
+      </button>
     </nav>
     <div class="sidebar-footer">
-      <button class="btn btn-primary btn-block" id="btn-new">+ 新增订阅</button>
+      <button class="btn btn-primary btn-block btn-new-sub" id="btn-new" title="新增订阅">
+        <span class="btn-icon">+</span>
+        <span class="btn-label">新增订阅</span>
+      </button>
+      <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="收起导航" title="收起导航" aria-expanded="true">
+        <svg class="toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+        <span class="toggle-label">收起导航</span>
+      </button>
     </div>
   </aside>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
   <main class="main">
     <header class="topbar">
+      <button class="hamburger" id="hamburger" type="button" aria-label="打开菜单" aria-expanded="false" aria-controls="sidebar">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
       <h1 id="view-title">订阅列表</h1>
       <div class="topbar-actions">
         <button class="btn" id="btn-backup">💾 立即备份</button>
@@ -51,15 +76,17 @@
         </select>
       </div>
       <div class="card">
-        <table class="table" id="sub-table">
-          <thead>
-            <tr>
-              <th>订阅</th><th>金额</th><th>周期</th><th>下次扣费</th>
-              <th>剩余</th><th>状态</th><th class="ta-r">操作</th>
-            </tr>
-          </thead>
-          <tbody id="sub-tbody"></tbody>
-        </table>
+        <div class="table-scroll">
+          <table class="table" id="sub-table">
+            <thead>
+              <tr>
+                <th>订阅</th><th>金额</th><th>周期</th><th>下次扣费</th>
+                <th>剩余</th><th>状态</th><th class="ta-r">操作</th>
+              </tr>
+            </thead>
+            <tbody id="sub-tbody"></tbody>
+          </table>
+        </div>
         <div id="sub-empty" class="empty hidden">还没有订阅，点击右上角「新增订阅」开始记录</div>
       </div>
     </section>
@@ -87,10 +114,12 @@
         </div>
         <div class="card">
           <h3>分类统计</h3>
-          <table class="table">
-            <thead><tr><th>分类</th><th>月支出</th><th>年支出</th><th>占比</th></tr></thead>
-            <tbody id="cat-tbody"></tbody>
-          </table>
+          <div class="table-scroll">
+            <table class="table">
+              <thead><tr><th>分类</th><th>月支出</th><th>年支出</th><th>占比</th></tr></thead>
+              <tbody id="cat-tbody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
@@ -174,10 +203,12 @@
           <label class="btn file-btn">导入 JSON<input type="file" id="file-import-json" accept=".json" hidden /></label>
           <label class="btn file-btn">导入 CSV<input type="file" id="file-import-csv" accept=".csv" hidden /></label>
         </div>
-        <table class="table" id="backup-table">
-          <thead><tr><th>备份文件</th><th>大小</th></tr></thead>
-          <tbody id="backup-tbody"></tbody>
-        </table>
+        <div class="table-scroll">
+          <table class="table" id="backup-table">
+            <thead><tr><th>备份文件</th><th>大小</th></tr></thead>
+            <tbody id="backup-tbody"></tbody>
+          </table>
+        </div>
         <div class="muted" id="save-hint"></div>
       </div>
     </section>

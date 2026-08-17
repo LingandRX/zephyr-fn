@@ -85,10 +85,17 @@ function render() {
 }
 
 function renderNav() {
-  $$(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.view === state.view));
+  $$(".nav-item").forEach((b) => {
+    const isActive = b.dataset.view === state.view;
+    b.classList.toggle("active", isActive);
+    b.setAttribute("aria-current", isActive ? "page" : "false");
+  });
   const titles = { subscriptions: "订阅列表", calendar: "日历", statistics: "统计", settings: "设置" };
   $("#view-title").textContent = titles[state.view];
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${state.view}`));
+  // 仅在订阅列表和日历视图下显示新增按钮
+  const footerViews = ["subscriptions", "calendar"];
+  $("#btn-new")?.classList.toggle("hidden", !footerViews.includes(state.view));
 }
 
 function renderStatsCards() {
@@ -346,7 +353,12 @@ async function refresh() {
 /* ---------------- 事件绑定 ---------------- */
 
 function bindEvents() {
-  $$(".nav-item").forEach((b) => b.onclick = () => { state.view = b.dataset.view; renderNav(); if (b.dataset.view === "calendar") renderCalendar(); if (b.dataset.view === "statistics") refresh(); });
+  $$(".nav-item").forEach((b) => b.onclick = () => {
+    state.view = b.dataset.view; renderNav();
+    if (b.dataset.view === "calendar") renderCalendar();
+    if (b.dataset.view === "statistics") refresh();
+    closeMobileSidebar();
+  });
 
   $("#btn-new").onclick = () => openModal(null);
   $("#modal-close").onclick = () => $("#modal").classList.add("hidden");
@@ -459,9 +471,76 @@ function esc(s) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+/* ---------------- 侧边栏交互 ---------------- */
+
+let closeMobileSidebar = () => {};
+
+function initSidebar() {
+  const sidebar = $(".sidebar");
+  const toggle = $("#sidebar-toggle");
+  const overlay = $("#sidebar-overlay");
+  const hamburger = $("#hamburger");
+
+  const syncSidebarState = () => {
+    const collapsed = sidebar.classList.contains("collapsed");
+    const open = sidebar.classList.contains("open");
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", String(!collapsed));
+      const label = collapsed ? "展开侧边栏" : "收起导航";
+      toggle.setAttribute("aria-label", label);
+      toggle.setAttribute("title", label);
+      const labelEl = toggle.querySelector(".toggle-label");
+      if (labelEl) labelEl.textContent = label;
+    }
+    if (hamburger) {
+      hamburger.setAttribute("aria-expanded", String(open));
+      hamburger.setAttribute("aria-label", open ? "关闭菜单" : "打开菜单");
+    }
+  };
+
+  const setMobileSidebarOpen = (open) => {
+    sidebar.classList.toggle("open", open);
+    if (overlay) overlay.classList.toggle("open", open);
+    syncSidebarState();
+  };
+
+  // 桌面端折叠（恢复 localStorage 状态）
+  if (localStorage.getItem("sidebar-collapsed") === "true") {
+    sidebar.classList.add("collapsed");
+  }
+  syncSidebarState();
+  if (toggle) {
+    toggle.onclick = () => {
+      sidebar.classList.toggle("collapsed");
+      localStorage.setItem("sidebar-collapsed", sidebar.classList.contains("collapsed"));
+      syncSidebarState();
+    };
+  }
+
+  // 移动端抽屉
+  if (hamburger) {
+    hamburger.onclick = () => setMobileSidebarOpen(!sidebar.classList.contains("open"));
+  }
+  if (overlay) {
+    overlay.onclick = () => setMobileSidebarOpen(false);
+  }
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && sidebar.classList.contains("open")) {
+      setMobileSidebarOpen(false);
+      hamburger?.focus();
+    }
+  });
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 860) setMobileSidebarOpen(false);
+  });
+
+  closeMobileSidebar = () => setMobileSidebarOpen(false);
+}
+
 /* ---------------- 启动 ---------------- */
 
 bindEvents();
+initSidebar();
 loadAll().catch((err) => toast(err.message, "err"));
 setInterval(() => {
   if (document.visibilityState === "visible") refresh().catch(() => {});
