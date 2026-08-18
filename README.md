@@ -4,6 +4,9 @@
 
 后端参考 [zephyr-tarui](https://github.com/LingandRX/zephyr-tarui)（Tauri + Rust 版订阅管理）的数据模型与业务逻辑，用 **Python 标准库** 重写（零第三方依赖），并针对飞牛 fnOS 平台做了适配：统一网关接入、NAS 多用户数据隔离、data-share 共享目录备份。
 
+## 官方开发文档
+<https://github.com/ckcoding/fnnas-docs>
+
 ## 功能
 
 - 订阅管理：新增 / 编辑 / 删除 / 续费（推进到下一期）
@@ -20,7 +23,7 @@
 ## 技术栈
 
 - 后端：Python 3（标准库：http.server / sqlite3 / smtplib / urllib，无第三方依赖）
-- 前端：原生 HTML + CSS + JavaScript（无构建步骤）
+- 前端：Vue 3 + Vite（默认，`frontend/`）；另保留原生 HTML/CSS/JS 零构建版（`app/www/`）作对照
 - 数据库：SQLite（WAL 模式，版本化迁移）
 - 接入方式：飞牛统一网关（Unix Socket + 登录态校验，`X-Trim-Userid` 隔离用户数据）
 
@@ -48,21 +51,59 @@
 │   │   ├── email_sender.py   # SMTP 邮件
 │   │   ├── pushplus.py       # PushPlus 推送
 │   │   └── scheduler.py      # 每小时提醒 + 每日备份
-│   ├── www/                  # 前端（index.html / style.css / app.js）
+│   ├── www/                  # 前端产物目录（git 基线为 vanilla 原生版；打包前由 tools/build.sh 覆盖为 Vue 产物）
 │   └── ui/
 │       ├── config            # 统一网关入口（/app/subscription）
 │       └── images/           # 入口图标
-├── tools/gen_icons.py        # 图标生成脚本（纯 Python）
-└── tests/test_backend.py     # 单元测试（15 个）
+├── frontend/                 # Vue 3 + Vite 前端（默认前端，架构与开发详见 frontend/README.md）
+├── dev.sh                    # 一键本地预览（Vue 或 vanilla）
+├── tools/
+│   ├── gen_icons.py          # 图标生成脚本（纯 Python）
+│   └── build.sh              # 打包前构建：Vite build → 同步 app/www → 清理 __pycache__
+└── tests/test_backend.py     # 单元测试（17 个）
 ```
+
+## 前端架构
+
+Vue 前端采用 **BaseLayout（公共页面壳）+ Sub Page（子页面）** 结构：
+
+```text
+frontend/src/
+├── layouts/BaseLayout.vue    # 公共壳：侧边栏（导航/新增/折叠按钮）+ 顶栏 + 提醒横幅 + Toast
+│                              #   主区为滚动容器 .page-host，<component :is> + keep-alive 切换 Sub Page
+└── views/                    # Sub Pages，各自只管内容，不重复写壳
+    ├── SubscriptionsView.vue   # 订阅列表（统计卡/筛选/表格/增删改续费/弹窗）
+    ├── CalendarView.vue        # 日历
+    ├── StatisticsView.vue      # 统计
+    └── SettingsView.vue        # 设置
+```
+
+- 切换导航 = 切换 BaseLayout 下的 Sub Page（keep-alive 保留各页状态，如日历月份、列表数据）；
+- 外壳锁死视口（`height:100vh`），**Sub Page 在主窗口内滚动**（`.page-host` 内部 `overflow-y:auto`），
+  顶栏/侧边栏折叠按钮始终可见；滚动条已隐藏（Chromium WebView 与 Firefox 双兼容）；
+- 设计令牌集中管理（`src/styles/tokens.css`）：色板/间距/字号/圆角/阴影/z-index，页面样式禁止魔法数字；
+- 状态类由 `src/ui.js` 轻量 store 管理（未引入 vue-router / 状态库，保持轻依赖）；
+- 新增 Sub Page 三步：`views/` 新建组件 → `layouts/BaseLayout.vue` 的 `NAV`/`PAGES` 注册 → 跑 `npm run check:views` 回归。
 
 ## 本地开发
 
-```bash
-# 初始化数据库并启动服务（TCP 模式，浏览器访问 http://127.0.0.1:8000）
-python3 app/backend/server.py --init-db --db ./data/subscription.db
-python3 app/backend/server.py --http 8000 --db ./data/subscription.db --www app/www --share ./data/backups
+前端有两套实现，默认使用 **Vue 3 版**（`frontend/`），原生零构建版（`app/www/`）保留作对照：
 
+```bash
+# 一键预览（自动：初始化数据库 -> 构建 Vue 前端 -> 启动服务）
+./dev.sh
+# 默认地址 http://127.0.0.1:8000/app/subscription/
+# FRONTEND=vanilla ./dev.sh  可预览原生版；PORT=9000 / DB=/tmp/t.db 可自定义
+
+# 开发 Vue 前端（HMR，代理 /api 到后端 5001）
+python3 app/backend/server.py --http 5001 --db ./data/subscription.db --www app/www --share ./data/backups
+cd frontend && npm install && npm run dev   # http://localhost:5173/
+
+# 前端回归检查（BaseLayout/Sub Page 隔离、折叠按钮、滚动容器断言）
+cd frontend && npm run check:views
+
+# 手动启动后端（TCP 模式）
+python3 app/backend/server.py --http 8000 --db ./data/subscription.db --www app/www --share ./data/backups
 # 网关模式（Unix Socket）
 python3 app/backend/server.py --uds /tmp/app.sock --db ./data/subscription.db --www app/www --share ./data/backups
 
@@ -75,13 +116,18 @@ python3 -m unittest discover -s tests -v
 ## 打包与安装（飞牛 fnOS）
 
 ```bash
-# 1. 生成图标（如未生成）
+# 1. 前置：构建 Vue 前端并同步到 app/www（同时清理 __pycache__）
+./tools/build.sh
+
+# 2. 生成图标（如未生成）
 python3 tools/gen_icons.py
 
-# 2. 打包（需安装 fnpack，见 https://developer.fnnas.com/docs/cli/fnpack/）
+# 3. 打包（需安装 fnpack，见 https://developer.fnnas.com/docs/cli/fnpack/）
 fnpack build
+# 产出 subscription.fpk；注意：打包前务必先运行 ./tools/build.sh，
+# 否则 app/www 不是 Vue 产物（git 中的 baseline 是 vanilla 原生版）
 
-# 3. 在飞牛 fnOS 设备上安装
+# 4. 在飞牛 fnOS 设备上安装
 appcenter-cli install-fpk subscription-0.1.0.fpk
 # 或应用中心 -> 手动安装
 ```

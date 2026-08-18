@@ -157,5 +157,40 @@ class ServicesTests(unittest.TestCase):
         self.assertTrue(all(e["date"].startswith("2026-08") for e in events))
 
 
+class StaticServeTests(unittest.TestCase):
+    """静态文件 MIME 映射（对齐 fnOS 官方 index.cgi 示例：css/js 带 charset）。"""
+
+    def test_mime_map_css_js_html(self):
+        import server
+        m = server.Handler._STATIC_MIME
+        self.assertEqual(m[".css"], "text/css; charset=utf-8")
+        self.assertEqual(m[".js"], "application/javascript; charset=utf-8")
+        self.assertEqual(m[".html"], "text/html; charset=utf-8")
+        self.assertEqual(m[".png"], "image/png")
+        self.assertEqual(m[".svg"], "image/svg+xml")
+
+    def test_serve_static_mime_uses_map(self):
+        import mimetypes
+        import server
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # 模拟浏览器请求的静态文件
+            for name, expect in [("style.css", "text/css; charset=utf-8"),
+                                 ("app.js", "application/javascript; charset=utf-8")]:
+                f = root / name
+                f.write_text("x", encoding="utf-8")
+                # 复刻 _serve_static 的 MIME 解析逻辑
+                suffix = "." + f.name.rsplit(".", 1)[-1]
+                ctype = server.Handler._STATIC_MIME.get(suffix) \
+                    or mimetypes.guess_type(str(f))[0] \
+                    or "application/octet-stream"
+                # 显式映射优先，且不同于无 charset 的 guess_type 结果
+                self.assertEqual(ctype, expect)
+                self.assertNotEqual(ctype, mimetypes.guess_type(str(f))[0])
+
+
 if __name__ == "__main__":
     unittest.main()

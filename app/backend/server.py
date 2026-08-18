@@ -238,16 +238,34 @@ class Handler(socketserver.StreamRequestHandler):
 
     # ----- 静态文件 -----
 
+    _STATIC_MIME = {
+        ".html": "text/html; charset=utf-8",
+        ".htm": "text/html; charset=utf-8",
+        ".css": "text/css; charset=utf-8",
+        ".js": "application/javascript; charset=utf-8",
+        ".json": "application/json; charset=utf-8",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".svg": "image/svg+xml",
+        ".webp": "image/webp",
+        ".ico": "image/x-icon",
+        ".txt": "text/plain; charset=utf-8",
+    }
+
     def _serve_static(self, path: str) -> None:
         root = config.www_dir().resolve()
         rel = path.lstrip("/") or "index.html"
-        if not rel:
-            rel = "index.html"
         target = (root / rel).resolve()
         if not str(target).startswith(str(root)) or not target.is_file():
             self._error(HTTPStatus.NOT_FOUND, "Not Found")
             return
-        ctype = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+        # MIME 显式映射（对齐官方 index.cgi 示例：css/js 带 charset；
+        # .js 用 application/javascript），未知后缀回退 mimetypes 猜测。
+        ctype = self._STATIC_MIME.get(target.suffix) \
+            or mimetypes.guess_type(str(target))[0] \
+            or "application/octet-stream"
         data = target.read_bytes()
         cache = rel != "index.html"
         self._raw(HTTPStatus.OK, ctype, data, cache=cache)

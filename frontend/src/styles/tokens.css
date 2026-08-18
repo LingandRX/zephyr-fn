@@ -1,0 +1,54 @@
+/* ===================== 设计令牌（Design Tokens） =====================
+ * 规则：页面/组件样式中禁止使用魔法数字，一律引用本文件令牌。
+ * 色板 | 间距 | 字号 | 圆角 | 阴影 | z-index
+ */
+:root {
+  /* 色板 */
+  --bg: #0f172a;
+  --bg-2: #111c33;
+  --card: #16213b;
+  --card-2: #1b2947;
+  --border: #243458;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --primary: #6366f1;
+  --primary-2: #4f46e5;
+  --green: #22c55e;
+  --amber: #f59e0b;
+  --red: #ef4444;
+  --blue: #3b82f6;
+
+  /* 间距刻度 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  /* 字号刻度 */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 20px;
+
+  /* 圆角 */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+
+  /* 阴影 */
+  --shadow-modal: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-drawer: 6px 0 32px rgba(0, 0, 0, 0.4);
+  --shadow-toast: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+  /* z-index 刻度（与 vanilla 版保持一致）：
+     drawer-overlay 39 | sidebar 40 | modal 50 | toast 100 */
+  --z-overlay: 39;
+  --z-sidebar: 40;
+  --z-modal: 50;
+  --z-toast: 100;
+}
+
+/* 断点约定（CSS 媒体查询无法使用 var()，此处仅作文档约束）：
+   @media (max-width: 860px) 移动端抽屉模式 + 栅格降级
+   @media (max-width: 600px) 单列 + 全宽控件  */
