@@ -258,6 +258,41 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .toast.ok { border-color: var(--green); }
 .toast.err { border-color: var(--red); }
 
+/* =====================================================================
+ * 浅色模式特殊样式
+ * ===================================================================== */
+
+/* 导航项激活态 */
+:root[data-theme="light"] .nav-item.active {
+  background: rgba(99, 102, 241, 0.1);
+  color: #4f46e5;
+}
+
+/* 通知横幅 */
+:root[data-theme="light"] .notice {
+  background: rgba(245, 158, 11, 0.06);
+  border-color: #fbbf24;
+  color: #92400e;
+}
+
+/* 输入框聚焦态 */
+:root[data-theme="light"] input:focus,
+:root[data-theme="light"] select:focus,
+:root[data-theme="light"] textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* 表格行悬停 */
+:root[data-theme="light"] .table tr:hover td {
+  background: var(--card-2);
+}
+
+/* Toast 样式优化 */
+:root[data-theme="light"] .toast {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
 /* ---------------- 响应式 ---------------- */
 @media (max-width: 860px) {
   .hamburger { display: flex; }

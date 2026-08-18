@@ -3,13 +3,17 @@
 //   侧边栏（导航 / 新增按钮 / 折叠按钮）+ 顶栏 + 到期提醒横幅 + 主区（Sub Page 插槽）+ Toast
 //   切换导航 = 切换本壳下的 Sub Page（keep-alive 保留各页状态）
 import { computed, ref, watch, onMounted } from "vue";
-import { ui, toastState, toast, openNewSub } from "../ui.js";
-import { getUpcomingNotifications, backupNow as apiBackupNow } from "../api.js";
+import { ui, toastState, toast, openNewSub, setTheme } from "../ui.js";
+import { getUpcomingNotifications } from "../api.js";
 import logo from "../assets/icon_64.png";
 import SubscriptionsView from "../views/SubscriptionsView.vue";
 import CalendarView from "../views/CalendarView.vue";
 import StatisticsView from "../views/StatisticsView.vue";
 import SettingsView from "../views/SettingsView.vue";
+
+const THEMES = ["dark", "light", "system"];
+const THEME_ICONS = { dark: "🌙", light: "☀️", system: "💻" };
+const THEME_LABELS = { dark: "深色模式", light: "浅色模式", system: "跟随系统" };
 
 const NAV = [
   { key: "subscriptions", icon: "📋", label: "订阅列表", title: "订阅列表" },
@@ -29,6 +33,16 @@ const PAGES = {
 const viewTitle = computed(() => NAV.find((n) => n.key === ui.view)?.title || "");
 const showNewBtn = computed(() => ["subscriptions", "calendar"].includes(ui.view));
 const currentPage = computed(() => PAGES[ui.view] || SubscriptionsView);
+
+// ---------- 主题切换（循环：深色 → 浅色 → 系统 → 深色…）----------
+const themeIcon = computed(() => THEME_ICONS[ui.theme] || "🌙");
+const themeLabel = computed(() => THEME_LABELS[ui.theme] || "切换主题");
+
+function cycleTheme() {
+  const idx = THEMES.indexOf(ui.theme);
+  const next = THEMES[(idx + 1) % THEMES.length];
+  setTheme(next);
+}
 
 // ---------- 侧边栏折叠（持久化到 localStorage，SSR/异常环境安全降级）----------
 const STORE_KEY = "sidebar-collapsed";
@@ -62,16 +76,6 @@ function switchView(key) {
 function createNew() {
   ui.view = "subscriptions";
   openNewSub();
-}
-
-// ---------- 顶栏操作 ----------
-async function handleBackup() {
-  try {
-    const r = await apiBackupNow();
-    toast(r?.file ? `备份完成: ${r.file}` : "备份完成");
-  } catch (err) {
-    toast(err.message, "err");
-  }
 }
 
 // ---------- 到期提醒横幅 ----------
@@ -144,7 +148,14 @@ onMounted(loadNotice);
         </button>
         <h1>{{ viewTitle }}</h1>
         <div class="topbar-actions">
-          <button class="btn" @click="handleBackup()">💾 立即备份</button>
+          <button
+            class="theme-toggle"
+            :title="themeLabel"
+            :aria-label="themeLabel"
+            @click="cycleTheme"
+          >
+            {{ themeIcon }}
+          </button>
         </div>
       </header>
 
@@ -169,3 +180,29 @@ onMounted(loadNotice);
   <!-- Toast -->
   <div v-if="toastState.visible" class="toast" :class="toastState.type">{{ toastState.msg }}</div>
 </template>
+
+<style scoped>
+/* 顶栏主题切换按钮 */
+.theme-toggle {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  background: var(--card-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--primary);
+  background: var(--card);
+}
+
+.theme-toggle:active {
+  transform: scale(0.95);
+}
+</style>

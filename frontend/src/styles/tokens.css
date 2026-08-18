@@ -40,6 +40,7 @@
   --shadow-modal: 0 8px 24px rgba(0, 0, 0, 0.4);
   --shadow-drawer: 6px 0 32px rgba(0, 0, 0, 0.4);
   --shadow-toast: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-sidebar: 6px 0 32px rgba(0, 0, 0, 0.4);
 
   /* z-index 刻度（与 vanilla 版保持一致）：
      drawer-overlay 39 | sidebar 40 | modal 50 | toast 100 */
@@ -47,6 +48,30 @@
   --z-sidebar: 40;
   --z-modal: 50;
   --z-toast: 100;
+}
+
+/* 浅色主题 */
+:root[data-theme="light"] {
+  /* 色板 */
+  --bg: #f8fafc;
+  --bg-2: #ffffff;
+  --card: #ffffff;
+  --card-2: #f1f5f9;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --muted: #64748b;
+  --primary: #6366f1;
+  --primary-2: #4f46e5;
+  --green: #16a34a;
+  --amber: #d97706;
+  --red: #dc2626;
+  --blue: #2563eb;
+
+  /* 阴影（浅色模式更柔和） */
+  --shadow-modal: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-drawer: 6px 0 32px rgba(0, 0, 0, 0.08);
+  --shadow-toast: 0 8px 24px rgba(0, 0, 0, 0.1);
+  --shadow-sidebar: 6px 0 32px rgba(0, 0, 0, 0.1);
 }
 
 /* 断点约定（CSS 媒体查询无法使用 var()，此处仅作文档约束）：
