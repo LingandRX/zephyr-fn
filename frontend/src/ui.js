@@ -18,6 +18,7 @@ function getSystemTheme() {
 }
 
 function applyTheme(theme) {
+  if (typeof document === "undefined") return;
   const root = document.documentElement;
   if (theme === "system") {
     root.dataset.theme = getSystemTheme();

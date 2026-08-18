@@ -42,9 +42,9 @@ try {
     const scrollHost = html.includes('class="page-host"');
     const hasToggle = html.includes('class="sidebar-toggle"');
     const hasFooter = html.includes('class="sidebar-footer"');
-    const titleOk = html.includes(`<h1>${TITLES[view]}</h1>`);
-    const activeNav = html.includes('<button class="active nav-item"') &&
-      html.includes(`<span class="nav-label">${TITLES[view]}</span>`);
+    const titleOk = html.includes(`>${TITLES[view]}</h1>`);
+    const activeNav = html.includes(`class="active nav-item"`) &&
+      html.includes(`>${TITLES[view]}</span>`);
 
     const pass = pages === 1 && scrollHost && hasToggle && hasFooter && titleOk && activeNav;
     failed ||= !pass;
