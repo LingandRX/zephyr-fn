@@ -164,6 +164,7 @@ onMounted(loadAll);
 
 <template>
   <div class="page">
+    <!-- 统计卡片 -->
     <div v-if="stats" class="stats-grid">
       <div v-for="c in statCards" :key="c.label" class="stat-card">
         <div class="label">{{ c.label }}</div>
@@ -172,58 +173,94 @@ onMounted(loadAll);
       </div>
     </div>
 
+    <!-- 筛选控制栏 -->
     <div class="filter-bar">
-      <input v-model="search" type="search" placeholder="搜索订阅名称..." />
-      <select v-model="filterCat">
-        <option value="">全部分类</option>
-        <option v-for="c in cats" :key="c.id" :value="c.id">{{ c.icon || "" }} {{ c.name }}</option>
-      </select>
-      <select v-model="filterStatus">
-        <option value="">全部状态</option>
-        <option value="active">活跃</option>
-        <option value="expiring">即将到期</option>
-        <option value="in_payment">待支付</option>
-        <option value="grace_period">宽限期</option>
-        <option value="canceled">已取消</option>
-        <option value="expired">已过期</option>
-      </select>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input v-model="search" type="search" placeholder="搜索订阅名称、备注..." />
+      </div>
+      <div class="filter-selects">
+        <select v-model="filterCat">
+          <option value="">全部分类</option>
+          <option v-for="c in cats" :key="c.id" :value="c.id">{{ c.icon || "📁" }} {{ c.name }}</option>
+        </select>
+        <select v-model="filterStatus">
+          <option value="">全部状态</option>
+          <option value="active">活跃</option>
+          <option value="expiring">即将到期</option>
+          <option value="in_payment">待支付</option>
+          <option value="grace_period">宽限期</option>
+          <option value="canceled">已取消</option>
+          <option value="expired">已过期</option>
+        </select>
+      </div>
     </div>
 
-    <div class="card">
-      <div class="table-scroll">
+    <!-- 结果统计摘要 -->
+    <div class="list-summary" v-if="subs.length">
+      <span>共 {{ filtered.length }} 项订阅</span>
+      <span v-if="filterCat || filterStatus || search" class="clear-filters" @click="search = ''; filterCat = ''; filterStatus = ''">清除筛选</span>
+    </div>
+
+    <!-- 列表展示容器 -->
+    <div class="card sub-content-card">
+      <!-- 桌面端表格视图 (>= 768px) -->
+      <div class="desktop-only table-scroll">
         <table class="table">
           <thead>
             <tr>
-              <th>订阅</th><th>金额</th><th>周期</th><th>下次扣费</th>
-              <th>剩余</th><th>状态</th><th class="ta-r">操作</th>
+              <th>订阅</th>
+              <th>金额</th>
+              <th>周期</th>
+              <th>下次扣费</th>
+              <th>状态</th>
+              <th class="ta-r">操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in filtered" :key="s.id">
+            <tr v-for="s in filtered" :key="s.id" class="sub-table-row">
               <td>
-                <div class="sub-name">
-                  {{ s.name }}
-                  <small>
-                    {{ catName(s.category_id) ? catName(s.category_id).icon + " " + catName(s.category_id).name : "未分类" }}
-                    {{ s.notes ? " · " + s.notes : "" }}
+                <div class="sub-cell">
+                  <div class="sub-avatar">{{ catName(s.category_id)?.icon || "💳" }}</div>
+                  <div class="sub-info">
+                    <span class="sub-title">{{ s.name }}</span>
+                    <div class="sub-meta">
+                      <span class="cat-badge">{{ catName(s.category_id)?.name || "未分类" }}</span>
+                      <span v-if="s.notes" class="notes-text" :title="s.notes">{{ s.notes }}</span>
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="amount-cell">
+                  <span class="amount-main">{{ fmtCents(s.amount, s.currency) }}</span>
+                  <small v-if="s.actual_amount" class="muted">实付 {{ fmtCents(s.actual_amount, s.currency) }}</small>
+                </div>
+              </td>
+              <td>
+                <div class="period-cell">
+                  <span>{{ PERIOD_LABEL[s.period_type] || s.period_type }}</span>
+                  <small v-if="s.period_type === 'custom'" class="muted">
+                    {{ s.custom_period_value }}{{ CUSTOM_UNIT_LABEL[s.custom_period_unit] }}
                   </small>
                 </div>
               </td>
               <td>
-                {{ fmtCents(s.amount, s.currency) }}
-                <small v-if="s.actual_amount" class="muted" style="display: block">实付 {{ fmtCents(s.actual_amount, s.currency) }}</small>
+                <div class="due-cell">
+                  <span class="due-date">{{ s.next_due_date || "—" }}</span>
+                  <span v-if="s.next_due_date" class="due-countdown" :class="statusClass(s)">
+                    {{ statusText(s) }}
+                  </span>
+                </div>
               </td>
-              <td>{{ PERIOD_LABEL[s.period_type] || s.period_type }}
-                <small v-if="s.period_type === 'custom'" class="muted" style="display: block">
-                  {{ s.custom_period_value }}{{ CUSTOM_UNIT_LABEL[s.custom_period_unit] }}
-                </small>
+              <td>
+                <span class="badge" :style="{ color: s.status_color, borderColor: s.status_color + '40', background: s.status_color + '15' }">
+                  {{ s.status_label }}
+                </span>
               </td>
-              <td>{{ s.next_due_date || "—" }}</td>
-              <td :class="statusClass(s)">{{ statusText(s) }}</td>
-              <td><span class="badge" :style="{ color: s.status_color }">{{ s.status_label }}</span></td>
               <td class="ta-r">
                 <div class="row-actions">
-                  <button v-if="s.period_type !== 'once'" @click="renew(s)">续费</button>
+                  <button v-if="s.period_type !== 'once'" class="btn-action-renew" @click="renew(s)">续费</button>
                   <button @click="openModal(s)">编辑</button>
                   <button class="danger" @click="del(s)">删除</button>
                 </div>
@@ -232,69 +269,483 @@ onMounted(loadAll);
           </tbody>
         </table>
       </div>
-      <div v-if="!loading && !filtered.length" class="empty">
-        {{ subs.length ? "没有匹配的订阅" : "还没有订阅，点击左侧「新增订阅」开始记录" }}
+
+      <!-- 移动端卡片视图 (< 768px) -->
+      <div class="mobile-only sub-cards-list">
+        <div v-for="s in filtered" :key="s.id" class="sub-item-card">
+          <div class="item-header">
+            <div class="item-brand">
+              <span class="item-avatar">{{ catName(s.category_id)?.icon || "💳" }}</span>
+              <div class="item-title-wrap">
+                <div class="item-name">{{ s.name }}</div>
+                <div class="item-cat-tag">{{ catName(s.category_id)?.name || "未分类" }}</div>
+              </div>
+            </div>
+            <div class="item-badge-wrap">
+              <span class="badge" :style="{ color: s.status_color, borderColor: s.status_color + '40', background: s.status_color + '15' }">
+                {{ s.status_label }}
+              </span>
+              <span v-if="s.next_due_date && statusText(s)" class="due-countdown" :class="statusClass(s)">
+                {{ statusText(s) }}
+              </span>
+            </div>
+          </div>
+
+          <div class="item-body">
+            <div class="item-stat">
+              <span class="stat-lbl">下次扣费</span>
+              <span class="stat-val">{{ s.next_due_date || "—" }}</span>
+            </div>
+            <div class="item-amount">
+              <span class="amt-val">{{ fmtCents(s.amount, s.currency) }}</span>
+              <span class="amt-cycle">/ {{ PERIOD_LABEL[s.period_type] || s.period_type }}</span>
+            </div>
+          </div>
+
+          <div v-if="s.notes" class="item-notes">
+            <span class="notes-icon">📝</span>
+            <span class="notes-content">{{ s.notes }}</span>
+          </div>
+
+          <div class="item-actions">
+            <button v-if="s.period_type !== 'once'" class="btn-m btn-m-renew" @click="renew(s)">续费</button>
+            <button class="btn-m" @click="openModal(s)">编辑</button>
+            <button class="btn-m btn-m-danger" @click="del(s)">删除</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 空状态 -->
+      <div v-if="!loading && !filtered.length" class="empty-wrap">
+        <div class="empty-icon">📭</div>
+        <div class="empty-text">
+          {{ subs.length ? "没有匹配的订阅条件" : "还没有订阅，点击左侧「新增订阅」开始记录" }}
+        </div>
       </div>
     </div>
 
-    <!-- 新增/编辑弹窗（嵌套在视图根节点内，保证组件单根 -> v-show 生效） -->
+    <!-- 新增/编辑弹窗 -->
     <div v-if="modalOpen" class="modal" @click.self="modalOpen = false">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2>{{ modalTitle }}</h2>
-        <button class="modal-close" @click="modalOpen = false">✕</button>
-      </div>
-      <form @submit.prevent="save">
-        <div class="form-grid">
-          <label class="field span-2"><span>名称 *</span><input v-model="form.name" required placeholder="如 Netflix" /></label>
-          <label class="field"><span>分类</span>
-            <select v-model="form.category_id">
-              <option value="">未分类</option>
-              <option v-for="c in cats" :key="c.id" :value="c.id">{{ c.icon || "" }} {{ c.name }}</option>
-            </select>
-          </label>
-          <label class="field"><span>货币</span>
-            <select v-model="form.currency">
-              <option value="CNY">CNY (¥)</option>
-              <option value="USD">USD ($)</option>
-              <option value="HKD">HKD (HK$)</option>
-            </select>
-          </label>
-          <label class="field"><span>金额（元）*</span>
-            <input v-model="form.amount" type="number" required min="0" step="0.01" placeholder="68" />
-          </label>
-          <label class="field"><span>周期</span>
-            <select v-model="form.period_type">
-              <option value="month">月付</option>
-              <option value="quarter">季付</option>
-              <option value="year">年付</option>
-              <option value="once">一次性</option>
-              <option value="custom">自定义</option>
-            </select>
-          </label>
-          <label v-if="form.period_type === 'custom'" class="field span-2"><span>自定义周期</span>
-            <span class="inline">
-              <input v-model="form.custom_value" type="number" min="1" />
-              <select v-model="form.custom_unit">
-                <option v-for="(label, u) in CUSTOM_UNIT_LABEL" :key="u" :value="u">{{ label }}</option>
+      <div class="modal-card">
+        <div class="modal-head">
+          <h2>{{ modalTitle }}</h2>
+          <button class="modal-close" @click="modalOpen = false">✕</button>
+        </div>
+        <form @submit.prevent="save">
+          <div class="form-grid">
+            <label class="field span-2"><span>名称 *</span><input v-model="form.name" required placeholder="如 Netflix" /></label>
+            <label class="field"><span>分类</span>
+              <select v-model="form.category_id">
+                <option value="">未分类</option>
+                <option v-for="c in cats" :key="c.id" :value="c.id">{{ c.icon || "" }} {{ c.name }}</option>
               </select>
-            </span>
-          </label>
-          <label class="field checkbox span-2">
-            <input v-model="form.auto_renew" type="checkbox" />
-            <span>自动续费</span>
-          </label>
-          <label class="field"><span>开始日期</span><input v-model="form.start_date" type="date" /></label>
-          <label class="field"><span>首次付款日</span><input v-model="form.first_payment_date" type="date" /></label>
-          <label class="field span-2"><span>下次扣费日</span><input v-model="form.next_due_date" type="date" /></label>
-          <label class="field span-2"><span>备注</span><textarea v-model="form.notes" rows="2" placeholder="可选"></textarea></label>
-        </div>
-        <div class="modal-foot">
-          <button type="button" class="btn" @click="modalOpen = false">取消</button>
-          <button type="submit" class="btn btn-primary">保存</button>
-        </div>
-      </form>
+            </label>
+            <label class="field"><span>货币</span>
+              <select v-model="form.currency">
+                <option value="CNY">CNY (¥)</option>
+                <option value="USD">USD ($)</option>
+                <option value="HKD">HKD (HK$)</option>
+              </select>
+            </label>
+            <label class="field"><span>金额（元）*</span>
+              <input v-model="form.amount" type="number" required min="0" step="0.01" placeholder="68" />
+            </label>
+            <label class="field"><span>周期</span>
+              <select v-model="form.period_type">
+                <option value="month">月付</option>
+                <option value="quarter">季付</option>
+                <option value="year">年付</option>
+                <option value="once">一次性</option>
+                <option value="custom">自定义</option>
+              </select>
+            </label>
+            <label v-if="form.period_type === 'custom'" class="field span-2"><span>自定义周期</span>
+              <span class="inline">
+                <input v-model="form.custom_value" type="number" min="1" />
+                <select v-model="form.custom_unit">
+                  <option v-for="(label, u) in CUSTOM_UNIT_LABEL" :key="u" :value="u">{{ label }}</option>
+                </select>
+              </span>
+            </label>
+            <label class="field checkbox span-2">
+              <input v-model="form.auto_renew" type="checkbox" />
+              <span>自动续费</span>
+            </label>
+            <label class="field"><span>开始日期</span><input v-model="form.start_date" type="date" /></label>
+            <label class="field"><span>首次付款日</span><input v-model="form.first_payment_date" type="date" /></label>
+            <label class="field span-2"><span>下次扣费日</span><input v-model="form.next_due_date" type="date" /></label>
+            <label class="field span-2"><span>备注</span><textarea v-model="form.notes" rows="2" placeholder="可选"></textarea></label>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn" @click="modalOpen = false">取消</button>
+            <button type="submit" class="btn btn-primary">保存</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
-</div>
 </template>
+
+<style scoped>
+/* ---------- 响应式展示切换 ---------- */
+.desktop-only { display: block !important; }
+.mobile-only { display: none !important; }
+
+/* 筛选栏与搜索 */
+.filter-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: var(--space-3);
+  align-items: center;
+  width: 100%;
+}
+.search-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 200px;
+}
+.search-wrap input[type="search"],
+.search-wrap input {
+  width: 100%;
+  height: 38px;
+  line-height: 38px;
+  padding: 0 12px 0 34px;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+  font-size: var(--fs-sm);
+  border-radius: var(--radius-sm);
+}
+.search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.6;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.filter-selects {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.filter-selects select {
+  height: 38px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  min-width: 130px;
+  font-size: var(--fs-sm);
+  border-radius: var(--radius-sm);
+}
+
+/* 列表摘要统计 */
+.list-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  margin-bottom: var(--space-2);
+  padding: 0 2px;
+}
+.clear-filters {
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.sub-content-card {
+  padding: var(--space-3);
+}
+
+/* ---------- 桌面端表格优化 ---------- */
+.sub-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sub-avatar {
+  width: 36px;
+  height: 36px;
+  background: var(--card-2);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.sub-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.sub-title {
+  font-weight: 600;
+  font-size: var(--fs-md);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sub-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+}
+.cat-badge {
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--muted);
+}
+.notes-text {
+  color: var(--muted);
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.amount-cell, .period-cell, .due-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.amount-main {
+  font-weight: 600;
+  color: var(--text);
+}
+.due-countdown {
+  font-size: 11px;
+  font-weight: 500;
+}
+.due-countdown.days-soon { color: var(--amber); }
+.due-countdown.days-overdue { color: var(--red); }
+
+.badge {
+  border: 1px solid currentColor;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.btn-action-renew {
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+.btn-action-renew:hover {
+  background: var(--primary) !important;
+  color: #fff !important;
+}
+
+/* ---------- 移动端卡片列表 ---------- */
+.sub-cards-list {
+  flex-direction: column;
+  gap: 10px;
+}
+.sub-item-card {
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.sub-item-card:active {
+  border-color: var(--primary);
+}
+.item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.item-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.item-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.item-title-wrap {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.item-name {
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.item-cat-tag {
+  font-size: 11px;
+  color: var(--muted);
+}
+.item-badge-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.item-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  background: var(--card);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+.item-stat .stat-lbl {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+.item-stat .stat-val {
+  font-size: 13px;
+  font-weight: 500;
+}
+.item-amount {
+  text-align: right;
+}
+.amt-val {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+.amt-cycle {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 2px;
+}
+.item-notes {
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--card);
+  padding: 6px 10px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.notes-icon {
+  font-size: 11px;
+  opacity: 0.8;
+}
+.notes-content {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.item-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 2px;
+}
+.btn-m {
+  padding: 5px 12px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+}
+.btn-m-renew {
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 500;
+}
+.btn-m-danger {
+  color: var(--red);
+}
+
+/* 空状态 */
+.empty-wrap {
+  text-align: center;
+  padding: 36px 16px;
+  color: var(--muted);
+}
+.empty-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+.empty-text {
+  font-size: var(--fs-sm);
+}
+
+/* ---------- 响应式断点适配 ---------- */
+@media (max-width: 860px) {
+  .desktop-only { display: none !important; }
+  .mobile-only { display: flex !important; }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  .stat-card {
+    padding: 10px 12px !important;
+  }
+  .stat-card .value {
+    font-size: 17px !important;
+  }
+
+  /* 移动端筛选栏：搜索独占一行，下拉并排 2 列 */
+  .filter-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+  .search-wrap {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+  }
+  .filter-selects {
+    display: flex !important;
+    width: 100% !important;
+    gap: 8px !important;
+  }
+  .filter-selects select {
+    flex: 1 1 50% !important;
+    width: 50% !important;
+    min-width: 0 !important;
+  }
+
+  .sub-content-card {
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+  }
+}
+</style>
