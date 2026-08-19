@@ -231,21 +231,24 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
         cat_monthly[cat_id] = cat_monthly.get(cat_id, 0) + cny_monthly
         cat_yearly[cat_id] = cat_yearly.get(cat_id, 0) + cny_yearly
 
-        # 月度趋势
-        for i, (ms, me) in enumerate(zip(month_starts, month_ends)):
+        # 月度趋势（按实际到期/发生扣费统计）
+        for ms, me in zip(month_starts, month_ends):
+            m_key = ms.strftime("%Y-%m")
             if sub["auto_renew"]:
-                monthly_amounts[ms.strftime("%Y-%m")] = (
-                    monthly_amounts.get(ms.strftime("%Y-%m"), 0) + cny_monthly
-                )
+                cycles = _count_cycles_in_range(sub, ms, me)
+                if cycles > 0:
+                    monthly_amounts[m_key] = (
+                        monthly_amounts.get(m_key, 0) + cycles * cny_amount
+                    )
             else:
                 pay_date = sub["first_payment_date"] or sub["start_date"]
                 try:
                     pd = date.fromisoformat(pay_date)
-                except ValueError:
+                except (ValueError, TypeError):
                     pd = None
-                if pd and pd.year == ms.year and pd.month == ms.month:
-                    monthly_amounts[ms.strftime("%Y-%m")] = (
-                        monthly_amounts.get(ms.strftime("%Y-%m"), 0) + cny_monthly
+                if pd and ms <= pd <= me:
+                    monthly_amounts[m_key] = (
+                        monthly_amounts.get(m_key, 0) + cny_amount
                     )
 
     category_stats = []

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch, onDeactivated } from "vue";
+import { ref, computed, onMounted, watch, onDeactivated, onActivated } from "vue";
 import {
   getSubscriptions, getCategories, getStatistics,
   createSubscription, updateSubscription, deleteSubscription, renewSubscription,
@@ -22,16 +22,37 @@ const modalTitle = ref("新增订阅");
 const editingId = ref(null);
 const form = ref(emptyForm());
 
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function emptyForm() {
   return {
     name: "", category_id: "", currency: "CNY", amount: "", period_type: "month",
     custom_value: "1", custom_unit: "month", auto_renew: true,
-    start_date: "", first_payment_date: "", next_due_date: "", notes: "",
+    start_date: todayStr(), first_payment_date: "", next_due_date: "", notes: "",
   };
 }
 
-// 侧边栏「新增订阅」按钮触发（跨组件事件，避免模板 ref 耦合）
-watch(() => ui.nextComponent, () => openModal());
+// 侧边栏「新增订阅」按钮触发（跨组件响应式状态）
+watch(
+  () => ui.showAddModal,
+  (show) => {
+    if (show) {
+      openModal();
+      ui.showAddModal = false;
+    }
+  },
+  { immediate: true },
+);
+
+onActivated(() => {
+  if (ui.showAddModal) {
+    openModal();
+    ui.showAddModal = false;
+  }
+});
 
 // keep-alive 切走时关闭弹窗，避免返回后弹窗残留
 onDeactivated(() => { modalOpen.value = false; });
@@ -63,10 +84,10 @@ function statusText(s) {
   const dl = daysLeft(s.next_due_date);
   if (s.lifecycle !== "active") return s.status_label;
   if (dl === null) return "";
-  if (dl < 0) return `已过 ${-dl} 天`;
-  if (dl === 0) return "今天";
-  if (dl <= 7) return `${dl} 天`;
-  return `${dl} 天`;
+  if (dl < 0) return `已逾期 ${-dl} 天`;
+  if (dl === 0) return "今天扣费";
+  if (dl === 1) return "明天扣费";
+  return `剩余 ${dl} 天`;
 }
 
 function statusClass(s) {
@@ -108,6 +129,7 @@ function openModal(sub = null) {
 async function save() {
   const f = form.value;
   if (!f.name.trim()) return toast("名称不能为空", "err");
+  if (!f.start_date) return toast("请选择开始日期", "err");
   const body = {
     name: f.name.trim(),
     category_id: f.category_id || null,
@@ -117,7 +139,7 @@ async function save() {
     custom_period_value: f.period_type === "custom" ? f.custom_value : null,
     custom_period_unit: f.period_type === "custom" ? f.custom_unit : null,
     auto_renew: f.auto_renew,
-    start_date: f.start_date || null,
+    start_date: f.start_date,
     first_payment_date: f.first_payment_date || null,
     next_due_date: f.next_due_date || null,
     notes: f.notes.trim() || null,
@@ -371,7 +393,7 @@ onMounted(loadAll);
               <input v-model="form.auto_renew" type="checkbox" />
               <span>自动续费</span>
             </label>
-            <label class="field"><span>开始日期</span><input v-model="form.start_date" type="date" /></label>
+            <label class="field"><span>开始日期 *</span><input v-model="form.start_date" type="date" required /></label>
             <label class="field"><span>首次付款日</span><input v-model="form.first_payment_date" type="date" /></label>
             <label class="field span-2"><span>下次扣费日</span><input v-model="form.next_due_date" type="date" /></label>
             <label class="field span-2"><span>备注</span><textarea v-model="form.notes" rows="2" placeholder="可选"></textarea></label>

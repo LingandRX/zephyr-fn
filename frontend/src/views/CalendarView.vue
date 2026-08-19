@@ -187,7 +187,7 @@ onMounted(loadMonth);
       <div class="details-head">
         <div class="details-date">
           <span>📅 {{ selectedDateStr }} 扣费明细</span>
-          <span class="details-count">共 {{ selectedDayEvents.length }} 笔</span>
+          <span class="details-count">共 {{ selectedDayEvents.length }} 笔 (合计 ¥{{ (selectedDayTotal / 100).toFixed(2) }})</span>
         </div>
       </div>
       <div class="details-list">

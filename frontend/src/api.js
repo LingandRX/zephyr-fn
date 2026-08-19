@@ -39,7 +39,9 @@ export function download(path, filename) {
   const a = document.createElement("a");
   a.href = exportUrl(path);
   a.download = filename;
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
 }
 
 // ---------- 订阅 ----------

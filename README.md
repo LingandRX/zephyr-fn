@@ -18,7 +18,7 @@
 - 统计：本月支出、本月实际到期、年支出、未来 30 天、分类统计、近 12 个月趋势
 - 日历视图：按月查看扣费 / 服务到期事件
 - 到期提醒：系统日志 + 邮件 (SMTP) + PushPlus 微信推送（每个订阅每天每渠道一次）
-- 备份：每日自动导出 JSON + SQLite 副本到共享目录 `subscription/backups`（保留 14 份），支持手动备份、JSON/CSV 导入导出
+- 备份：每日自动导出 JSON + SQLite 副本到共享目录 `subscription/backups`（保留 5 份），支持手动备份、JSON/CSV 导入导出
 
 ## 技术栈
 
@@ -198,7 +198,7 @@ appcenter-cli install-fpk subscription-0.1.0.fpk
 
 - 数据库：`$TRIM_PKGVAR/subscription.db`（WAL 模式，金额以「分」整数存储）
 - 日志：`$TRIM_PKGVAR/logs/app.log`
-- 自动备份：每天一次，JSON + SQLite 副本写入共享目录，保留最近 14 份
+- 自动备份：每天一次，JSON + SQLite 副本写入共享目录，保留最近 5 份
 - 升级：`upgrade_callback` 自动补迁数据库 schema（版本化迁移）
 
 ## 与 zephyr-tarui 的对应关系

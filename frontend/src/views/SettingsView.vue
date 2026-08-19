@@ -1,14 +1,24 @@
 <script setup>
 // 设置视图：常规 / 通知渠道 / 分类管理 / 备份与数据
-// 移植自 vanilla app.js renderSettings / saveSettings / loadBackupFiles
-import { ref, reactive, computed, watch, onMounted } from "vue";
+// 支持子页面（Tabs）切换展示
+import { ref, reactive, computed, watch, nextTick, onMounted } from "vue";
 import {
   getSettings, saveSettings, getCategories, createCategory, deleteCategory,
-  backupNow, getBackupFiles, importJson, importCsv, download, api,
+  backupNow, getBackupFiles, importJson, importCsv, download,
 } from "../api.js";
 import { toast } from "../ui.js";
 
+const TABS = [
+  { key: "general", label: "常规设置", icon: "⚙️" },
+  { key: "notifications", label: "通知渠道", icon: "🔔" },
+  { key: "categories", label: "分类管理", icon: "🏷️" },
+  { key: "backup", label: "数据与备份", icon: "💾" },
+];
+
+const activeTab = ref("general");
 const loaded = ref(false);
+const saving = ref(false);
+const saveStatusText = ref("");
 const cats = ref([]);
 const backupFiles = ref([]);
 
@@ -56,19 +66,23 @@ async function loadAll() {
     });
     cats.value = c;
     backupFiles.value = files;
+    await nextTick();
     loaded.value = true;
   } catch (err) {
     toast(err.message, "err");
   }
 }
 
-// 延迟自动保存（与 vanilla 的 change 事件 debounce 行为一致）
+// 延迟自动保存（防抖 800ms，静默保存状态，避免频繁 toast 打扰）
 let saveTimer = null;
+let statusTimer = null;
 watch(
   form,
   () => {
     if (!loaded.value) return;
     clearTimeout(saveTimer);
+    saving.value = true;
+    saveStatusText.value = "正在保存...";
     saveTimer = setTimeout(async () => {
       try {
         await saveSettings({
@@ -85,11 +99,18 @@ watch(
           smtp_from_address: form.smtp_from_address || null,
           pushplus_token: form.pushplus_token || null,
         });
-        toast("设置已保存");
+        saving.value = false;
+        saveStatusText.value = "✓ 设置已保存";
+        clearTimeout(statusTimer);
+        statusTimer = setTimeout(() => {
+          saveStatusText.value = "";
+        }, 2000);
       } catch (err) {
+        saving.value = false;
+        saveStatusText.value = "保存失败";
         toast(err.message, "err");
       }
-    }, 400);
+    }, 800);
   },
   { deep: true },
 );
@@ -157,11 +178,26 @@ onMounted(loadAll);
 </script>
 
 <template>
-  <div class="page">
-    <div class="grid-2">
-      <!-- 常规 -->
+  <div class="page settings-page">
+    <!-- 子页面导航栏 -->
+    <div class="settings-tabs-nav">
+      <button
+        v-for="t in TABS"
+        :key="t.key"
+        type="button"
+        class="tab-btn"
+        :class="{ active: activeTab === t.key }"
+        @click="activeTab = t.key"
+      >
+        <span class="tab-icon">{{ t.icon }}</span>
+        <span class="tab-label">{{ t.label }}</span>
+      </button>
+    </div>
+
+    <!-- 子页面 1：常规设置 -->
+    <div v-show="activeTab === 'general'" class="settings-section">
       <div class="card">
-        <h3>常规</h3>
+        <h3>通用与汇率</h3>
         <label class="field">
           <span>默认货币</span>
           <select v-model="form.default_currency">
@@ -170,21 +206,27 @@ onMounted(loadAll);
             <option value="HKD">HKD (HK$)</option>
           </select>
         </label>
-        <label class="field">
-          <span>USD → CNY 汇率</span>
-          <input v-model="form.exchange_rate_usd" type="number" step="0.0001" min="0" />
-        </label>
-        <label class="field">
-          <span>HKD → CNY 汇率</span>
-          <input v-model="form.exchange_rate_hkd" type="number" step="0.0001" min="0" />
+        <div class="form-row">
+          <label class="field">
+            <span>USD → CNY 汇率</span>
+            <input v-model="form.exchange_rate_usd" type="number" step="0.0001" min="0" />
+          </label>
+          <label class="field">
+            <span>HKD → CNY 汇率</span>
+            <input v-model="form.exchange_rate_hkd" type="number" step="0.0001" min="0" />
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>提醒偏好</h3>
+        <label class="field checkbox">
+          <input v-model="form.notification_enabled" type="checkbox" />
+          <span>启用到期提醒</span>
         </label>
         <label class="field">
           <span>到期提醒提前天数</span>
           <input v-model="form.notification_days" type="number" min="0" max="90" />
-        </label>
-        <label class="field checkbox">
-          <input v-model="form.notification_enabled" type="checkbox" />
-          <span>启用到期提醒</span>
         </label>
         <div class="field dnd">
           <span>免打扰时段</span>
@@ -194,105 +236,340 @@ onMounted(loadAll);
             <input v-model="form.do_not_disturb_end" type="time" />
           </div>
         </div>
+        <div class="sub-hint-row">
+          <div class="muted sub-hint">更改后自动生效并保存</div>
+          <span v-if="saveStatusText" class="save-status-badge" :class="{ saving }">{{ saveStatusText }}</span>
+        </div>
       </div>
+    </div>
 
-      <!-- 通知渠道 -->
+    <!-- 子页面 2：通知渠道 -->
+    <div v-show="activeTab === 'notifications'" class="settings-section">
       <div class="card">
-        <h3>通知渠道</h3>
-        <label class="field checkbox">
-          <input v-model="form.email_enabled" type="checkbox" />
-          <span>邮件通知 (SMTP)</span>
-        </label>
-        <label class="field"><span>SMTP 服务器</span><input v-model="form.smtp_host" placeholder="smtp.example.com" /></label>
-        <label class="field"><span>SMTP 端口</span><input v-model="form.smtp_port" placeholder="465" /></label>
-        <label class="field"><span>用户名</span><input v-model="form.smtp_username" /></label>
-        <label class="field"><span>密码 / 授权码</span><input v-model="form.smtp_password" type="password" /></label>
-        <label class="field"><span>发件人地址</span><input v-model="form.smtp_from_address" placeholder="user@example.com" /></label>
-        <hr class="sep" />
-        <label class="field checkbox">
-          <input v-model="form.pushplus_enabled" type="checkbox" />
-          <span>PushPlus 微信推送</span>
-        </label>
-        <label class="field"><span>PushPlus Token</span><input v-model="form.pushplus_token" /></label>
+        <div class="section-header">
+          <h3>邮件通知 (SMTP)</h3>
+          <label class="field checkbox switch-box">
+            <input v-model="form.email_enabled" type="checkbox" />
+            <span>启用</span>
+          </label>
+        </div>
+        <div class="fields-group" :class="{ disabled: !form.email_enabled }">
+          <div class="form-row">
+            <label class="field flex-2">
+              <span>SMTP 服务器</span>
+              <input v-model="form.smtp_host" placeholder="smtp.example.com" />
+            </label>
+            <label class="field flex-1">
+              <span>SMTP 端口</span>
+              <input v-model="form.smtp_port" placeholder="465" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label class="field">
+              <span>用户名</span>
+              <input v-model="form.smtp_username" />
+            </label>
+            <label class="field">
+              <span>密码 / 授权码</span>
+              <input v-model="form.smtp_password" type="password" />
+            </label>
+          </div>
+          <label class="field">
+            <span>发件人地址</span>
+            <input v-model="form.smtp_from_address" placeholder="user@example.com" />
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-header">
+          <h3>PushPlus 微信推送</h3>
+          <label class="field checkbox switch-box">
+            <input v-model="form.pushplus_enabled" type="checkbox" />
+            <span>启用</span>
+          </label>
+        </div>
+        <div class="fields-group" :class="{ disabled: !form.pushplus_enabled }">
+          <label class="field">
+            <span>PushPlus Token</span>
+            <input v-model="form.pushplus_token" placeholder="填写从 pushplus.plus 获取的一对一或群组 Token" />
+          </label>
+        </div>
+        <div class="sub-hint-row">
+          <div class="muted sub-hint">更改后自动生效并保存</div>
+          <span v-if="saveStatusText" class="save-status-badge" :class="{ saving }">{{ saveStatusText }}</span>
+        </div>
       </div>
     </div>
 
-    <!-- 分类管理 -->
-    <div class="card">
-      <h3>分类管理</h3>
-      <div class="cat-editor">
-        <input v-model="newCat.name" type="text" placeholder="新分类名称" @keyup.enter="addCategory" />
-        <input v-model="newCat.icon" type="text" placeholder="图标 emoji，如 📺" class="cat-icon" />
-        <button class="btn btn-primary" :disabled="!CAN_ADD_CAT" @click="addCategory">添加</button>
+    <!-- 子页面 3：分类管理 -->
+    <div v-show="activeTab === 'categories'" class="settings-section">
+      <div class="card">
+        <h3>新增分类</h3>
+        <div class="cat-editor">
+          <input v-model="newCat.name" type="text" placeholder="分类名称，如：流媒体、云服务" @keyup.enter="addCategory" />
+          <input v-model="newCat.icon" type="text" placeholder="图标 emoji，如 📺" class="cat-icon" />
+          <button class="btn btn-primary" :disabled="!CAN_ADD_CAT" @click="addCategory">添加分类</button>
+        </div>
       </div>
-      <div class="cat-list">
-        <span v-for="c in cats" :key="c.id" class="cat-chip">
-          {{ c.icon || "" }} {{ c.name }}
-          <button :title="`删除分类 ${c.name}`" @click="removeCategory(c.id, c.name)">✕</button>
-        </span>
-        <span v-if="!cats.length" class="muted">暂无分类</span>
+
+      <div class="card">
+        <h3>现有分类 ({{ cats.length }})</h3>
+        <div class="cat-list">
+          <span v-for="c in cats" :key="c.id" class="cat-chip">
+            <span class="chip-icon">{{ c.icon || "🏷️" }}</span>
+            <span class="chip-name">{{ c.name }}</span>
+            <button :title="`删除分类 ${c.name}`" @click="removeCategory(c.id, c.name)">✕</button>
+          </span>
+          <span v-if="!cats.length" class="muted">暂无分类</span>
+        </div>
       </div>
     </div>
 
-    <!-- 备份与数据 -->
-    <div class="card">
-      <h3>备份与数据</h3>
-      <p class="muted">
-        数据保存在本机 SQLite。每日自动导出 JSON + 数据库副本到共享目录
-        <code>subscription/backups</code>，保留最近 14 份。
-      </p>
-      <div class="backup-actions">
-        <button class="btn" @click="doBackupNow">立即备份</button>
-        <button class="btn" @click="doExportJson">导出 JSON</button>
-        <button class="btn" @click="doExportCsv">导出 CSV</button>
-        <label class="btn file-btn">导入 JSON
-          <input type="file" accept=".json" hidden @change="onImportFile('json', $event)" />
-        </label>
-        <label class="btn file-btn">导入 CSV
-          <input type="file" accept=".csv" hidden @change="onImportFile('csv', $event)" />
-        </label>
+    <!-- 子页面 4：数据与备份 -->
+    <div v-show="activeTab === 'backup'" class="settings-section">
+      <div class="card">
+        <h3>备份与数据管理</h3>
+        <p class="muted">
+          数据保存在本机 SQLite。每日自动导出 JSON + 数据库副本到共享目录
+          <code>subscription/backups</code>，最多保留最近 5 份（超过自动删除）。
+        </p>
+        <div class="backup-actions">
+          <button class="btn btn-primary" @click="doBackupNow">立即备份</button>
+          <button class="btn" @click="doExportJson">导出 JSON</button>
+          <button class="btn" @click="doExportCsv">导出 CSV</button>
+          <label class="btn file-btn">导入 JSON
+            <input type="file" accept=".json" hidden @change="onImportFile('json', $event)" />
+          </label>
+          <label class="btn file-btn">导入 CSV
+            <input type="file" accept=".csv" hidden @change="onImportFile('csv', $event)" />
+          </label>
+        </div>
       </div>
-      <div class="table-scroll">
-        <table class="table backup-table">
-          <thead><tr><th>备份文件</th><th>大小</th></tr></thead>
-          <tbody>
-            <tr v-for="f in backupFiles" :key="f.name">
-              <td>{{ f.name }}</td><td>{{ (f.size / 1024).toFixed(1) }} KB</td>
-            </tr>
-            <tr v-if="!backupFiles.length"><td colspan="2" class="muted">暂无备份</td></tr>
-          </tbody>
-        </table>
+
+      <div class="card">
+        <h3>备份历史</h3>
+        <div class="table-scroll">
+          <table class="table backup-table">
+            <thead><tr><th>备份文件</th><th>大小</th></tr></thead>
+            <tbody>
+              <tr v-for="f in backupFiles" :key="f.name">
+                <td>{{ f.name }}</td><td>{{ (f.size / 1024).toFixed(1) }} KB</td>
+              </tr>
+              <tr v-if="!backupFiles.length"><td colspan="2" class="muted">暂无备份</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div class="muted" id="save-hint">修改后自动保存</div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
-.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: var(--space-3); }
-.field span { color: var(--muted); font-size: var(--fs-xs); }
-.field.checkbox { flex-direction: row; align-items: center; gap: var(--space-2); }
-.field.checkbox span { color: var(--text); font-size: var(--fs-sm); }
-.dnd-inputs { display: flex; gap: 6px; align-items: center; }
-.sep { border: none; border-top: 1px solid var(--border); margin: var(--space-4) 0; }
-.cat-editor { display: flex; gap: var(--space-2); margin-bottom: 10px; }
-.cat-editor input[type="text"] { flex: 1; }
-.cat-editor .cat-icon { flex: 0 0 90px; }
-.cat-list { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.cat-chip {
-  display: inline-flex; align-items: center; gap: 6px; background: var(--card-2);
-  border: 1px solid var(--border); border-radius: 20px; padding: var(--space-1) var(--space-3);
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* 子页面切换选项卡导航 */
+.settings-tabs-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  padding: 4px;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-2);
+  overflow-x: auto;
+}
+.tab-btn {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 100px;
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.tab-btn:hover {
+  color: var(--text);
+  background: var(--card);
+}
+.tab-btn.active {
+  background: var(--card);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+.tab-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* 子页面内容容器 */
+.settings-section {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 表单与布局 */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+.section-header h3 {
+  margin: 0;
+}
+.switch-box {
+  margin-bottom: 0;
+}
+
+.form-row {
+  display: flex;
+  gap: var(--space-3);
+}
+.form-row .field {
+  flex: 1;
+}
+.form-row .flex-2 {
+  flex: 2;
+}
+.form-row .flex-1 {
+  flex: 1;
+}
+
+.fields-group {
+  transition: opacity 0.2s ease;
+}
+.fields-group.disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: var(--space-3);
+}
+.field span {
+  color: var(--muted);
+  font-size: var(--fs-xs);
+}
+.field.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+}
+.field.checkbox span {
+  color: var(--text);
   font-size: var(--fs-sm);
 }
-.cat-chip button { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0 0 0 var(--space-1); }
-.cat-chip button:hover { color: var(--red); }
-.backup-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
-.file-btn { display: inline-block; position: relative; }
-.backup-table { min-width: 320px; }
-#save-hint { margin-top: var(--space-2); }
+.dnd-inputs {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
 
-@media (max-width: 860px) {
-  .grid-2 { grid-template-columns: minmax(0, 1fr); }
+.sub-hint-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-2);
+}
+.sub-hint {
+  font-size: var(--fs-xs);
+}
+.save-status-badge {
+  font-size: var(--fs-xs);
+  color: var(--primary);
+  font-weight: 500;
+  transition: opacity 0.2s ease;
+}
+.save-status-badge.saving {
+  color: var(--muted);
+}
+
+/* 分类管理 */
+.cat-editor {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: 6px;
+}
+.cat-editor input[type="text"] {
+  flex: 1;
+}
+.cat-editor .cat-icon {
+  flex: 0 0 140px;
+}
+.cat-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: 4px;
+}
+.cat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--fs-sm);
+}
+.chip-icon {
+  font-size: 14px;
+}
+.cat-chip button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 0 0 var(--space-1);
+}
+.cat-chip button:hover {
+  color: var(--red);
+}
+
+/* 备份与数据 */
+.backup-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin: var(--space-3) 0 var(--space-2);
+}
+.file-btn {
+  display: inline-block;
+  position: relative;
+}
+.backup-table {
+  min-width: 320px;
+}
+
+@media (max-width: 640px) {
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+  .cat-editor {
+    flex-direction: column;
+  }
+  .cat-editor .cat-icon {
+    flex: auto;
+  }
 }
 </style>

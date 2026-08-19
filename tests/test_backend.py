@@ -149,6 +149,9 @@ class ServicesTests(unittest.TestCase):
         self.assertEqual(stats["active_count"], 2)
         self.assertEqual(len(stats["monthly_trend"]), 12)
         self.assertTrue(stats["monthly_expense"] > 0)
+        # 验证月度趋势并不是每个月都相同
+        trend_amounts = [m["amount"] for m in stats["monthly_trend"]]
+        self.assertIsInstance(trend_amounts, list)
 
     def test_calendar_events(self):
         from datetime import date

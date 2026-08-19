@@ -7,8 +7,11 @@ export const PERIOD_LABEL = {
 export const CUSTOM_UNIT_LABEL = { day: "天", week: "周", month: "月", year: "年" };
 
 export function fmtCents(cents, currency) {
-  const sym = CURRENCY_SYMBOL[currency] || "¥";
-  return `${sym}${(cents / 100).toFixed(2)}`;
+  const sym = CURRENCY_SYMBOL[currency];
+  if (sym) {
+    return `${sym}${(cents / 100).toFixed(2)}`;
+  }
+  return `${currency || "CNY"} ${(cents / 100).toFixed(2)}`;
 }
 
 export function daysLeft(dateStr) {

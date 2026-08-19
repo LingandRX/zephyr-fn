@@ -55,14 +55,14 @@ if (typeof window !== "undefined") {
 
 export const ui = reactive({
   view: "subscriptions",
-  nextComponent: 0, // 触发「新增订阅」弹窗
+  showAddModal: false, // 触发「新增订阅」弹窗
   sidebarOpen: false, // 移动端抽屉
   sidebarCollapsed: false, // 桌面端折叠
   theme: loadTheme(),
 });
 
 export function openNewSub() {
-  ui.nextComponent += 1;
+  ui.showAddModal = true;
 }
 
 export const toastState = reactive({ msg: "", type: "ok", visible: false });

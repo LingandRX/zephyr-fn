@@ -21,7 +21,7 @@ import pushplus
 
 CHECK_INTERVAL = 3600          # 通知检查间隔 1 小时
 BACKUP_INTERVAL = 24 * 3600    # 备份间隔 24 小时
-KEEP_BACKUPS = 14              # 保留最近 14 份 JSON 备份
+KEEP_BACKUPS = 5               # 保留最近 5 份 JSON 备份
 LOGGER_NAME = "subscription"
 
 

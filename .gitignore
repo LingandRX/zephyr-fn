@@ -59,6 +59,10 @@ data/
 *.db-wal
 backups/
 
+# ===== 前端构建产物 =====
+frontend/dist/
+app/www/
+
 # ===== fnOS 应用包构建产物 =====
 *.fpk
 fnpack-output/
