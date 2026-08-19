@@ -69,7 +69,7 @@ Vue 前端采用 **BaseLayout（公共页面壳）+ Sub Page（子页面）** �
 
 ```text
 frontend/src/
-├── layouts/BaseLayout.vue    # 公共壳：侧边栏（导航/新增/折叠按钮）+ 顶栏 + 提醒横幅 + Toast
+├── layouts/BaseLayout.vue    # 公共壳：侧边栏（导航/新增/折叠按钮）+ 顶栏 + 浮动到期提醒（可收起/关闭）+ Toast
 │                              #   主区为滚动容器 .page-host，<component :is> + keep-alive 切换 Sub Page
 └── views/                    # Sub Pages，各自只管内容，不重复写壳
     ├── SubscriptionsView.vue   # 订阅列表（统计卡/筛选/表格/增删改续费/弹窗）

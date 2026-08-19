@@ -103,6 +103,23 @@ class DbTests(unittest.TestCase):
         self.assertFalse(sub["auto_renew"])
         self.assertEqual(sub["renewal_policy"], "manual")
 
+    def test_notes_are_limited_to_120_characters(self):
+        notes = "备" * 120
+        sub = db.create_subscription("u1", {
+            "name": "备注限制", "amount": 100, "period_type": "month",
+            "start_date": "2026-01-01", "notes": notes,
+        })
+        self.assertEqual(sub["notes"], notes)
+
+        with self.assertRaisesRegex(ValueError, "备注不能超过120字"):
+            db.create_subscription("u1", {
+                "name": "超长备注", "amount": 100, "period_type": "month",
+                "start_date": "2026-01-01", "notes": "备" * 121,
+            })
+
+        with self.assertRaisesRegex(ValueError, "备注不能超过120字"):
+            db.update_subscription(sub["id"], "u1", {"notes": "备" * 121})
+
     def test_settings_defaults_and_update(self):
         s = db.get_app_settings()
         self.assertEqual(s["default_currency"], "CNY")

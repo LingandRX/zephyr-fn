@@ -20,6 +20,7 @@ _lock = threading.RLock()
 _conn: sqlite3.Connection | None = None
 
 CURRENT_DB_VERSION = 7
+MAX_NOTES_LENGTH = 120
 
 _MIGRATIONS: list[tuple[int, str]] = [
     (1, """
@@ -246,6 +247,13 @@ def _date_value(value: Any) -> str | None:
     return str(value)[:10]
 
 
+def _normalize_notes(value: Any) -> str | None:
+    notes = str(value or "").strip()
+    if len(notes) > MAX_NOTES_LENGTH:
+        raise ValueError(f"备注不能超过{MAX_NOTES_LENGTH}字")
+    return notes or None
+
+
 def _row_to_sub(row: sqlite3.Row) -> dict:
     data = dict(row)
     data["auto_renew"] = bool(data["auto_renew"])
@@ -305,7 +313,7 @@ def _normalize_new_subscription(user_id: str, data: dict) -> dict:
         "currency": currency,
         "actual_amount": actual_amount,
         "category_id": data.get("category_id") or None,
-        "notes": (data.get("notes") or "").strip() or None,
+        "notes": _normalize_notes(data.get("notes")),
         "period_type": period_type,
         "custom_period_value": custom_value,
         "custom_period_unit": custom_unit if period_type == "custom" else None,
@@ -384,6 +392,8 @@ def update_subscription(sub_id: str, user_id: str, data: dict) -> dict | None:
             updates[field] = int(_to_bool(value))
         elif field in ("actual_amount",):
             updates[field] = _to_int(value) if value not in (None, "") else None
+        elif field == "notes":
+            updates[field] = _normalize_notes(value)
         elif field in ("start_date", "first_payment_date", "next_due_date",
                        "grace_period_ends_at"):
             updates[field] = _date_value(value)

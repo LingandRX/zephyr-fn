@@ -15,6 +15,7 @@ const loading = ref(false);
 const search = ref("");
 const filterCat = ref("");
 const filterStatus = ref("");
+const NOTES_MAX_LENGTH = 120;
 
 // ---------- 弹窗状态 ----------
 const modalOpen = ref(false);
@@ -33,6 +34,14 @@ function emptyForm() {
     custom_value: "1", custom_unit: "month", auto_renew: true,
     start_date: todayStr(), first_payment_date: "", next_due_date: "", notes: "",
   };
+}
+
+const notesLength = computed(() => Array.from(form.value.notes || "").length);
+
+function limitNotes(event) {
+  const notes = Array.from(event.target.value).slice(0, NOTES_MAX_LENGTH).join("");
+  if (event.target.value !== notes) event.target.value = notes;
+  form.value.notes = notes;
 }
 
 // 侧边栏「新增订阅」按钮触发（跨组件响应式状态）
@@ -130,6 +139,9 @@ async function save() {
   const f = form.value;
   if (!f.name.trim()) return toast("名称不能为空", "err");
   if (!f.start_date) return toast("请选择开始日期", "err");
+  if (notesLength.value > NOTES_MAX_LENGTH) {
+    return toast(`备注不能超过${NOTES_MAX_LENGTH}字`, "err");
+  }
   const body = {
     name: f.name.trim(),
     category_id: f.category_id || null,
@@ -396,7 +408,20 @@ onMounted(loadAll);
             <label class="field"><span>开始日期 *</span><input v-model="form.start_date" type="date" required /></label>
             <label class="field"><span>首次付款日</span><input v-model="form.first_payment_date" type="date" /></label>
             <label class="field span-2"><span>下次扣费日</span><input v-model="form.next_due_date" type="date" /></label>
-            <label class="field span-2"><span>备注</span><textarea v-model="form.notes" rows="2" placeholder="可选"></textarea></label>
+            <label class="field span-2 notes-field">
+              <span>备注</span>
+              <textarea
+                v-model="form.notes"
+                class="notes-input"
+                rows="3"
+                maxlength="120"
+                placeholder="可选"
+                @input="limitNotes"
+              ></textarea>
+              <span class="notes-counter" :class="{ 'is-limit': notesLength >= NOTES_MAX_LENGTH }">
+                {{ notesLength }}/{{ NOTES_MAX_LENGTH }}
+              </span>
+            </label>
           </div>
           <div class="modal-foot">
             <button type="button" class="btn" @click="modalOpen = false">取消</button>
@@ -535,6 +560,26 @@ onMounted(loadAll);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.notes-field .notes-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 84px;
+  min-height: 84px;
+  max-height: 120px;
+  resize: vertical;
+  overflow-y: auto;
+  line-height: 1.5;
+}
+.notes-field .notes-counter {
+  align-self: flex-end;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+}
+.notes-field .notes-counter.is-limit {
+  color: var(--amber);
 }
 
 .amount-cell, .period-cell, .due-cell {

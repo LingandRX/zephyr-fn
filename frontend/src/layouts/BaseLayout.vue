@@ -1,6 +1,6 @@
 <script setup>
 // 公共页面壳（BasePage）：
-//   侧边栏（导航 / 新增按钮 / 折叠按钮）+ 顶栏 + 到期提醒横幅 + 主区（Sub Page 插槽）+ Toast
+//   侧边栏（导航 / 新增按钮 / 折叠按钮）+ 顶栏 + 浮动到期提醒 + 主区（Sub Page 插槽）+ Toast
 //   切换导航 = 切换本壳下的 Sub Page（keep-alive 保留各页状态）
 import { computed, ref, watch, onMounted } from "vue";
 import { ui, toastState, toast, openNewSub, setTheme } from "../ui.js";
@@ -78,18 +78,37 @@ function createNew() {
   openNewSub();
 }
 
-// ---------- 到期提醒横幅 ----------
-const notice = ref(null); // { list: [], hidden: false }
+// ---------- 浮动到期提醒 ----------
+const notice = ref(null); // { list: [], collapsed: false, hidden: false }
 
 async function loadNotice() {
   try {
-    const list = await getUpcomingNotifications();
-    if (!notice.value) notice.value = { list, hidden: false };
-    else notice.value.list = list;
+    const result = await getUpcomingNotifications();
+    const list = Array.isArray(result) ? result : [];
+    if (!notice.value) {
+      notice.value = { list, collapsed: false, hidden: false };
+    } else {
+      const hadNoNotices = notice.value.list.length === 0;
+      notice.value.list = list;
+      // 页面初次拿到提醒时自动展开；用户主动关闭后继续保持关闭状态。
+      if (hadNoNotices && list.length) {
+        notice.value.hidden = false;
+        notice.value.collapsed = false;
+      }
+    }
   } catch (_) {
-    /* 横幅加载失败静默 */
+    /* 提醒加载失败静默 */
   }
 }
+
+function toggleNoticeCollapsed() {
+  if (notice.value) notice.value.collapsed = !notice.value.collapsed;
+}
+
+function closeNotice() {
+  if (notice.value) notice.value.hidden = true;
+}
+
 watch(() => ui.view, (v) => { if (v === "subscriptions") loadNotice(); });
 onMounted(loadNotice);
 </script>
@@ -138,7 +157,7 @@ onMounted(loadNotice);
     </aside>
     <div class="sidebar-overlay" :class="{ open: ui.sidebarOpen }" @click="ui.sidebarOpen = false"></div>
 
-    <!-- 主区域：顶栏 + 通知横幅 + Sub Page -->
+    <!-- 主区域：顶栏 + Sub Page -->
     <main class="main">
       <header class="topbar">
         <button class="hamburger" aria-label="打开菜单" @click="ui.sidebarOpen = !ui.sidebarOpen">
@@ -159,15 +178,6 @@ onMounted(loadNotice);
         </div>
       </header>
 
-      <!-- 到期提醒横幅 -->
-      <div v-if="notice?.list.length && !notice.hidden" class="notice">
-        <strong>⏰ 到期提醒</strong>
-        <ul>
-          <li v-for="n in notice.list" :key="n.id">{{ n.title }} — {{ n.body }}</li>
-        </ul>
-        <button class="btn btn-ghost" style="margin-top: 6px" @click="notice.hidden = true">知道了</button>
-      </div>
-
       <!-- Sub Page 容器：切换导航即切换这里渲染的页面；内部滚动，不带动顶栏/侧边栏 -->
       <div class="page-host">
         <keep-alive>
@@ -176,6 +186,71 @@ onMounted(loadNotice);
       </div>
     </main>
   </div>
+
+  <!-- 浮动提醒：不占用页面布局空间，可收起为图标或直接关闭 -->
+  <section
+    v-if="notice?.list.length && !notice.hidden"
+    class="notice-float"
+    :class="{ 'notice-float--collapsed': notice.collapsed }"
+    aria-label="到期提醒"
+  >
+    <button
+      v-if="notice.collapsed"
+      type="button"
+      class="notice-float-toggle"
+      title="展开到期提醒"
+      aria-label="展开到期提醒"
+      aria-expanded="false"
+      @click="toggleNoticeCollapsed"
+    >
+      <svg class="notice-float-bell" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+      <span class="notice-float-count">{{ notice.list.length }}</span>
+    </button>
+
+    <div v-else class="notice-float-panel" role="status" aria-live="polite">
+      <div class="notice-float-head">
+        <div class="notice-float-title">
+          <svg class="notice-float-bell" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <strong>到期提醒</strong>
+          <span class="notice-float-count notice-float-count--inline">{{ notice.list.length }}</span>
+        </div>
+        <div class="notice-float-actions">
+          <button
+            type="button"
+            class="notice-float-action"
+            title="收起提醒"
+            aria-label="收起到期提醒"
+            @click="toggleNoticeCollapsed"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="notice-float-action"
+            title="关闭提醒"
+            aria-label="关闭到期提醒"
+            @click="closeNotice"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <ul class="notice-float-list">
+        <li v-for="n in notice.list" :key="n.id" class="notice-float-item">
+          <strong>{{ n.title }}</strong>
+          <span>{{ n.body }}</span>
+        </li>
+      </ul>
+    </div>
+  </section>
 
   <!-- Toast -->
   <div v-if="toastState.visible" class="toast" :class="toastState.type">{{ toastState.msg }}</div>

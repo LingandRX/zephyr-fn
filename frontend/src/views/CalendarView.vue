@@ -1,6 +1,6 @@
 <script setup>
 // 日历视图：按月渲染扣费 / 服务到期事件
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { getCalendar } from "../api.js";
 import { toast } from "../ui.js";
 
@@ -9,6 +9,10 @@ const calYear = ref(now.getFullYear());
 const calMonth = ref(now.getMonth() + 1);
 const events = ref([]);
 const selectedDateStr = ref(null);
+const detailsCardRef = ref(null);
+const detailsVisible = ref(false);
+const detailsVisibilityReady = ref(false);
+let detailsObserver = null;
 
 // 6 行 7 列 = 42 格
 const grid = ref([]);
@@ -99,6 +103,41 @@ const selectedDayTotal = computed(() => {
   return selectedDayEvents.value.reduce((acc, cur) => acc + (cur.amount || 0), 0);
 });
 
+function observeDetailsCard() {
+  detailsObserver?.disconnect();
+  detailsObserver = null;
+  // 切换日期时先隐藏跳转按钮，等新明细卡片完成可见性检测后再决定是否显示，避免闪烁。
+  detailsVisibilityReady.value = false;
+
+  if (!selectedDayEvents.value.length) {
+    detailsVisible.value = false;
+    return;
+  }
+
+  nextTick(() => {
+    const card = detailsCardRef.value;
+    if (!card) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      detailsVisible.value = false;
+      detailsVisibilityReady.value = true;
+      return;
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (detailsObserver !== observer) return;
+      detailsVisible.value = entry.isIntersecting;
+      detailsVisibilityReady.value = true;
+    }, { threshold: 0.25 });
+    detailsObserver = observer;
+    observer.observe(card);
+  });
+}
+
+function scrollToDetails() {
+  detailsCardRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function prevMonth(delta) {
   calMonth.value += delta;
   if (calMonth.value < 1) { calMonth.value = 12; calYear.value--; }
@@ -113,7 +152,9 @@ function goToday() {
   loadMonth();
 }
 
+watch(() => [selectedDateStr.value, selectedDayEvents.value.length], observeDetailsCard);
 onMounted(loadMonth);
+onBeforeUnmount(() => detailsObserver?.disconnect());
 </script>
 
 <template>
@@ -131,78 +172,98 @@ onMounted(loadMonth);
       </div>
     </div>
 
-    <div class="card cal-card">
-      <div class="cal-grid">
-        <div v-for="(d, i) in ['日', '一', '二', '三', '四', '五', '六']" :key="'dow-' + i" class="cal-dow">{{ d }}</div>
-        <div
-          v-for="(c, i) in grid"
-          :key="i"
-          class="cal-day"
-          :class="{
-            other: c.other,
-            today: c.today,
-            selected: c.dateStr === selectedDateStr && !c.other,
-            'has-events': c.events && c.events.length > 0
-          }"
-          @click="selectDay(c)"
-        >
-          <div class="cal-day-header">
-            <span class="num">{{ c.day }}</span>
-            <span v-if="c.today" class="today-tag">今</span>
-          </div>
+    <div class="cal-content">
+      <div class="card cal-card">
+        <div class="cal-grid">
+          <div v-for="(d, i) in ['日', '一', '二', '三', '四', '五', '六']" :key="'dow-' + i" class="cal-dow">{{ d }}</div>
+          <div
+            v-for="(c, i) in grid"
+            :key="i"
+            class="cal-day"
+            :class="{
+              other: c.other,
+              today: c.today,
+              selected: c.dateStr === selectedDateStr && !c.other,
+              'has-events': c.events && c.events.length > 0
+            }"
+            @click="selectDay(c)"
+          >
+            <div class="cal-day-header">
+              <span class="num">{{ c.day }}</span>
+              <span v-if="c.today" class="today-tag">今</span>
+            </div>
 
-          <!-- 桌面端/宽屏：文字条模式 -->
-          <div class="events-wrap desktop-events">
-            <template v-if="c.visibleEvents">
-              <div
-                v-for="(e, j) in c.visibleEvents"
+            <!-- 桌面端/宽屏：文字条模式 -->
+            <div class="events-wrap desktop-events">
+              <template v-if="c.visibleEvents">
+                <div
+                  v-for="(e, j) in c.visibleEvents"
+                  :key="j"
+                  class="cal-event"
+                  :class="e.event_type === 'service_end' ? 'end' : 'due'"
+                  :title="`${e.name} ${e.amount_formatted}`"
+                >
+                  <span class="event-name">{{ e.name }}</span>
+                  <span class="event-amt">{{ e.amount_formatted }}</span>
+                </div>
+                <div v-if="c.more" class="cal-event more-badge">+{{ c.more }} 项</div>
+              </template>
+            </div>
+
+            <!-- 移动端：精致圆点模式 -->
+            <div class="mobile-dots" v-if="!c.other && c.events && c.events.length">
+              <span
+                v-for="(e, j) in c.events.slice(0, 3)"
                 :key="j"
-                class="cal-event"
-                :class="e.event_type === 'service_end' ? 'end' : 'due'"
-                :title="`${e.name} ${e.amount_formatted}`"
-              >
-                <span class="event-name">{{ e.name }}</span>
-                <span class="event-amt">{{ e.amount_formatted }}</span>
-              </div>
-              <div v-if="c.more" class="cal-event more-badge">+{{ c.more }} 项</div>
-            </template>
+                class="mob-dot"
+                :class="e.event_type === 'service_end' ? 'dot-end' : 'dot-due'"
+              ></span>
+              <span v-if="c.events.length > 3" class="mob-dot-more">+</span>
+            </div>
           </div>
+        </div>
+      </div>
 
-          <!-- 移动端：精致圆点模式 -->
-          <div class="mobile-dots" v-if="!c.other && c.events && c.events.length">
-            <span
-              v-for="(e, j) in c.events.slice(0, 3)"
-              :key="j"
-              class="mob-dot"
-              :class="e.event_type === 'service_end' ? 'dot-end' : 'dot-due'"
-            ></span>
-            <span v-if="c.events.length > 3" class="mob-dot-more">+</span>
+      <!-- 选中日期明细：桌面端显示在日历右侧，窄屏显示在日历下方 -->
+      <div
+        v-if="selectedDateStr && selectedDayEvents.length"
+        id="day-details"
+        ref="detailsCardRef"
+        class="card day-details-card"
+      >
+        <div class="details-head">
+          <div class="details-date">
+            <span>📅 {{ selectedDateStr }} 扣费明细</span>
+            <span class="details-count">共 {{ selectedDayEvents.length }} 笔 (合计 ¥{{ (selectedDayTotal / 100).toFixed(2) }})</span>
+          </div>
+        </div>
+        <div class="details-list">
+          <div v-for="(e, idx) in selectedDayEvents" :key="idx" class="detail-item">
+            <div class="detail-left">
+              <span class="detail-dot" :class="e.event_type === 'service_end' ? 'dot-end' : 'dot-due'"></span>
+              <span class="detail-name">{{ e.name }}</span>
+              <span class="detail-type-tag">{{ e.event_type === 'service_end' ? '服务到期' : '续费扣款' }}</span>
+            </div>
+            <div class="detail-right">
+              <span class="detail-amount">{{ e.amount_formatted }}</span>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 选中日期明细抽屉/卡片 (特别适合移动端和桌面端即时扫读) -->
-    <div v-if="selectedDateStr && selectedDayEvents.length" class="card day-details-card">
-      <div class="details-head">
-        <div class="details-date">
-          <span>📅 {{ selectedDateStr }} 扣费明细</span>
-          <span class="details-count">共 {{ selectedDayEvents.length }} 笔 (合计 ¥{{ (selectedDayTotal / 100).toFixed(2) }})</span>
-        </div>
-      </div>
-      <div class="details-list">
-        <div v-for="(e, idx) in selectedDayEvents" :key="idx" class="detail-item">
-          <div class="detail-left">
-            <span class="detail-dot" :class="e.event_type === 'service_end' ? 'dot-end' : 'dot-due'"></span>
-            <span class="detail-name">{{ e.name }}</span>
-            <span class="detail-type-tag">{{ e.event_type === 'service_end' ? '服务到期' : '续费扣款' }}</span>
-          </div>
-          <div class="detail-right">
-            <span class="detail-amount">{{ e.amount_formatted }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- 窄屏时明细位于日历下方，用浮动按钮提示并快捷跳转 -->
+    <button
+      v-if="selectedDateStr && selectedDayEvents.length && detailsVisibilityReady && !detailsVisible"
+      class="details-jump"
+      type="button"
+      aria-label="跳转到扣费明细"
+      aria-controls="day-details"
+      @click="scrollToDetails"
+    >
+      <span>查看扣费明细</span>
+      <span class="details-jump-arrow" aria-hidden="true">↓</span>
+    </button>
   </div>
 </template>
 
@@ -211,6 +272,7 @@ onMounted(loadMonth);
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
 }
 
 /* 顶部导航与图例 */
@@ -225,6 +287,7 @@ onMounted(loadMonth);
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 .cal-title {
   margin: 0 4px;
@@ -259,8 +322,23 @@ onMounted(loadMonth);
 .dot-end { background: var(--red); }
 
 /* 日历卡片与网格 */
+.cal-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+}
+.cal-content > .card {
+  /* .card 默认带下边距，栅格间距统一交给 cal-content 的 gap */
+  margin-bottom: 0;
+}
 .cal-card {
   padding: 12px;
+}
+.day-details-card {
+  min-width: 0;
+  scroll-margin-top: 12px;
 }
 .cal-grid {
   display: grid;
@@ -406,11 +484,21 @@ onMounted(loadMonth);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.details-date > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .details-count {
   font-size: var(--fs-xs);
   color: var(--muted);
   font-weight: normal;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .details-list {
   display: flex;
@@ -430,6 +518,7 @@ onMounted(loadMonth);
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 .detail-dot {
@@ -459,7 +548,82 @@ onMounted(loadMonth);
   color: var(--text);
 }
 
-/* ---------- 移动端与窄屏适配 (< 768px) ---------- */
+/* 窄屏快捷跳转按钮：宽屏隐藏，避免影响桌面端右侧明细布局 */
+.details-jump {
+  display: none;
+  position: fixed;
+  right: 16px;
+  bottom: 24px;
+  z-index: 10;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--primary);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(79, 70, 229, 0.28);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  animation: details-jump-float 1.8s ease-in-out infinite;
+}
+.details-jump:hover {
+  background: var(--primary-2);
+}
+.details-jump-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  animation: details-jump-arrow 1.1s ease-in-out infinite;
+}
+@keyframes details-jump-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+@keyframes details-jump-arrow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(3px); }
+}
+
+/* ---------- 窄屏适配：空间不足时把明细移到日历下方 ---------- */
+@media (max-width: 1024px) {
+  .cal-page {
+    width: 100%;
+    max-width: 760px;
+    margin-inline: auto;
+  }
+  .cal-content {
+    display: flex;
+    flex-direction: column;
+  }
+  .cal-card,
+  .day-details-card {
+    width: 100%;
+  }
+  .details-jump {
+    display: inline-flex;
+  }
+}
+
+/* ---------- 移动端：页面居中、控件不溢出 ---------- */
+@media (max-width: 860px) {
+  .cal-page {
+    max-width: 640px;
+  }
+  .cal-head {
+    justify-content: center;
+  }
+  .cal-nav,
+  .cal-legend {
+    justify-content: center;
+  }
+}
+
 @media (max-width: 768px) {
   .cal-card {
     padding: 8px;
@@ -514,6 +678,84 @@ onMounted(loadMonth);
   }
   .cal-legend {
     display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .cal-page {
+    max-width: 440px;
+  }
+  .cal-nav {
+    width: 100%;
+    gap: 6px;
+  }
+  .cal-nav > .btn-sm:not(.today-btn) {
+    flex: 0 0 40px;
+  }
+  .cal-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-inline: 0;
+    white-space: nowrap;
+  }
+  .today-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .cal-card {
+    padding: 8px;
+  }
+  .cal-grid {
+    gap: 3px;
+  }
+  .cal-day {
+    height: auto;
+    min-height: 48px;
+    aspect-ratio: 0.9 / 1;
+    padding: 4px;
+  }
+  .day-details-card {
+    padding: 12px;
+  }
+  .details-date {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .details-date > span:first-child {
+    max-width: 100%;
+  }
+  .details-count {
+    align-self: flex-start;
+  }
+  .detail-item {
+    gap: 6px;
+    padding: 8px;
+  }
+}
+
+@media (max-width: 360px) {
+  .cal-nav {
+    gap: 4px;
+  }
+  .cal-title {
+    font-size: 14px;
+  }
+  .today-btn {
+    padding-inline: 8px;
+  }
+  .day-details-card {
+    padding-inline: 10px;
+  }
+  .detail-item {
+    padding-inline: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .details-jump,
+  .details-jump-arrow {
+    animation: none;
   }
 }
 </style>

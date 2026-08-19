@@ -42,8 +42,8 @@
   --shadow-toast: 0 8px 24px rgba(0, 0, 0, 0.4);
   --shadow-sidebar: 6px 0 32px rgba(0, 0, 0, 0.4);
 
-  /* z-index 刻度（与 vanilla 版保持一致）：
-     drawer-overlay 39 | sidebar 40 | modal 50 | toast 100 */
+  /* z-index 刻度：浮动提醒位于页面之上，但不遮挡抽屉、弹窗和 Toast */
+  --z-notice: 30;
   --z-overlay: 39;
   --z-sidebar: 40;
   --z-modal: 50;
