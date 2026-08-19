@@ -15,8 +15,11 @@ import math
 from datetime import date, timedelta
 from typing import Any
 
-import db
-import domain
+try:  # 包模式与直接从 backend 目录启动模式兼容。
+    from . import db, domain
+except ImportError:  # pragma: no cover
+    import db
+    import domain
 
 
 def _divide_round(amount: int, divisor: int) -> int:
@@ -25,7 +28,9 @@ def _divide_round(amount: int, divisor: int) -> int:
 
 def _monthly_amount(sub: dict, mode: str) -> int:
     """单个订阅折算为每月金额（分）。"""
-    amount = sub["actual_amount"] if (mode == "actual" and sub["actual_amount"]) else sub["amount"]
+    amount = (sub["actual_amount"]
+              if mode == "actual" and sub.get("actual_amount") is not None
+              else sub["amount"])
     period = sub["period_type"]
     if period == "month":
         return amount
@@ -43,7 +48,9 @@ def _monthly_amount(sub: dict, mode: str) -> int:
 
 
 def _yearly_amount(sub: dict, mode: str) -> int:
-    amount = sub["actual_amount"] if (mode == "actual" and sub["actual_amount"]) else sub["amount"]
+    amount = (sub["actual_amount"]
+              if mode == "actual" and sub.get("actual_amount") is not None
+              else sub["amount"])
     period = sub["period_type"]
     if period == "month":
         return amount * 12
@@ -95,13 +102,33 @@ def _month_end(d: date) -> date:
     return domain.add_months(d.replace(day=1), 1) - timedelta(days=1)
 
 
+def _fixed_cycle_days(sub: dict) -> int | None:
+    """返回可用整数天数直接计算的周期，避免每日订阅逐日迭代。"""
+    if sub.get("period_type") != "custom":
+        return None
+    try:
+        value = max(1, int(sub.get("custom_period_value") or 1))
+    except (TypeError, ValueError):
+        value = 1
+    unit = sub.get("custom_period_unit") or "month"
+    if unit == "day":
+        return value
+    if unit == "week":
+        return value * 7
+    return None
+
+
 def _count_cycles_in_range(sub: dict, range_start: date, range_end: date) -> int:
-    """统计订阅在 [range_start, range_end] 区间内到期的周期数（移植 count_cycles_in_range）。"""
-    if sub["period_type"] == "once":
+    """统计订阅在 [range_start, range_end] 区间内到期的周期数。
+
+    对日/周自定义周期使用整数运算，避免订阅历史较长时触发循环保护导致统计为 0；
+    月/季度/年继续使用日期推进逻辑，以保持月末钳制行为兼容。
+    """
+    if sub["period_type"] == "once" or range_start > range_end:
         return 0
     try:
         start_date = date.fromisoformat(sub["start_date"])
-    except ValueError:
+    except (TypeError, ValueError):
         return 0
     first_due = domain.add_one_period(
         start_date, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"]
@@ -109,9 +136,19 @@ def _count_cycles_in_range(sub: dict, range_start: date, range_end: date) -> int
     if first_due is None:
         return 0
     try:
-        anchor = date.fromisoformat(sub["next_due_date"]) if sub["next_due_date"] else first_due
-    except ValueError:
+        anchor = date.fromisoformat(sub["next_due_date"]) if sub.get("next_due_date") else first_due
+    except (TypeError, ValueError):
         anchor = first_due
+
+    fixed_days = _fixed_cycle_days(sub)
+    if fixed_days:
+        # 序列以 next_due_date（或首次到期日）为锚点，且不能早于首次到期日。
+        lower = max(range_start, first_due, start_date + timedelta(days=1))
+        if lower > range_end:
+            return 0
+        first_k = max(0, math.ceil((lower - anchor).days / fixed_days))
+        last_k = math.floor((range_end - anchor).days / fixed_days)
+        return max(0, last_k - first_k + 1)
 
     step = lambda d: domain.add_one_period(
         d, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"])
@@ -158,6 +195,8 @@ def _count_cycles_in_range(sub: dict, range_start: date, range_end: date) -> int
 
 
 def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
+    if mode not in ("nominal", "actual"):
+        raise ValueError("统计模式必须是 nominal 或 actual")
     subs = db.get_all_subscriptions(user_id)
     cats = {c["id"]: c for c in db.get_all_categories(user_id)}
     settings = db.get_app_settings()
@@ -188,7 +227,9 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
             continue
         active_count += 1
 
-        amount = sub["actual_amount"] if (mode == "actual" and sub["actual_amount"]) else sub["amount"]
+        amount = (sub["actual_amount"]
+                  if mode == "actual" and sub.get("actual_amount") is not None
+                  else sub["amount"])
         cny_amount = _convert_to_cny(amount, sub["currency"], settings)
 
         monthly_amount = _monthly_amount(sub, mode)
@@ -329,21 +370,32 @@ def _events_for_month(sub: dict, year: int, month: int) -> list[dict]:
                 start_date, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"]
             )
 
-    current = start_date
-    guard = 0
-    while current <= target_end:
-        guard += 1
-        if guard >= 10_000:
-            break
-        is_within = (current < effective_end) if effective_end else True
-        if (is_within and target_start <= current <= target_end
-                and current.month == month and current.year == year):
-            _push_event(events, sub, current, "cycle_start")
-        nxt = domain.add_one_period(
-            current, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"])
-        if nxt is None:
-            break
-        current = nxt
+    fixed_days = _fixed_cycle_days(sub)
+    if fixed_days:
+        # 对日/周周期直接定位到目标月份的第一条事件，避免从 start_date 逐日追赶。
+        offset = max(0, (target_start - start_date).days)
+        index = (offset + fixed_days - 1) // fixed_days
+        current = start_date + timedelta(days=index * fixed_days)
+        while current <= target_end:
+            if not effective_end or current < effective_end:
+                _push_event(events, sub, current, "cycle_start")
+            current += timedelta(days=fixed_days)
+    else:
+        current = start_date
+        guard = 0
+        while current <= target_end:
+            guard += 1
+            if guard >= 10_000:
+                break
+            is_within = (current < effective_end) if effective_end else True
+            if (is_within and target_start <= current <= target_end
+                    and current.month == month and current.year == year):
+                _push_event(events, sub, current, "cycle_start")
+            nxt = domain.add_one_period(
+                current, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"])
+            if nxt is None:
+                break
+            current = nxt
 
     due = sub.get("next_due_date")
     if due:
@@ -359,7 +411,9 @@ def _events_for_month(sub: dict, year: int, month: int) -> list[dict]:
 def _push_event(events: list, sub: dict, d: date, event_type: str) -> None:
     if not domain.is_calendar_event_visible(sub["lifecycle"], sub["updated_at"], d):
         return
-    amount = sub["actual_amount"] if sub["actual_amount"] else sub["amount"]
+    amount = (sub["actual_amount"]
+              if sub.get("actual_amount") is not None
+              else sub["amount"])
     events.append({
         "date": d.isoformat(),
         "subscription_id": sub["id"],

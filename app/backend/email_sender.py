@@ -5,7 +5,10 @@ import smtplib
 from email.mime.text import MIMEText
 from email.header import Header
 
-import db
+try:  # 包模式与直接从 backend 目录启动模式兼容。
+    from . import db
+except ImportError:  # pragma: no cover
+    import db
 
 
 def send_email(to_address: str, subject: str, body: str) -> None:

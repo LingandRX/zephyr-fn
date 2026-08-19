@@ -35,14 +35,24 @@ const form = reactive({
   smtp_port: "",
   smtp_username: "",
   smtp_password: "",
+  smtp_password_configured: false,
   smtp_from_address: "",
   pushplus_enabled: false,
   pushplus_token: "",
+  pushplus_token_configured: false,
 });
 
 const newCat = reactive({ name: "", icon: "" });
 
 const CAN_ADD_CAT = computed(() => newCat.name.trim().length > 0);
+
+function isSecretUpdate(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return false;
+  if (/^(?:\*{3,}|[•·●]{3,})$/.test(text)) return false;
+  if (/已配置|configured|redacted|masked/i.test(text)) return false;
+  return true;
+}
 
 async function loadAll() {
   try {
@@ -59,10 +69,13 @@ async function loadAll() {
       smtp_host: s.smtp_host || "",
       smtp_port: s.smtp_port || "",
       smtp_username: s.smtp_username || "",
-      smtp_password: s.smtp_password || "",
+      // 后端只返回 configured 标志，不再返回密钥原文。
+      smtp_password: "",
+      smtp_password_configured: !!s.smtp_password_configured,
       smtp_from_address: s.smtp_from_address || "",
       pushplus_enabled: !!s.pushplus_enabled,
-      pushplus_token: s.pushplus_token || "",
+      pushplus_token: "",
+      pushplus_token_configured: !!s.pushplus_token_configured,
     });
     cats.value = c;
     backupFiles.value = files;
@@ -85,7 +98,9 @@ watch(
     saveStatusText.value = "正在保存...";
     saveTimer = setTimeout(async () => {
       try {
-        await saveSettings({
+        const smtpSecretDraft = isSecretUpdate(form.smtp_password);
+        const pushplusSecretDraft = isSecretUpdate(form.pushplus_token);
+        const payload = {
           ...form,
           exchange_rate_usd: parseFloat(form.exchange_rate_usd) || 7.2,
           exchange_rate_hkd: parseFloat(form.exchange_rate_hkd) || 0.92,
@@ -95,10 +110,27 @@ watch(
           do_not_disturb_end: form.do_not_disturb_end || null,
           smtp_host: form.smtp_host || null,
           smtp_username: form.smtp_username || null,
-          smtp_password: form.smtp_password || null,
           smtp_from_address: form.smtp_from_address || null,
-          pushplus_token: form.pushplus_token || null,
-        });
+        };
+        // 密钥输入框为空或包含掩码时不发送字段，后端会保留现有密钥。
+        delete payload.smtp_password;
+        delete payload.pushplus_token;
+        delete payload.smtp_password_configured;
+        delete payload.pushplus_token_configured;
+        if (smtpSecretDraft) payload.smtp_password = form.smtp_password;
+        if (pushplusSecretDraft) payload.pushplus_token = form.pushplus_token;
+
+        await saveSettings(payload);
+        // 成功后清空前端草稿，降低密钥在页面内存中的停留时间；configured
+        // 标志保留，用户仍能看到“已配置，留空保持”的提示。
+        if (smtpSecretDraft) {
+          form.smtp_password = "";
+          form.smtp_password_configured = true;
+        }
+        if (pushplusSecretDraft) {
+          form.pushplus_token = "";
+          form.pushplus_token_configured = true;
+        }
         saving.value = false;
         saveStatusText.value = "✓ 设置已保存";
         clearTimeout(statusTimer);
@@ -271,7 +303,12 @@ onMounted(loadAll);
             </label>
             <label class="field">
               <span>密码 / 授权码</span>
-              <input v-model="form.smtp_password" type="password" />
+              <input
+                v-model="form.smtp_password"
+                type="password"
+                autocomplete="new-password"
+                :placeholder="form.smtp_password_configured ? '已配置，留空保持原密码' : '输入 SMTP 密码 / 授权码'"
+              />
             </label>
           </div>
           <label class="field">
@@ -292,7 +329,11 @@ onMounted(loadAll);
         <div class="fields-group" :class="{ disabled: !form.pushplus_enabled }">
           <label class="field">
             <span>PushPlus Token</span>
-            <input v-model="form.pushplus_token" placeholder="填写从 pushplus.plus 获取的一对一或群组 Token" />
+            <input
+              v-model="form.pushplus_token"
+              autocomplete="off"
+              :placeholder="form.pushplus_token_configured ? '已配置，留空保持原 Token' : '填写从 pushplus.plus 获取的一对一或群组 Token'"
+            />
           </label>
         </div>
         <div class="sub-hint-row">

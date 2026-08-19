@@ -103,6 +103,17 @@ class DbTests(unittest.TestCase):
         self.assertFalse(sub["auto_renew"])
         self.assertEqual(sub["renewal_policy"], "manual")
 
+    def test_switching_from_custom_period_clears_legacy_custom_fields(self):
+        sub = db.create_subscription("u1", {
+            "name": "自定义周期", "amount": 100, "period_type": "custom",
+            "custom_period_value": 2, "custom_period_unit": "week",
+            "start_date": "2026-01-01",
+        })
+        updated = db.update_subscription(sub["id"], "u1", {"period_type": "month"})
+        self.assertEqual(updated["period_type"], "month")
+        self.assertIsNone(updated["custom_period_value"])
+        self.assertIsNone(updated["custom_period_unit"])
+
     def test_notes_are_limited_to_120_characters(self):
         notes = "备" * 120
         sub = db.create_subscription("u1", {

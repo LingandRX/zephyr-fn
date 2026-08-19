@@ -10,17 +10,77 @@ from __future__ import annotations
 import sqlite3
 import threading
 import uuid
+from contextlib import contextmanager
+from collections.abc import Mapping
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import domain
+try:  # 包模式与直接从 backend 目录启动模式兼容。
+    from . import domain
+except ImportError:  # pragma: no cover
+    import domain
 
 _lock = threading.RLock()
 _conn: sqlite3.Connection | None = None
+_transaction_state = threading.local()
 
-CURRENT_DB_VERSION = 7
+CURRENT_DB_VERSION = 9
 MAX_NOTES_LENGTH = 120
+
+# app_settings 的字段定义集中维护，迁移和 SETTINGS_FIELDS 共用这份清单，
+# 避免新增设置字段后忘记补 schema。
+_SETTINGS_COLUMN_DEFINITIONS = {
+    "dark_mode": "TEXT NOT NULL DEFAULT 'system'",
+    "default_currency": "TEXT NOT NULL DEFAULT 'CNY'",
+    "exchange_rate_usd": "REAL NOT NULL DEFAULT 7.2",
+    "exchange_rate_hkd": "REAL NOT NULL DEFAULT 0.92",
+    "notification_days": "INTEGER NOT NULL DEFAULT 3",
+    "do_not_disturb_start": "TEXT",
+    "do_not_disturb_end": "TEXT",
+    "auto_start": "INTEGER NOT NULL DEFAULT 0",
+    "tray_mode": "INTEGER NOT NULL DEFAULT 1",
+    "email_enabled": "INTEGER NOT NULL DEFAULT 0",
+    "smtp_host": "TEXT",
+    "smtp_port": "INTEGER",
+    "smtp_username": "TEXT",
+    "smtp_password": "TEXT",
+    "smtp_from_address": "TEXT",
+    "email_template": "TEXT NOT NULL DEFAULT 'default'",
+    "notification_enabled": "INTEGER NOT NULL DEFAULT 1",
+    "pushplus_enabled": "INTEGER NOT NULL DEFAULT 0",
+    "pushplus_token": "TEXT",
+    "last_check_date": "TEXT",
+    "last_rate_update": "TEXT",
+}
+
+# v9 迁移和启动时自修复共用：每个 identity 组只保留一条日志。
+# sent 优先；同一优先级下保留 created_at 最新、id 最大的记录。
+_NOTIFICATION_DEDUP_SQL = """
+DELETE FROM notification_logs
+WHERE id IN (
+    SELECT doomed.id
+    FROM notification_logs AS doomed
+    WHERE EXISTS (
+        SELECT 1
+        FROM notification_logs AS winner
+        WHERE winner.subscription_id = doomed.subscription_id
+          AND winner.notification_date = doomed.notification_date
+          AND winner.channel = doomed.channel
+          AND (
+              (winner.status = 'sent' AND doomed.status <> 'sent')
+              OR (
+                  (winner.status = 'sent' AND doomed.status = 'sent')
+                  OR (winner.status <> 'sent' AND doomed.status <> 'sent')
+              )
+              AND (
+                  winner.created_at > doomed.created_at
+                  OR (winner.created_at = doomed.created_at AND winner.id > doomed.id)
+              )
+          )
+    )
+);
+"""
 
 _MIGRATIONS: list[tuple[int, str]] = [
     (1, """
@@ -108,6 +168,13 @@ CREATE INDEX IF NOT EXISTS idx_notif_sub_date ON notification_logs(subscription_
     (5, "ALTER TABLE app_settings ADD COLUMN pushplus_enabled INTEGER NOT NULL DEFAULT 0;"),
     (6, "ALTER TABLE app_settings ADD COLUMN pushplus_token TEXT;"),
     (7, "ALTER TABLE app_settings ADD COLUMN last_check_date TEXT;"),
+    # v8：SETTINGS_FIELDS 中的 last_rate_update 正式落库。
+    (8, "ALTER TABLE app_settings ADD COLUMN last_rate_update TEXT;"),
+    # v9：清理历史重复通知，并建立数据库级幂等约束。
+    (9, _NOTIFICATION_DEDUP_SQL + "\n"
+        "CREATE UNIQUE INDEX IF NOT EXISTS "
+        "idx_notification_logs_identity "
+        "ON notification_logs(subscription_id, notification_date, channel);"),
 ]
 
 # 订阅可更新字段（白名单）
@@ -127,6 +194,15 @@ SETTINGS_FIELDS = (
     "last_check_date", "last_rate_update",
 )
 
+_SUBSCRIPTION_COLUMNS = (
+    "id", "user_id", "name", "amount", "currency", "actual_amount",
+    "category_id", "notes", "period_type", "custom_period_value",
+    "custom_period_unit", "auto_renew", "sharing_role", "sharing_count",
+    "start_date", "first_payment_date", "next_due_date", "lifecycle",
+    "renewal_policy", "billing_status", "grace_period_ends_at",
+    "sync_version", "created_at", "updated_at",
+)
+
 
 def now_utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -141,16 +217,69 @@ def new_id() -> str:
 # --------------------------------------------------------------------------- #
 
 def connect(path: Path) -> None:
+    """打开数据库、设置并发参数并执行所有待迁移版本。"""
     global _conn
     path.parent.mkdir(parents=True, exist_ok=True)
-    _conn = sqlite3.connect(str(path), check_same_thread=False)
-    _conn.row_factory = sqlite3.Row
     with _lock:
+        if _conn is not None:
+            _conn.close()
+            _conn = None
+        _conn = sqlite3.connect(str(path), check_same_thread=False)
+        _conn.row_factory = sqlite3.Row
         _conn.execute("PRAGMA journal_mode=WAL")
         _conn.execute("PRAGMA foreign_keys=ON")
+        _conn.execute("PRAGMA busy_timeout=5000")
         _run_migrations()
+        _ensure_settings_schema()
+        _ensure_notification_schema()
         _seed_default_settings()
         _conn.commit()
+
+
+def close() -> None:
+    """关闭当前连接；测试、热重载和进程退出时可安全调用。"""
+    global _conn
+    with _lock:
+        if _conn is not None:
+            _conn.close()
+            _conn = None
+
+
+@contextmanager
+def transaction():
+    """提供可嵌套的、线程安全的数据库事务原语。
+
+    现有 CRUD 函数在普通调用下仍然自动提交；调用方需要把多步导入或
+    合并作为一个原子操作时，可使用：
+
+        with db.transaction():
+            ...
+
+    内层 CRUD 不会提前提交，异常会回滚最外层事务。"""
+    conn = _require_conn()
+    depth = getattr(_transaction_state, "depth", 0)
+    outermost = depth == 0
+    with _lock:
+        if outermost:
+            conn.execute("BEGIN IMMEDIATE")
+        _transaction_state.depth = depth + 1
+        try:
+            yield conn
+        except Exception:
+            _transaction_state.depth = depth
+            if outermost:
+                conn.rollback()
+            raise
+        else:
+            _transaction_state.depth = depth
+            if outermost:
+                conn.commit()
+
+
+def _commit() -> None:
+    conn = _require_conn()
+    if getattr(_transaction_state, "depth", 0) == 0:
+        conn.commit()
 
 
 def _get_db_version() -> int:
@@ -161,7 +290,7 @@ def _get_db_version() -> int:
     if row[0] == 0:
         return 0
     row = conn.execute("SELECT version FROM db_version WHERE id=1").fetchone()
-    return row[0] if row else 0
+    return int(row[0]) if row else 0
 
 
 def _column_exists(table: str, column: str) -> bool:
@@ -170,36 +299,103 @@ def _column_exists(table: str, column: str) -> bool:
     return any(r[1] == column for r in rows)
 
 
+def _ensure_settings_schema() -> None:
+    """修复版本号与实际 schema 不一致的旧数据库。"""
+    conn = _require_conn()
+    for column, definition in _SETTINGS_COLUMN_DEFINITIONS.items():
+        if not _column_exists("app_settings", column):
+            conn.execute(f"ALTER TABLE app_settings ADD COLUMN {column} {definition}")
+
+
+def _ensure_notification_schema() -> None:
+    """修复通知日志 schema，并保证旧数据库也具备幂等写入能力。
+
+    v9 迁移会处理正常的版本升级；这里再执行一次清理/建索引，是为了
+    兼容版本号已经写成最新但上次升级中途失败、或由旧版本手工创建的数据库。
+    清理必须发生在唯一索引之前。通知写入统一使用带冲突目标的 UPSERT，
+    不依赖触发器处理失败重试。
+    """
+    conn = _require_conn()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS notification_logs (
+            id TEXT PRIMARY KEY,
+            subscription_id TEXT NOT NULL,
+            notification_date TEXT NOT NULL,
+            channel TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'sent',
+            error_message TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.execute(_NOTIFICATION_DEDUP_SQL)
+
+    # 如果曾有同名但非唯一/列顺序不正确的手工索引，IF NOT EXISTS 不会替换它，
+    # 必须先删除后重建；正常升级路径不会触发这段分支。
+    index_name = "idx_notification_logs_identity"
+    expected_columns = ["subscription_id", "notification_date", "channel"]
+    existing = conn.execute("PRAGMA index_list(notification_logs)").fetchall()
+    for index in existing:
+        if index[1] != index_name:
+            continue
+        columns = [row[2] for row in conn.execute(
+            f'PRAGMA index_info("{index_name}")'
+        ).fetchall()]
+        is_unique = bool(index[2])
+        is_partial = len(index) > 5 and bool(index[5])
+        if not (is_unique and not is_partial and columns == expected_columns):
+            conn.execute(f'DROP INDEX "{index_name}"')
+        break
+
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_logs_identity "
+        "ON notification_logs(subscription_id, notification_date, channel)"
+    )
+
+    # 清理早期尝试留下的触发器；当前幂等语义由显式 UPSERT 保证，
+    # 避免触发器定义缺失或旧定义改变 INSERT 行为。
+    conn.execute("DROP TRIGGER IF EXISTS trg_notification_logs_reuse_failed")
+
+
 def _run_migrations() -> None:
     conn = _require_conn()
-    version = _get_db_version()
-    for target_version, sql in sorted(_MIGRATIONS):
-        if version < target_version:
-            # ALTER TABLE ADD COLUMN 逐条执行，列已存在则跳过（幂等）
-            statements = [s.strip() for s in sql.split(";") if s.strip()]
-            for stmt in statements:
-                lower = stmt.lower()
-                if lower.startswith("alter table"):
-                    table, _, rest = stmt[12:].partition(" ")
-                    column = rest.split(" ")[0] if rest else ""
-                    if _column_exists(table.strip(), column.strip()):
-                        continue
-                conn.execute(stmt)
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS db_version "
-                "(id INTEGER PRIMARY KEY CHECK (id=1), version INTEGER NOT NULL)"
-            )
-            conn.execute(
-                "INSERT OR REPLACE INTO db_version (id, version) VALUES (1, ?)",
-                (target_version,),
-            )
-    # 记录最终版本
     conn.execute(
         "CREATE TABLE IF NOT EXISTS db_version "
         "(id INTEGER PRIMARY KEY CHECK (id=1), version INTEGER NOT NULL)"
     )
+    version = _get_db_version()
+    if version > CURRENT_DB_VERSION:
+        raise RuntimeError(
+            f"数据库版本 {version} 高于当前后端支持的版本 {CURRENT_DB_VERSION}"
+        )
+
+    for target_version, sql in sorted(_MIGRATIONS):
+        if version >= target_version:
+            continue
+        # ALTER TABLE ADD COLUMN 逐条执行，列已存在则跳过（幂等）。
+        statements = [s.strip() for s in sql.split(";") if s.strip()]
+        for stmt in statements:
+            lower = stmt.lower()
+            if lower.startswith("alter table"):
+                tokens = stmt.split()
+                table = tokens[2] if len(tokens) > 2 else ""
+                # ALTER TABLE <table> ADD COLUMN <column> ...
+                column = tokens[5] if len(tokens) > 5 and tokens[3].lower() == "add" \
+                    and tokens[4].lower() == "column" else ""
+                if table and column and _column_exists(table.strip(), column.strip()):
+                    continue
+            conn.execute(stmt)
+        conn.execute(
+            "INSERT INTO db_version (id, version) VALUES (1, ?) "
+            "ON CONFLICT(id) DO UPDATE SET version=excluded.version",
+            (target_version,),
+        )
+        version = target_version
+
+    # 即使数据库版本号已经是最新，也修复手工创建/不完整升级的 schema。
+    _ensure_settings_schema()
     conn.execute(
-        "INSERT OR REPLACE INTO db_version (id, version) VALUES (1, ?)",
+        "INSERT INTO db_version (id, version) VALUES (1, ?) "
+        "ON CONFLICT(id) DO UPDATE SET version=excluded.version",
         (CURRENT_DB_VERSION,),
     )
 
@@ -240,11 +436,8 @@ def _to_bool(value: Any) -> bool:
 
 
 def _date_value(value: Any) -> str | None:
-    if value in (None, ""):
-        return None
-    if isinstance(value, date):
-        return value.isoformat()
-    return str(value)[:10]
+    """兼容旧调用名，但改为严格的日期解析。"""
+    return domain.normalize_date(value, "日期")
 
 
 def _normalize_notes(value: Any) -> str | None:
@@ -252,6 +445,17 @@ def _normalize_notes(value: Any) -> str | None:
     if len(notes) > MAX_NOTES_LENGTH:
         raise ValueError(f"备注不能超过{MAX_NOTES_LENGTH}字")
     return notes or None
+
+
+def _optional_text(value: Any) -> str | None:
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _normalize_sharing_count(value: Any) -> int | None:
+    return domain.normalize_non_negative_int(value, "共享人数", allow_none=True)
 
 
 def _row_to_sub(row: sqlite3.Row) -> dict:
@@ -268,68 +472,143 @@ def _row_to_settings(row: sqlite3.Row) -> dict:
     return data
 
 
-def _normalize_new_subscription(user_id: str, data: dict) -> dict:
-    """校验并规整创建入参（移植 create_subscription 逻辑）。"""
-    name = str(data.get("name") or "").strip()
-    if not name:
-        raise ValueError("名称不能为空")
-    period_type = str(data.get("period_type") or "month").strip()
-    if period_type not in domain.PERIOD_TYPES:
-        raise ValueError(f"未知周期类型: {period_type}")
-    currency = str(data.get("currency") or "CNY").strip().upper()
-    if currency not in ("CNY", "USD", "HKD"):
-        raise ValueError(f"不支持的货币: {currency}")
-    amount = _to_int(data.get("amount"), 0)
-    if amount < 0:
-        raise ValueError("金额不能为负数")
-    actual_amount = data.get("actual_amount")
-    actual_amount = _to_int(actual_amount) if actual_amount not in (None, "") else None
-    start_date = _date_value(data.get("start_date")) or date.today().isoformat()
-    first_payment_date = _date_value(data.get("first_payment_date"))
-    next_due_date = _date_value(data.get("next_due_date"))
+def _reject_explicit_blank(data: Mapping[str, Any], fields: tuple[str, ...]) -> None:
+    for field in fields:
+        if field in data and data[field] is None:
+            raise ValueError(f"{field}不能为空")
+        if field in data and isinstance(data[field], str) and not data[field].strip():
+            raise ValueError(f"{field}不能为空")
 
-    custom_value = data.get("custom_period_value")
-    custom_value = max(1, _to_int(custom_value, 1)) if custom_value not in (None, "") else None
-    custom_unit = data.get("custom_period_unit") or "month"
 
-    if next_due_date is None and period_type != "once":
-        derived = domain.add_one_period(
-            date.fromisoformat(start_date), period_type, custom_value, custom_unit
-        )
-        if derived:
-            next_due_date = derived.isoformat()
-
-    auto_renew = _to_bool(data.get("auto_renew", True))
-    auto_renew, renewal_policy = (
-        (False, "manual") if period_type == "once"
-        else domain.normalize_renewal_on_create(auto_renew, data.get("renewal_policy"))
+def _derive_next_due(normalized: Mapping[str, Any]) -> str | None:
+    if normalized["period_type"] == "once":
+        return None
+    if normalized.get("next_due_date"):
+        return normalized["next_due_date"]
+    next_due = domain.add_one_period(
+        date.fromisoformat(normalized["start_date"]),
+        normalized["period_type"],
+        normalized.get("custom_period_value"),
+        normalized.get("custom_period_unit"),
     )
+    return next_due.isoformat() if next_due else None
 
+
+def _normalize_new_subscription(user_id: str, data: Mapping[str, Any]) -> dict:
+    """创建订阅：所有核心字段统一通过 domain.normalize_subscription_data 校验。"""
+    if not isinstance(data, Mapping):
+        raise ValueError("订阅数据必须是对象")
+    _reject_explicit_blank(
+        data,
+        ("name", "amount", "currency", "period_type", "auto_renew", "start_date",
+         "lifecycle"),
+    )
+    normalized = domain.normalize_subscription_data(
+        data,
+        defaults={
+            "amount": 0,
+            "currency": "CNY",
+            "period_type": "month",
+            "auto_renew": True,
+            "lifecycle": "active",
+            "billing_status": "normal",
+            "start_date": date.today().isoformat(),
+        },
+    )
+    normalized["next_due_date"] = _derive_next_due(normalized)
+    timestamp = now_utc()
     return {
         "id": new_id(),
-        "user_id": user_id,
-        "name": name,
-        "amount": amount,
-        "currency": currency,
-        "actual_amount": actual_amount,
-        "category_id": data.get("category_id") or None,
+        "user_id": str(user_id or "local"),
+        "name": normalized["name"],
+        "amount": normalized["amount"],
+        "currency": normalized["currency"],
+        "actual_amount": normalized["actual_amount"],
+        "category_id": _optional_text(data.get("category_id")),
         "notes": _normalize_notes(data.get("notes")),
-        "period_type": period_type,
-        "custom_period_value": custom_value,
-        "custom_period_unit": custom_unit if period_type == "custom" else None,
-        "auto_renew": int(auto_renew),
-        "sharing_role": data.get("sharing_role") or None,
-        "sharing_count": data.get("sharing_count"),
-        "start_date": start_date,
-        "first_payment_date": first_payment_date,
-        "next_due_date": next_due_date,
-        "lifecycle": "active",
-        "renewal_policy": renewal_policy,
-        "billing_status": "normal",
-        "grace_period_ends_at": None,
+        "period_type": normalized["period_type"],
+        "custom_period_value": normalized["custom_period_value"],
+        "custom_period_unit": normalized["custom_period_unit"],
+        "auto_renew": int(normalized["auto_renew"]),
+        "sharing_role": _optional_text(data.get("sharing_role")),
+        "sharing_count": _normalize_sharing_count(data.get("sharing_count")),
+        "start_date": normalized["start_date"],
+        "first_payment_date": normalized["first_payment_date"],
+        "next_due_date": normalized["next_due_date"],
+        "lifecycle": normalized["lifecycle"],
+        "renewal_policy": normalized["renewal_policy"],
+        "billing_status": normalized["billing_status"],
+        "grace_period_ends_at": normalized["grace_period_ends_at"],
         "sync_version": 1,
-        "created_at": now_utc(),
-        "updated_at": now_utc(),
+        "created_at": timestamp,
+        "updated_at": timestamp,
+    }
+
+
+def _normalize_raw_subscription(
+    sub: Mapping[str, Any],
+    user_id: str | None = None,
+    *,
+    preserve_id: bool = False,
+) -> dict:
+    """规范化外部导入/合并行，但不信任外部 user_id 和字段名。"""
+    if not isinstance(sub, Mapping):
+        raise ValueError("订阅数据必须是对象")
+    owner = str(user_id if user_id is not None else sub.get("user_id", "local") or "local")
+    _reject_explicit_blank(
+        sub,
+        ("name", "amount", "currency", "period_type", "auto_renew", "start_date",
+         "lifecycle"),
+    )
+    normalized = domain.normalize_subscription_data(
+        sub,
+        defaults={
+            "amount": 0,
+            "currency": "CNY",
+            "period_type": "month",
+            "auto_renew": True,
+            "lifecycle": "active",
+            "billing_status": "normal",
+            "start_date": date.today().isoformat(),
+        },
+    )
+    normalized["next_due_date"] = _derive_next_due(normalized)
+    raw_id = str(sub.get("id") or "").strip()
+    if not raw_id:
+        raw_id = new_id()
+    if not preserve_id:
+        raw_id = raw_id
+    sync_version = domain.normalize_positive_int(
+        sub.get("sync_version", 1), "同步版本"
+    )
+    timestamp = now_utc()
+    created_at = str(sub.get("created_at") or timestamp)
+    updated_at = str(sub.get("updated_at") or timestamp)
+    return {
+        "id": raw_id,
+        "user_id": owner,
+        "name": normalized["name"],
+        "amount": normalized["amount"],
+        "currency": normalized["currency"],
+        "actual_amount": normalized["actual_amount"],
+        "category_id": _optional_text(sub.get("category_id")),
+        "notes": _normalize_notes(sub.get("notes")),
+        "period_type": normalized["period_type"],
+        "custom_period_value": normalized["custom_period_value"],
+        "custom_period_unit": normalized["custom_period_unit"],
+        "auto_renew": int(normalized["auto_renew"]),
+        "sharing_role": _optional_text(sub.get("sharing_role")),
+        "sharing_count": _normalize_sharing_count(sub.get("sharing_count")),
+        "start_date": normalized["start_date"],
+        "first_payment_date": normalized["first_payment_date"],
+        "next_due_date": normalized["next_due_date"],
+        "lifecycle": normalized["lifecycle"],
+        "renewal_policy": normalized["renewal_policy"],
+        "billing_status": normalized["billing_status"],
+        "grace_period_ends_at": normalized["grace_period_ends_at"],
+        "sync_version": sync_version,
+        "created_at": created_at,
+        "updated_at": updated_at,
     }
 
 
@@ -365,8 +644,98 @@ def create_subscription(user_id: str, data: dict) -> dict:
             f"INSERT INTO subscriptions ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
             [sub[c] for c in cols],
         )
-        conn.commit()
-    return get_subscription_by_id(sub["id"], user_id)
+        _commit()
+    result = get_subscription_by_id(sub["id"], sub["user_id"])
+    if result is None:
+        raise RuntimeError("订阅创建后无法读取")
+    return result
+
+
+def _normalize_update_subscription(
+    current: Mapping[str, Any], data: Mapping[str, Any]
+) -> tuple[dict[str, Any], set[str]]:
+    if not isinstance(data, Mapping):
+        raise ValueError("订阅数据必须是对象")
+    requested = {field for field in SUBSCRIPTION_FIELDS if field in data}
+    if not requested:
+        return dict(current), set()
+
+    _reject_explicit_blank(
+        data,
+        ("name", "amount", "currency", "period_type", "auto_renew", "lifecycle"),
+    )
+    if "renewal_policy" in data and (
+        data["renewal_policy"] is None
+        or (isinstance(data["renewal_policy"], str) and not data["renewal_policy"].strip())
+    ):
+        raise ValueError("续费策略不能为空")
+    if "start_date" in data and data["start_date"] is None:
+        raise ValueError("开始日期不能为空")
+    if "start_date" in data and isinstance(data["start_date"], str) \
+            and not data["start_date"].strip():
+        raise ValueError("开始日期不能为空")
+
+    candidate: dict[str, Any] = {
+        field: current.get(field)
+        for field in (
+            "name", "amount", "currency", "actual_amount", "period_type",
+            "custom_period_value", "custom_period_unit", "auto_renew",
+            "start_date", "first_payment_date", "next_due_date", "lifecycle",
+            "renewal_policy", "billing_status", "grace_period_ends_at",
+        )
+    }
+    for field in requested:
+        if field in candidate:
+            candidate[field] = data[field]
+
+    # 续费策略更新有明确的优先级：显式策略 > auto_renew；一次性强制手动。
+    effective_period = domain.normalize_period_type(candidate.get("period_type"))
+    update_auto = (
+        domain.normalize_bool(data["auto_renew"], "自动续费")
+        if "auto_renew" in data else None
+    )
+    update_policy = data.get("renewal_policy") if "renewal_policy" in data else None
+    effective_auto, effective_policy = domain.resolve_renewal_on_update(
+        bool(current.get("auto_renew")),
+        str(current.get("renewal_policy") or "manual"),
+        update_auto,
+        update_policy,
+        period_type=effective_period,
+    )
+    candidate["auto_renew"] = effective_auto
+    candidate["renewal_policy"] = effective_policy
+
+    # 旧记录从 custom 切换到标准周期时，调用方可能只提交 period_type；
+    # 不能把数据库里遗留的 custom 字段带入领域校验，否则无法完成迁移。
+    # 若请求显式携带非空 custom 字段，则仍拒绝矛盾数据；空值则按清理处理。
+    if effective_period != "custom":
+        if any(
+            field in data and data[field] not in (None, "")
+            for field in ("custom_period_value", "custom_period_unit")
+        ):
+            raise ValueError("custom_period_value/custom_period_unit仅适用于custom周期")
+        candidate["custom_period_value"] = None
+        candidate["custom_period_unit"] = None
+
+    normalized = domain.normalize_subscription_data(candidate)
+    requested_period_fields = {
+        "period_type", "custom_period_value", "custom_period_unit"
+    }
+    period_changed = normalized["period_type"] != current.get("period_type")
+    custom_changed = any(field in data for field in requested_period_fields)
+    anchor_changed = "start_date" in data
+    explicit_next_due = "next_due_date" in data
+    next_due_needs_recompute = period_changed or custom_changed or anchor_changed
+
+    if normalized["period_type"] == "once":
+        # once 没有后续周期；即使旧记录带有 next_due_date，也清理掉。
+        normalized["next_due_date"] = None
+    elif next_due_needs_recompute and (
+        not explicit_next_due or data.get("next_due_date") in (None, "")
+    ):
+        normalized["next_due_date"] = _derive_next_due(normalized)
+
+    return normalized, requested
 
 
 def update_subscription(sub_id: str, user_id: str, data: dict) -> dict | None:
@@ -375,43 +744,47 @@ def update_subscription(sub_id: str, user_id: str, data: dict) -> dict | None:
     if current is None:
         return None
 
-    updates: dict = {}
-    for field in SUBSCRIPTION_FIELDS:
-        if field not in data:
-            continue
-        value = data[field]
-        if field in ("amount",):
-            updates[field] = max(0, _to_int(value, 0))
-        elif field in ("custom_period_value",):
-            updates[field] = max(1, _to_int(value, 1)) if value not in (None, "") else None
-        elif field in ("custom_period_unit", "period_type", "currency"):
-            if value in (None, ""):
-                continue
-            updates[field] = str(value)
-        elif field in ("auto_renew",):
-            updates[field] = int(_to_bool(value))
-        elif field in ("actual_amount",):
-            updates[field] = _to_int(value) if value not in (None, "") else None
+    normalized, requested = _normalize_update_subscription(current, data)
+    if not requested:
+        return current
+
+    updates: dict[str, Any] = {}
+    # 只把调用方请求过的字段写回；领域归一化产生的同步字段在下面补齐。
+    for field in requested:
+        if field in normalized:
+            updates[field] = normalized[field]
         elif field == "notes":
-            updates[field] = _normalize_notes(value)
-        elif field in ("start_date", "first_payment_date", "next_due_date",
-                       "grace_period_ends_at"):
-            updates[field] = _date_value(value)
-        else:
-            updates[field] = value
+            updates[field] = _normalize_notes(data[field])
+        elif field == "category_id":
+            updates[field] = _optional_text(data[field])
+        elif field == "sharing_role":
+            updates[field] = _optional_text(data[field])
+        elif field == "sharing_count":
+            updates[field] = _normalize_sharing_count(data[field])
 
-    # 续费策略归一化
-    if "auto_renew" in updates or "renewal_policy" in data:
-        auto_renew, policy = domain.resolve_renewal_on_update(
-            current["auto_renew"], current["renewal_policy"],
-            updates.get("auto_renew", None) if "auto_renew" in updates else None,
-            data.get("renewal_policy"),
-        )
-        updates["auto_renew"] = int(auto_renew)
-        updates["renewal_policy"] = policy
+    period_changed = normalized["period_type"] != current.get("period_type")
+    custom_changed = any(
+        field in data for field in ("period_type", "custom_period_value", "custom_period_unit")
+    )
+    if period_changed or custom_changed:
+        # 非 custom 周期必须清理旧的自定义字段，custom 周期则同时写入完整值。
+        updates["period_type"] = normalized["period_type"]
+        updates["custom_period_value"] = normalized["custom_period_value"]
+        updates["custom_period_unit"] = normalized["custom_period_unit"]
 
-    if "renewal_policy" in updates and "auto_renew" not in updates and "auto_renew" not in data:
-        updates["auto_renew"] = int(updates["renewal_policy"] == "auto")
+    # auto_renew 与 renewal_policy 始终成对保存，避免出现互相矛盾的状态。
+    if "auto_renew" in data or "renewal_policy" in data or period_changed:
+        updates["auto_renew"] = int(normalized["auto_renew"])
+        updates["renewal_policy"] = normalized["renewal_policy"]
+
+    # once 或周期/开始日期变更时，必要时重算 next_due_date；显式有效日期优先。
+    if normalized["period_type"] == "once":
+        updates["next_due_date"] = None
+    elif (
+        (period_changed or custom_changed or "start_date" in data)
+        and ("next_due_date" not in data or data.get("next_due_date") in (None, ""))
+    ):
+        updates["next_due_date"] = _derive_next_due(normalized)
 
     if not updates:
         return current
@@ -419,11 +792,13 @@ def update_subscription(sub_id: str, user_id: str, data: dict) -> dict | None:
     updates["updated_at"] = now_utc()
     sets = ",".join(f"{c}=?" for c in updates)
     with _lock:
-        conn.execute(
+        cur = conn.execute(
             f"UPDATE subscriptions SET {sets} WHERE id=? AND user_id=?",
             [updates[c] for c in updates] + [sub_id, user_id],
         )
-        conn.commit()
+        _commit()
+    if cur.rowcount == 0:
+        return None
     return get_subscription_by_id(sub_id, user_id)
 
 
@@ -433,7 +808,7 @@ def delete_subscription(sub_id: str, user_id: str) -> bool:
         cur = conn.execute(
             "DELETE FROM subscriptions WHERE id=? AND user_id=?", (sub_id, user_id)
         )
-        conn.commit()
+        _commit()
     return cur.rowcount > 0
 
 
@@ -456,7 +831,7 @@ def renew_subscription(sub_id: str, user_id: str) -> dict | None:
             "billing_status='normal', updated_at=? WHERE id=? AND user_id=?",
             (nxt.isoformat(), now_utc(), sub_id, user_id),
         )
-        conn.commit()
+        _commit()
     return get_subscription_by_id(sub_id, user_id)
 
 
@@ -485,7 +860,7 @@ def create_category(user_id: str, data: dict) -> dict:
             "INSERT INTO categories (id, user_id, name, icon, sort_order) VALUES (?,?,?,?,?)",
             (cat_id, user_id, name, data.get("icon"), _to_int(data.get("sort_order"), 0)),
         )
-        conn.commit()
+        _commit()
     row = conn.execute("SELECT * FROM categories WHERE id=?", (cat_id,)).fetchone()
     return dict(row)
 
@@ -514,7 +889,7 @@ def update_category(cat_id: str, user_id: str, data: dict) -> dict | None:
                 f"UPDATE categories SET {sets} WHERE id=? AND user_id=?",
                 [updates[c] for c in updates] + [cat_id, user_id],
             )
-            conn.commit()
+            _commit()
         row = conn.execute("SELECT * FROM categories WHERE id=?", (cat_id,)).fetchone()
     return dict(row)
 
@@ -525,13 +900,41 @@ def delete_category(cat_id: str, user_id: str) -> bool:
         cur = conn.execute(
             "DELETE FROM categories WHERE id=? AND user_id=?", (cat_id, user_id)
         )
-        conn.commit()
+        _commit()
     return cur.rowcount > 0
 
 
 # --------------------------------------------------------------------------- #
 # 设置
 # --------------------------------------------------------------------------- #
+
+_SECRET_SETTING_FIELDS = frozenset({"smtp_password", "pushplus_token"})
+_SECRET_MASK_EXACT = frozenset({
+    "***", "******", "********", "**********", "************",
+    "••••", "••••••", "••••••••", "[redacted]", "[已配置]",
+    "已配置", "configured",
+})
+
+
+def is_secret_placeholder(value: Any) -> bool:
+    """判断设置请求中的值是否表示“保持原密钥”。
+
+    空值、None 和常见掩码都不会覆盖数据库中的现有密钥；只有明确的非掩码
+    字符串才会被 update_app_settings 写入。该规则同时供 HTTP 层复用。
+    """
+    if value is None:
+        return True
+    text = str(value).strip()
+    if not text:
+        return True
+    lowered = text.lower()
+    if lowered in _SECRET_MASK_EXACT:
+        return True
+    if "已配置" in text or lowered in {"redacted", "masked"}:
+        return True
+    mask_chars = {"*", "•", "·", "●"}
+    return len(text) >= 3 and all(char in mask_chars for char in text)
+
 
 def get_app_settings() -> dict:
     conn = _require_conn()
@@ -547,6 +950,10 @@ def update_app_settings(data: dict) -> dict:
         if field not in data:
             continue
         value = data[field]
+        if field in _SECRET_SETTING_FIELDS and is_secret_placeholder(value):
+            # GET /api/settings 不再回传原文；前端未修改密钥时会传空值或掩码，
+            # 此处必须跳过，而不是把已有密钥清空。
+            continue
         if field in ("exchange_rate_usd", "exchange_rate_hkd"):
             try:
                 updates[field] = float(value)
@@ -570,7 +977,7 @@ def update_app_settings(data: dict) -> dict:
             f"UPDATE app_settings SET {sets} WHERE id=1",
             [updates[c] for c in updates],
         )
-        conn.commit()
+        _commit()
     return get_app_settings()
 
 
@@ -592,15 +999,37 @@ def has_channel_notified_today(subscription_id: str, channel: str) -> bool:
 
 def log_notification(subscription_id: str, channel: str, status: str,
                      error_message: str | None = None) -> None:
+    """幂等记录通知结果。
+
+    notification_logs 的 identity 由订阅、日期和渠道组成，同一 identity 只保留
+    一行：sent 是终态，不能被后续 failed/pending 降级；failed/pending 可以被
+    新结果更新，sent 可以把失败记录升级为成功。整个 check/update/insert 在
+    ``BEGIN IMMEDIATE`` 中完成，避免并发调用在唯一索引处互相报错。
+    """
     conn = _require_conn()
-    with _lock:
-        conn.execute(
+    notification_date = date.today().isoformat()
+    created_at = now_utc()
+    incoming_status = str(status or "").strip().lower() or "failed"
+
+    with transaction() as tx:
+        # identity 唯一索引是数据库级并发保护；DO UPDATE 保留现有行 id，
+        # 因此重复失败/重试不会触发 IntegrityError，也不会产生第二行。
+        tx.execute(
             "INSERT INTO notification_logs (id, subscription_id, notification_date, "
-            "channel, status, error_message, created_at) VALUES (?,?,?,?,?,?,?)",
-            (new_id(), subscription_id, date.today().isoformat(),
-             channel, status, error_message, now_utc()),
+            "channel, status, error_message, created_at) VALUES (?,?,?,?,?,?,?) "
+            "ON CONFLICT(subscription_id, notification_date, channel) DO UPDATE SET "
+            "status=CASE WHEN notification_logs.status='sent' THEN 'sent' "
+            "           ELSE excluded.status END, "
+            "error_message=CASE WHEN notification_logs.status='sent' "
+            "                 THEN notification_logs.error_message "
+            "                 WHEN excluded.status='sent' THEN NULL "
+            "                 ELSE excluded.error_message END, "
+            "created_at=CASE WHEN notification_logs.status='sent' "
+            "               THEN notification_logs.created_at "
+            "               ELSE excluded.created_at END",
+            (new_id(), subscription_id, notification_date, channel,
+             incoming_status, error_message, created_at),
         )
-        conn.commit()
 
 
 def log_email(to_address: str, subject: str, status: str,
@@ -613,68 +1042,183 @@ def log_email(to_address: str, subject: str, status: str,
             (new_id(), to_address, subject, status, error_message,
              now_utc() if status == "sent" else None, now_utc()),
         )
-        conn.commit()
+        _commit()
 
 
 # --------------------------------------------------------------------------- #
 # 备份辅助（全量读取，供导出/合并使用）
 # --------------------------------------------------------------------------- #
 
-def get_all_subscriptions_raw() -> list[dict]:
+def get_all_subscriptions_raw(user_id: str | None = None) -> list[dict]:
+    """读取原始订阅；传入 user_id 时只返回该用户数据。"""
     conn = _require_conn()
     with _lock:
-        rows = conn.execute("SELECT * FROM subscriptions ORDER BY id").fetchall()
+        if user_id is None:
+            rows = conn.execute("SELECT * FROM subscriptions ORDER BY id").fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM subscriptions WHERE user_id=? ORDER BY id",
+                (user_id,),
+            ).fetchall()
     return [_row_to_sub(r) for r in rows]
 
 
-def get_all_categories_raw() -> list[dict]:
+def get_all_subscriptions_scoped(user_id: str) -> list[dict]:
+    """显式的用户范围原始读取 API。"""
+    return get_all_subscriptions_raw(user_id)
+
+
+def get_all_categories_raw(user_id: str | None = None) -> list[dict]:
+    """读取原始分类；传入 user_id 时只返回该用户数据。"""
     conn = _require_conn()
     with _lock:
-        rows = conn.execute("SELECT * FROM categories ORDER BY id").fetchall()
+        if user_id is None:
+            rows = conn.execute("SELECT * FROM categories ORDER BY id").fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM categories WHERE user_id=? ORDER BY id",
+                (user_id,),
+            ).fetchall()
     return [dict(r) for r in rows]
+
+
+def get_all_categories_scoped(user_id: str) -> list[dict]:
+    """显式的用户范围原始分类读取 API。"""
+    return get_all_categories_raw(user_id)
 
 
 def get_subscription_dedup_keys(user_id: str | None = None) -> set:
     """去重键：名称|金额|周期类型（与参考项目一致）。"""
     conn = _require_conn()
-    if user_id:
-        rows = conn.execute(
-            "SELECT name, amount, period_type FROM subscriptions WHERE user_id=?",
-            (user_id,),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT name, amount, period_type FROM subscriptions"
-        ).fetchall()
+    with _lock:
+        if user_id is not None:
+            rows = conn.execute(
+                "SELECT name, amount, period_type FROM subscriptions WHERE user_id=?",
+                (user_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT name, amount, period_type FROM subscriptions"
+            ).fetchall()
     return {f"{r['name']}|{r['amount']}|{r['period_type']}".lower() for r in rows}
 
 
-def insert_subscription_raw(sub: dict) -> None:
-    conn = _require_conn()
-    cols = list(sub.keys())
-    with _lock:
-        conn.execute(
-            f"INSERT OR REPLACE INTO subscriptions ({','.join(cols)}) "
-            f"VALUES ({','.join('?' * len(cols))})",
-            [sub[c] for c in cols],
-        )
-        conn.commit()
+def _insert_subscription_row(conn: sqlite3.Connection, sub: Mapping[str, Any]) -> None:
+    values = [sub[column] for column in _SUBSCRIPTION_COLUMNS]
+    placeholders = ",".join("?" for _ in _SUBSCRIPTION_COLUMNS)
+    conn.execute(
+        f"INSERT INTO subscriptions ({','.join(_SUBSCRIPTION_COLUMNS)}) "
+        f"VALUES ({placeholders})",
+        values,
+    )
 
 
-def insert_category_raw(cat: dict) -> None:
+def insert_subscription_raw(
+    sub: Mapping[str, Any], user_id: str | None = None
+) -> dict:
+    """安全插入外部订阅行，绝不覆盖已有 id。
+
+    旧调用仍可只传一个 dict；如果 id 已被任何用户占用，会生成新 id，
+    从而避免 ``INSERT OR REPLACE`` 删除其他用户的记录。
+    """
     conn = _require_conn()
+    normalized = _normalize_raw_subscription(sub, user_id)
+    owner = normalized["user_id"]
     with _lock:
-        conn.execute(
+        while True:
+            try:
+                _insert_subscription_row(conn, normalized)
+                break
+            except sqlite3.IntegrityError:
+                # 其他进程可能刚好占用了同一个外部 id；只在确认是主键
+                # 冲突时改用本地新 id，其他完整性错误继续抛出。
+                if conn.execute(
+                    "SELECT 1 FROM subscriptions WHERE id=?",
+                    (normalized["id"],),
+                ).fetchone():
+                    normalized["id"] = new_id()
+                    continue
+                raise
+        _commit()
+    result = get_subscription_by_id(normalized["id"], owner)
+    if result is None:
+        raise RuntimeError("原始订阅插入后无法读取")
+    return result
+
+
+def insert_subscription_raw_scoped(user_id: str, sub: Mapping[str, Any]) -> dict:
+    """强制指定 owner 的安全原始插入 API。"""
+    return insert_subscription_raw(sub, user_id=user_id)
+
+
+def insert_category_raw(cat: Mapping[str, Any], user_id: str | None = None) -> bool:
+    """安全插入外部分类；id 冲突时忽略，不覆盖任何用户的分类。"""
+    conn = _require_conn()
+    if not isinstance(cat, Mapping):
+        raise ValueError("分类数据必须是对象")
+    cat_id = str(cat.get("id") or "").strip()
+    name = str(cat.get("name") or "未分类").strip() or "未分类"
+    if not cat_id:
+        raise ValueError("分类 id 不能为空")
+    owner = str(user_id if user_id is not None else cat.get("user_id", "local") or "local")
+    with _lock:
+        cur = conn.execute(
             "INSERT OR IGNORE INTO categories (id, user_id, name, icon, sort_order) "
             "VALUES (?,?,?,?,?)",
-            (cat["id"], cat.get("user_id", "local"), cat["name"],
-             cat.get("icon"), cat.get("sort_order", 0)),
+            (cat_id, owner, name, cat.get("icon"),
+             _to_int(cat.get("sort_order"), 0)),
         )
-        conn.commit()
+        _commit()
+    return cur.rowcount > 0
 
 
-def replace_subscription_raw(sub: dict) -> None:
-    insert_subscription_raw(sub)
+def insert_category_raw_scoped(user_id: str, cat: Mapping[str, Any]) -> bool:
+    """强制指定 owner 的安全原始分类插入 API。"""
+    return insert_category_raw(cat, user_id=user_id)
+
+
+def replace_subscription_raw(
+    sub: Mapping[str, Any], user_id: str | None = None
+) -> bool:
+    """按 owner 安全替换订阅行，不允许跨用户覆盖。
+
+    该函数保留旧 API 名称，供数据库合并使用；同一 id 属于其他用户时
+    返回 False，既不删除也不修改对方记录。
+    """
+    conn = _require_conn()
+    if not isinstance(sub, Mapping):
+        raise ValueError("订阅数据必须是对象")
+    normalized = _normalize_raw_subscription(sub, user_id, preserve_id=True)
+    owner = normalized["user_id"]
+    sub_id = normalized["id"]
+    with _lock:
+        existing = conn.execute(
+            "SELECT user_id FROM subscriptions WHERE id=?", (sub_id,)
+        ).fetchone()
+        if existing and existing["user_id"] != owner:
+            return False
+        if existing:
+            assignments = ",".join(
+                f"{column}=?" for column in _SUBSCRIPTION_COLUMNS
+                if column not in ("id", "user_id")
+            )
+            columns = [
+                column for column in _SUBSCRIPTION_COLUMNS
+                if column not in ("id", "user_id")
+            ]
+            conn.execute(
+                f"UPDATE subscriptions SET {assignments} WHERE id=? AND user_id=?",
+                [normalized[column] for column in columns] + [sub_id, owner],
+            )
+        else:
+            _insert_subscription_row(conn, normalized)
+        _commit()
+    return True
+
+
+def replace_subscription_raw_scoped(user_id: str, sub: Mapping[str, Any]) -> bool:
+    """强制指定 owner 的安全原始替换 API。"""
+    return replace_subscription_raw(sub, user_id=user_id)
 
 
 def export_db_copy(target_path: Path) -> None:
