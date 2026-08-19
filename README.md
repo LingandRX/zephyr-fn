@@ -2,9 +2,8 @@
 
 飞牛 fnOS 订阅管理应用：记录订阅服务、费用与到期时间，支持多货币统计、日历视图、到期提醒与自动备份。
 
-后端参考 [zephyr-tarui](https://github.com/LingandRX/zephyr-tarui)（Tauri + Rust 版订阅管理）的数据模型与业务逻辑，用 **Python 标准库** 重写（零第三方依赖），并针对飞牛 fnOS 平台做了适配：统一网关接入、NAS 多用户数据隔离、data-share 共享目录备份。
-
 ## 官方开发文档
+
 <https://github.com/ckcoding/fnnas-docs>
 
 ## 功能
