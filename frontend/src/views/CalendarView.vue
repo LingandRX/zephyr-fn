@@ -590,6 +590,53 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   50% { transform: translateY(3px); }
 }
 
+/* ---------- 桌面端：视口内一次展示全部 42 格（6 行 × 7 列） ---------- */
+@media (min-width: 1025px) {
+  .cal-page {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+  }
+  .cal-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-items: stretch;
+  }
+  .cal-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+  .cal-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    /* 首行周标题 auto，其余 6 行等分剩余高度，整体撑满卡片 */
+    grid-template-rows: auto repeat(6, minmax(0, 1fr));
+    align-content: stretch;
+  }
+  .cal-day {
+    height: auto;
+    min-height: 0;
+    /* 随视口拉伸，同时保留内部文字条的可用高度 */
+  }
+  .day-details-card {
+    align-self: stretch;
+    max-height: 100%;
+    overflow-y: auto;
+    /* 明细过长时内部滚动，避免把日历挤出视口 */
+    scrollbar-width: thin;
+  }
+  .day-details-card::-webkit-scrollbar {
+    width: 6px;
+  }
+  /* 无选中明细时日历独占整行，避免右侧空白轨 */
+  .cal-content:not(:has(.day-details-card)) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ---------- 窄屏适配：空间不足时把明细移到日历下方 ---------- */
 @media (max-width: 1024px) {
   .cal-page {
