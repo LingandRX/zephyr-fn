@@ -234,8 +234,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
   width: min(380px, calc(100vw - 24px));
   color: var(--text);
   animation: notice-float-in 0.2s ease-out;
+  /* 方案A：容器宽度恒定（不再随 collapsed 突变），透明区域不拦截点击 */
+  pointer-events: none;
 }
-.notice-float--collapsed { width: auto; }
+/* 仅按钮/面板可交互 */
+.notice-float-toggle,
+.notice-float-panel { pointer-events: auto; }
 .notice-float-panel {
   overflow: hidden;
   border: 1px solid rgba(245, 158, 11, 0.72);
@@ -355,7 +359,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
   overflow-wrap: anywhere;
 }
 .notice-float-toggle {
-  position: relative;
+  position: absolute;
+  right: 0;
+  bottom: 0;
   width: 48px;
   height: 48px;
   padding: 0;
@@ -387,6 +393,47 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+/* ===== 到期提醒：打开/收起 缩小动画（缩放+位移，锚点右下角） ===== */
+@keyframes notice-panel-in {
+  from { opacity: 0; transform: scale(0.86) translateY(14px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes notice-panel-out {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.86) translateY(10px); }
+}
+@keyframes notice-bubble-in {
+  from { opacity: 0; transform: scale(0.62); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes notice-bubble-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.7); }
+}
+
+/* 展开面板：从图标处缩放弹出 — 单 Transition(out-in) 避免双动画同时出现 */
+.notice-switch-enter-active.notice-float-panel {
+  animation: notice-panel-in 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transform-origin: bottom right;
+}
+.notice-switch-leave-active.notice-float-panel {
+  animation: notice-panel-out 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
+  transform-origin: bottom right;
+}
+/* 收起图标：弹性缩小/放大 */
+.notice-switch-enter-active.notice-float-toggle {
+  animation: notice-bubble-in 0.34s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transform-origin: bottom right;
+}
+.notice-switch-leave-active.notice-float-toggle {
+  animation: notice-bubble-out 0.2s ease-in both;
+  transform-origin: bottom right;
+}
+/* 兼容旧命名（若有残留引用，不再产生双动画，仅保留空壳） */
+.notice-panel-enter-active,
+.notice-panel-leave-active,
+.notice-bubble-enter-active,
+.notice-bubble-leave-active { animation: none; }
 
 /* ---------------- 弹窗 / 表单 ---------------- */
 .modal {
@@ -516,4 +563,6 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
   .notice-float { animation: none; }
   .notice-float-action,
   .notice-float-toggle { transition: none; }
+  .notice-switch-enter-active,
+  .notice-switch-leave-active { animation: none !important; }
 }

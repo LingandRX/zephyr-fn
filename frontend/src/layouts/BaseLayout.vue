@@ -187,69 +187,71 @@ onMounted(loadNotice);
     </main>
   </div>
 
-  <!-- 浮动提醒：不占用页面布局空间，可收起为图标或直接关闭 -->
+  <!-- 浮动提醒：支持缩小动画，可收起为图标或直接关闭 -->
   <section
     v-if="notice?.list.length && !notice.hidden"
     class="notice-float"
-    :class="{ 'notice-float--collapsed': notice.collapsed }"
     aria-label="到期提醒"
   >
-    <button
-      v-if="notice.collapsed"
-      type="button"
-      class="notice-float-toggle"
-      title="展开到期提醒"
-      aria-label="展开到期提醒"
-      aria-expanded="false"
-      @click="toggleNoticeCollapsed"
-    >
-      <svg class="notice-float-bell" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
-      <span class="notice-float-count">{{ notice.list.length }}</span>
-    </button>
-
-    <div v-else class="notice-float-panel" role="status" aria-live="polite">
-      <div class="notice-float-head">
-        <div class="notice-float-title">
-          <svg class="notice-float-bell" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <strong>到期提醒</strong>
-          <span class="notice-float-count notice-float-count--inline">{{ notice.list.length }}</span>
-        </div>
-        <div class="notice-float-actions">
-          <button
-            type="button"
-            class="notice-float-action"
-            title="收起提醒"
-            aria-label="收起到期提醒"
-            @click="toggleNoticeCollapsed"
-          >
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+    <!-- 单一 Transition + mode=out-in 确保打开/收起时不会同时出现两个动画 -->
+    <Transition name="notice-switch" mode="out-in" appear>
+      <button
+        v-if="notice.collapsed"
+        key="notice-bubble"
+        type="button"
+        class="notice-float-toggle"
+        title="展开到期提醒"
+        aria-label="展开到期提醒"
+        aria-expanded="false"
+        @click="toggleNoticeCollapsed"
+      >
+        <svg class="notice-float-bell" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="notice-float-count">{{ notice.list.length }}</span>
+      </button>
+      <div v-else key="notice-panel" class="notice-float-panel" role="status" aria-live="polite">
+        <div class="notice-float-head">
+          <div class="notice-float-title">
+            <svg class="notice-float-bell" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
-          </button>
-          <button
-            type="button"
-            class="notice-float-action"
-            title="关闭提醒"
-            aria-label="关闭到期提醒"
-            @click="closeNotice"
-          >
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-            </svg>
-          </button>
+            <strong>到期提醒</strong>
+            <span class="notice-float-count notice-float-count--inline">{{ notice.list.length }}</span>
+          </div>
+          <div class="notice-float-actions">
+            <button
+              type="button"
+              class="notice-float-action"
+              title="收起提醒"
+              aria-label="收起到期提醒"
+              @click="toggleNoticeCollapsed"
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="notice-float-action"
+              title="关闭提醒"
+              aria-label="关闭到期提醒"
+              @click="closeNotice"
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              </svg>
+            </button>
+          </div>
         </div>
+        <ul class="notice-float-list">
+          <li v-for="n in notice.list" :key="n.id" class="notice-float-item">
+            <strong>{{ n.title }}</strong>
+            <span>{{ n.body }}</span>
+          </li>
+        </ul>
       </div>
-      <ul class="notice-float-list">
-        <li v-for="n in notice.list" :key="n.id" class="notice-float-item">
-          <strong>{{ n.title }}</strong>
-          <span>{{ n.body }}</span>
-        </li>
-      </ul>
-    </div>
+    </Transition>
   </section>
 
   <!-- Toast -->
