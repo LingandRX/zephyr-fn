@@ -42,9 +42,39 @@ const form = reactive({
   pushplus_token_configured: false,
 });
 
-const newCat = reactive({ name: "", icon: "" });
+const newCat = reactive({ name: "" });
+const adding = ref(false);
+const nameErr = ref("");
 
-const CAN_ADD_CAT = computed(() => newCat.name.trim().length > 0);
+const MAX_CAT_NAME_LEN = 20;
+const MAX_CAT_COUNT = 50;
+
+const CAN_ADD_CAT = computed(() => newCat.name.trim().length > 0 && !nameErr.value && !adding.value);
+
+function normalizeCatName(s) {
+  // NFC 归一并做全角转半角，便于重名判断（与后端 _normalize_category_name 保持一致）
+  let t = String(s ?? "").normalize("NFC").trim();
+  // 全角转半角
+  t = t.replace(/[\uFF01-\uFF5E]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
+  // 全角空格转半角后再 trim，保证空名（含全角空格）能被正确识别
+  t = t.replace(/\u3000/g, " ").trim();
+  return t;
+}
+
+function validateCat(name) {
+  const rawName = String(name ?? "");
+  const trimmed = rawName.trim();
+  const normalized = normalizeCatName(trimmed);
+  // 空值用归一化后的 codepoint 长度判断，避免空白字符/全角空格绕过
+  if ([...normalized].length === 0) return "请输入分类名称";
+  if ([...normalized].length > MAX_CAT_NAME_LEN) return `分类名称最多${MAX_CAT_NAME_LEN}字`;
+  if (/[<>"'&]/.test(normalized)) return "分类名称不能包含 < > \" \' &";
+  if (cats.value.length >= MAX_CAT_COUNT) return `分类数量已达上限(${MAX_CAT_COUNT})`;
+  // 重名：大小写+全半角不敏感
+  const low = normalized.toLowerCase();
+  if (cats.value.some(c => normalizeCatName(c.name).toLowerCase() === low)) return "分类已存在";
+  return null;
+}
 
 function isSecretUpdate(value) {
   const text = String(value ?? "").trim();
@@ -148,22 +178,34 @@ watch(
 );
 
 // ---------- 分类 ----------
+watch(() => newCat.name, (v) => {
+  // 清空输入时直接清空错误，避免添加成功后立刻出现“请输入分类名称”
+  nameErr.value = v ? (validateCat(v) || "") : "";
+});
+
 async function addCategory() {
-  const name = newCat.name.trim();
-  if (!name) return toast("请输入分类名称", "err");
+  const err = validateCat(newCat.name);
+  if (err) {
+    nameErr.value = err;
+    return toast(err, "err");
+  }
+  if (adding.value) return;
+  adding.value = true;
   try {
-    await createCategory({ name, icon: newCat.icon.trim() || null });
+    await createCategory({ name: newCat.name.trim() });
     newCat.name = "";
-    newCat.icon = "";
+    nameErr.value = "";
     toast("分类已添加");
     cats.value = await getCategories();
   } catch (err) {
     toast(err.message, "err");
+  } finally {
+    adding.value = false;
   }
 }
 
 async function removeCategory(id, name) {
-  if (!confirm(`确定删除分类「${name}」？（订阅保留为未分类）`)) return;
+  if (!confirm(`确定删除分类「${name}」？（关联订阅将保留为未分类）`)) return;
   try {
     await deleteCategory(id);
     toast("已删除");
@@ -348,17 +390,23 @@ onMounted(loadAll);
       <div class="card">
         <h3>新增分类</h3>
         <div class="cat-editor">
-          <input v-model="newCat.name" type="text" placeholder="分类名称，如：流媒体、云服务" @keyup.enter="addCategory" />
-          <input v-model="newCat.icon" type="text" placeholder="图标 emoji，如 📺" class="cat-icon" />
-          <button class="btn btn-primary" :disabled="!CAN_ADD_CAT" @click="addCategory">添加分类</button>
+          <input
+            v-model="newCat.name"
+            type="text"
+            maxlength="20"
+            :aria-invalid="!!nameErr"
+            placeholder="分类名称，如：流媒体、云服务"
+          />
+          <button class="btn btn-primary" :disabled="!CAN_ADD_CAT" @click="addCategory">{{ adding ? '添加中...' : '添加分类' }}</button>
         </div>
+        <div v-if="nameErr" class="field-err">{{ nameErr }}</div>
+        <div class="muted sub-hint" style="margin-top:6px">最多{{ MAX_CAT_COUNT }}个</div>
       </div>
 
       <div class="card">
         <h3>现有分类 ({{ cats.length }})</h3>
         <div class="cat-list">
           <span v-for="c in cats" :key="c.id" class="cat-chip">
-            <span class="chip-icon">{{ c.icon || "🏷️" }}</span>
             <span class="chip-name">{{ c.name }}</span>
             <button :title="`删除分类 ${c.name}`" @click="removeCategory(c.id, c.name)">✕</button>
           </span>
@@ -545,6 +593,11 @@ onMounted(loadAll);
 }
 
 /* 分类管理 */
+.field-err {
+  color: var(--red, #ef4444);
+  font-size: var(--fs-xs);
+  margin-top: 6px;
+}
 .cat-editor {
   display: flex;
   gap: var(--space-2);
@@ -552,9 +605,6 @@ onMounted(loadAll);
 }
 .cat-editor input[type="text"] {
   flex: 1;
-}
-.cat-editor .cat-icon {
-  flex: 0 0 140px;
 }
 .cat-list {
   display: flex;
@@ -571,9 +621,6 @@ onMounted(loadAll);
   border-radius: 20px;
   padding: var(--space-1) var(--space-3);
   font-size: var(--fs-sm);
-}
-.chip-icon {
-  font-size: 14px;
 }
 .cat-chip button {
   background: none;
@@ -608,9 +655,6 @@ onMounted(loadAll);
   }
   .cat-editor {
     flex-direction: column;
-  }
-  .cat-editor .cat-icon {
-    flex: auto;
   }
 }
 </style>

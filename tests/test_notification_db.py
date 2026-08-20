@@ -64,7 +64,7 @@ class NotificationDbTests(unittest.TestCase):
 
         db.connect(self.path)
         rows = self._rows()
-        self.assertEqual(db._get_db_version(), 9)  # noqa: SLF001
+        self.assertEqual(db._get_db_version(), db.CURRENT_DB_VERSION)  # noqa: SLF001
         self.assertEqual(len(rows), 2)
         by_key = {(row["subscription_id"], row["channel"]): row for row in rows}
         self.assertEqual(by_key[("sub-a", "email")]["id"], "sent-old")
@@ -128,6 +128,74 @@ class NotificationDbTests(unittest.TestCase):
         self.assertTrue(db.has_channel_notified_today("sub", "email"))
         self.assertTrue(db.has_channel_notified_today("expired", "push"))
 
+
+
+    def test_v10_upgrade_deduplicates_and_merges_subscriptions(self):
+        db.close()
+
+        # 模拟 v9 旧库：删除 v10 索引并回退版本号，插入大小写/全角重复分类
+        # 以及引用这些分类的订阅，验证迁移会归一化去重并归并订阅引用。
+        raw = sqlite3.connect(self.path)
+        raw.execute("DROP INDEX IF EXISTS idx_cat_user_name")
+        raw.execute("DROP INDEX IF EXISTS idx_cat_user_sort")
+        raw.execute("UPDATE db_version SET version=9 WHERE id=1")
+        raw.execute("DELETE FROM subscriptions")
+        raw.execute("DELETE FROM categories")
+        raw.executemany(
+            "INSERT INTO categories (id, user_id, name, icon, sort_order) VALUES (?,?,?,?,?)",
+            [
+                ("cat-a", "u1", "Stream", None, 0),       # 保留（rowid 最小）
+                ("cat-b", "u1", "stream", None, 1),       # ASCII 大小写重复 -> 删除
+                ("cat-c", "u1", "Ｓｔｒｅａｍ", None, 2),  # 全角重复 -> 删除
+                ("cat-d", "u2", "Games", None, 0),
+            ],
+        )
+        raw.executemany(
+            "INSERT INTO subscriptions "
+            "(id, user_id, name, amount, currency, category_id, period_type, start_date, "
+            "lifecycle, renewal_policy, billing_status, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [
+                ("sub-1", "u1", "Netflix", 100, "CNY", "cat-b", "month", "2026-01-01",
+                 "active", "auto", "normal", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
+                ("sub-2", "u1", "Spotify", 50, "CNY", "cat-c", "month", "2026-01-01",
+                 "active", "auto", "normal", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
+                ("sub-3", "u2", "Steam", 30, "CNY", "cat-d", "month", "2026-01-01",
+                 "active", "auto", "normal", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
+            ],
+        )
+        raw.commit()
+        raw.close()
+
+        db.connect(self.path)
+        self.assertEqual(db._get_db_version(), db.CURRENT_DB_VERSION)  # noqa: SLF001
+
+        cats = db._conn.execute(  # noqa: SLF001
+            "SELECT id, name FROM categories ORDER BY rowid"
+        ).fetchall()
+        self.assertEqual(
+            [dict(r) for r in cats],
+            [{"id": "cat-a", "name": "Stream"}, {"id": "cat-d", "name": "Games"}],
+        )
+
+        merged = db._conn.execute(  # noqa: SLF001
+            "SELECT id, category_id FROM subscriptions ORDER BY id"
+        ).fetchall()
+        self.assertEqual(
+            [dict(r) for r in merged],
+            [
+                {"id": "sub-1", "category_id": "cat-a"},
+                {"id": "sub-2", "category_id": "cat-a"},
+                {"id": "sub-3", "category_id": "cat-d"},
+            ],
+        )
+
+        indexes = db._conn.execute("PRAGMA index_list(categories)").fetchall()  # noqa: SLF001
+        names = [i["name"] for i in indexes]
+        self.assertIn("idx_cat_user_name", names)
+        self.assertIn("idx_cat_user_sort", names)
+        uniq = next(i for i in indexes if i["name"] == "idx_cat_user_name")
+        self.assertTrue(uniq["unique"])
 
 if __name__ == "__main__":
     unittest.main()

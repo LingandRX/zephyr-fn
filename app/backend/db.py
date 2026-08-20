@@ -7,11 +7,14 @@
 """
 from __future__ import annotations
 
+import logging
+import re
 import sqlite3
 import threading
+import unicodedata
 import uuid
-from contextlib import contextmanager
 from collections.abc import Mapping
+from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,11 +25,15 @@ except ImportError:  # pragma: no cover
     import domain
 
 _lock = threading.RLock()
+_logger = logging.getLogger("subscription.db")
 _conn: sqlite3.Connection | None = None
 _transaction_state = threading.local()
 
-CURRENT_DB_VERSION = 9
+CURRENT_DB_VERSION = 10
 MAX_NOTES_LENGTH = 120
+MAX_CATEGORY_NAME_LEN = 20
+MAX_CATEGORIES_PER_USER = 50
+_CATEGORY_ILLEGAL_RE = re.compile(r'[<>"\'&]')
 
 # app_settings 的字段定义集中维护，迁移和 SETTINGS_FIELDS 共用这份清单，
 # 避免新增设置字段后忘记补 schema。
@@ -175,6 +182,15 @@ CREATE INDEX IF NOT EXISTS idx_notif_sub_date ON notification_logs(subscription_
         "CREATE UNIQUE INDEX IF NOT EXISTS "
         "idx_notification_logs_identity "
         "ON notification_logs(subscription_id, notification_date, channel);"),
+    # v10：分类重名唯一约束（大小写不敏感）。归一化去重 + 订阅归并由
+    # _dedupe_categories_py 在应用 v10 前完成（SQLite 的 lower()/NOCASE 仅 ASCII，
+    # 无法处理全角重复）。
+    (10, """
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cat_user_name
+  ON categories(user_id, name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_cat_user_sort
+  ON categories(user_id, sort_order);
+"""),
 ]
 
 # 订阅可更新字段（白名单）
@@ -356,6 +372,51 @@ def _ensure_notification_schema() -> None:
     conn.execute("DROP TRIGGER IF EXISTS trg_notification_logs_reuse_failed")
 
 
+def _dedupe_categories_py(conn: sqlite3.Connection) -> None:
+    """按归一化名称（大小写/全角不敏感）去重分类，保留 rowid 最小的。
+
+    被删分类下的订阅先归并到保留分类，避免孤儿 category_id；
+    仅用于升级/自修复路径，正常运行期的新增由 _validate_category_name 拦截。
+    """
+    rows = conn.execute(
+        "SELECT id, user_id, name FROM categories ORDER BY rowid ASC"
+    ).fetchall()
+    keep: dict[tuple[str, str], str] = {}  # (user_id, 归一化名小写) -> 保留分类 id
+    doomed: list[tuple[str, str]] = []     # (被删分类 id, 保留分类 id)
+    for r in rows:
+        key = (r["user_id"], _normalize_category_name(r["name"]).lower())
+        kept = keep.get(key)
+        if kept is None:
+            keep[key] = r["id"]
+        else:
+            doomed.append((r["id"], kept))
+    for cat_id, kept_id in doomed:
+        conn.execute(
+            "UPDATE subscriptions SET category_id=?, updated_at=? WHERE category_id=?",
+            (kept_id, now_utc(), cat_id),
+        )
+        conn.execute("DELETE FROM categories WHERE id=?", (cat_id,))
+
+
+def _ensure_category_schema() -> None:
+    """保证 v10 分类索引在旧版本直接升级或手工建库场景下也存在。"""
+    conn = _require_conn()
+    # categories 表可能尚未创建（全新库刚建立、v1 迁移未执行时）
+    try:
+        conn.execute("SELECT 1 FROM categories LIMIT 1")
+    except sqlite3.OperationalError:
+        return
+    _dedupe_categories_py(conn)
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_cat_user_name "
+        "ON categories(user_id, name COLLATE NOCASE)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cat_user_sort "
+        "ON categories(user_id, sort_order)"
+    )
+
+
 def _run_migrations() -> None:
     conn = _require_conn()
     conn.execute(
@@ -371,6 +432,9 @@ def _run_migrations() -> None:
     for target_version, sql in sorted(_MIGRATIONS):
         if version >= target_version:
             continue
+        # v10 唯一索引前先做 Python 归一化去重 + 订阅归并
+        if target_version == 10:
+            _dedupe_categories_py(conn)
         # ALTER TABLE ADD COLUMN 逐条执行，列已存在则跳过（幂等）。
         statements = [s.strip() for s in sql.split(";") if s.strip()]
         for stmt in statements:
@@ -393,6 +457,7 @@ def _run_migrations() -> None:
 
     # 即使数据库版本号已经是最新，也修复手工创建/不完整升级的 schema。
     _ensure_settings_schema()
+    _ensure_category_schema()
     conn.execute(
         "INSERT INTO db_version (id, version) VALUES (1, ?) "
         "ON CONFLICT(id) DO UPDATE SET version=excluded.version",
@@ -837,6 +902,63 @@ def renew_subscription(sub_id: str, user_id: str) -> dict | None:
 
 # --------------------------------------------------------------------------- #
 # 分类 CRUD
+def _normalize_category_name(name: Any) -> str:
+    """NFC 归一 + 全角转半角 + trim，用于重名与存储统一。"""
+    raw = str(name or "")
+    # NFC 归一
+    norm = unicodedata.normalize("NFC", raw).strip()
+    # 全角转半角 (FF01-FF5E -> 0021-007E)
+    converted = []
+    for ch in norm:
+        code = ord(ch)
+        if 0xFF01 <= code <= 0xFF5E:
+            converted.append(chr(code - 0xFEE0))
+        elif code == 0x3000:  # 全角空格
+            converted.append(" ")
+        else:
+            converted.append(ch)
+    return "".join(converted).strip()
+
+
+def _validate_category_name(name: Any, user_id: str, exclude_id: str | None = None) -> str:
+    normalized = _normalize_category_name(name)
+    if not normalized:
+        raise ValueError("分类名称不能为空")
+    if len([*normalized]) > MAX_CATEGORY_NAME_LEN:
+        raise ValueError(f"分类名称最多{MAX_CATEGORY_NAME_LEN}字")
+    if _CATEGORY_ILLEGAL_RE.search(normalized):
+        raise ValueError("分类名称不能包含 < > \" ' &")
+    # 重名检查（大小写不敏感，含全角归一）
+    conn = _require_conn()
+    # 用 Python 层做 NOCASE + 归一化比对，避免 COLLATE 差异
+    rows = conn.execute("SELECT id, name FROM categories WHERE user_id=?", (user_id,)).fetchall()
+    low = normalized.lower()
+    for r in rows:
+        if exclude_id and r["id"] == exclude_id:
+            continue
+        if _normalize_category_name(r["name"]).lower() == low:
+            raise ValueError("分类已存在")
+    # 配额（仅新建时）
+    if exclude_id is None:
+        cnt = conn.execute("SELECT COUNT(*) FROM categories WHERE user_id=?", (user_id,)).fetchone()[0]
+        if cnt >= MAX_CATEGORIES_PER_USER:
+            raise ValueError(f"分类数量已达上限({MAX_CATEGORIES_PER_USER})")
+    return normalized
+
+
+def _validate_category_icon(icon: Any) -> str | None:
+    if icon is None or str(icon).strip() == "":
+        return None
+    ic = str(icon).strip()
+    if len([*ic]) > 2:
+        raise ValueError("图标限1-2个emoji")
+    # 纯字母数字视为非 emoji
+    if re.fullmatch(r"[a-zA-Z0-9]+", ic):
+        raise ValueError("图标请使用 emoji，如 \U0001f3ac")
+    # 只保留首个字符（防止传入多字符）
+    return [*ic][0]
+
+
 # --------------------------------------------------------------------------- #
 
 def get_all_categories(user_id: str) -> list[dict]:
@@ -851,16 +973,28 @@ def get_all_categories(user_id: str) -> list[dict]:
 
 def create_category(user_id: str, data: dict) -> dict:
     conn = _require_conn()
-    name = str(data.get("name") or "").strip()
-    if not name:
-        raise ValueError("分类名称不能为空")
+    normalized_name = _validate_category_name(data.get("name"), user_id)
+    icon = _validate_category_icon(data.get("icon"))
     cat_id = new_id()
     with _lock:
-        conn.execute(
-            "INSERT INTO categories (id, user_id, name, icon, sort_order) VALUES (?,?,?,?,?)",
-            (cat_id, user_id, name, data.get("icon"), _to_int(data.get("sort_order"), 0)),
-        )
+        # 二次重名校验防并发（UNIQUE 索引为最终兜底）
+        if conn.execute(
+            "SELECT 1 FROM categories WHERE user_id=? AND name=? COLLATE NOCASE",
+            (user_id, normalized_name),
+        ).fetchone():
+            raise ValueError("分类已存在")
+        try:
+            conn.execute(
+                "INSERT INTO categories (id, user_id, name, icon, sort_order) VALUES (?,?,?,?,?)",
+                (cat_id, user_id, normalized_name, icon, _to_int(data.get("sort_order"), 0)),
+            )
+        except sqlite3.IntegrityError as e:
+            # 唯一索引冲突
+            if "idx_cat_user_name" in str(e) or "UNIQUE" in str(e):
+                raise ValueError("分类已存在") from e
+            raise
         _commit()
+        _logger.info("create_category user=%s name=%s id=%s", user_id, normalized_name, cat_id[:8])
     row = conn.execute("SELECT * FROM categories WHERE id=?", (cat_id,)).fetchone()
     return dict(row)
 
@@ -875,21 +1009,25 @@ def update_category(cat_id: str, user_id: str, data: dict) -> dict | None:
             return None
         updates: dict = {}
         if "name" in data:
-            name = str(data.get("name") or "").strip()
-            if not name:
-                raise ValueError("分类名称不能为空")
-            updates["name"] = name
+            normalized = _validate_category_name(data.get("name"), user_id, exclude_id=cat_id)
+            updates["name"] = normalized
         if "icon" in data:
-            updates["icon"] = data.get("icon")
+            updates["icon"] = _validate_category_icon(data.get("icon"))
         if "sort_order" in data:
             updates["sort_order"] = _to_int(data.get("sort_order"), 0)
         if updates:
             sets = ",".join(f"{c}=?" for c in updates)
-            conn.execute(
-                f"UPDATE categories SET {sets} WHERE id=? AND user_id=?",
-                [updates[c] for c in updates] + [cat_id, user_id],
-            )
+            try:
+                conn.execute(
+                    f"UPDATE categories SET {sets} WHERE id=? AND user_id=?",
+                    [updates[c] for c in updates] + [cat_id, user_id],
+                )
+            except sqlite3.IntegrityError as e:
+                if "idx_cat_user_name" in str(e) or "UNIQUE" in str(e):
+                    raise ValueError("分类已存在") from e
+                raise
             _commit()
+            _logger.info("update_category user=%s id=%s fields=%s", user_id, cat_id[:8], list(updates.keys()))
         row = conn.execute("SELECT * FROM categories WHERE id=?", (cat_id,)).fetchone()
     return dict(row)
 
@@ -897,10 +1035,17 @@ def update_category(cat_id: str, user_id: str, data: dict) -> dict | None:
 def delete_category(cat_id: str, user_id: str) -> bool:
     conn = _require_conn()
     with _lock:
+        # 先将关联订阅置为未分类，避免孤儿 category_id 残留
+        conn.execute(
+            "UPDATE subscriptions SET category_id=NULL, updated_at=? WHERE category_id=? AND user_id=?",
+            (now_utc(), cat_id, user_id),
+        )
         cur = conn.execute(
             "DELETE FROM categories WHERE id=? AND user_id=?", (cat_id, user_id)
         )
         _commit()
+        if cur.rowcount:
+            _logger.info("delete_category user=%s id=%s", user_id, cat_id[:8])
     return cur.rowcount > 0
 
 

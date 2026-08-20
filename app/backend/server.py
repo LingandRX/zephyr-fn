@@ -304,8 +304,15 @@ class Handler(socketserver.StreamRequestHandler):
             elif path == "/api/categories" and method == "GET":
                 self._json(db.get_all_categories(user_id))
             elif path == "/api/categories" and method == "POST":
-                self._json(db.create_category(user_id, self._json_body(body)),
-                           HTTPStatus.CREATED)
+                try:
+                    cat = db.create_category(user_id, self._json_body(body))
+                except ValueError as exc:
+                    msg = str(exc)
+                    if "已存在" in msg or "已达上限" in msg:
+                        self._json({"error": msg}, HTTPStatus.CONFLICT)
+                        return
+                    raise
+                self._json(cat, HTTPStatus.CREATED)
             elif path == "/api/settings" and method == "GET":
                 self._json(_public_settings(db.get_app_settings()))
             elif path == "/api/settings" and method == "PUT":
@@ -343,7 +350,11 @@ class Handler(socketserver.StreamRequestHandler):
         except AccessDeniedError as exc:
             self._json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
         except ValueError as exc:
-            self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            msg = str(exc)
+            if "已存在" in msg or "已达上限" in msg:
+                self._json({"error": msg}, HTTPStatus.CONFLICT)
+            else:
+                self._json({"error": msg}, HTTPStatus.BAD_REQUEST)
         except Exception:  # noqa: BLE001
             log.exception("API 处理失败: %s %s", method, raw_target)
             self._json({"error": "服务器内部错误"}, HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -380,7 +391,14 @@ class Handler(socketserver.StreamRequestHandler):
     def _route_category(self, method: str, path: str, user_id: str, body: bytes) -> None:
         cat_id = path[len("/api/categories/"):].rstrip("/")
         if method == "PUT":
-            cat = db.update_category(cat_id, user_id, self._json_body(body))
+            try:
+                cat = db.update_category(cat_id, user_id, self._json_body(body))
+            except ValueError as exc:
+                msg = str(exc)
+                if "已存在" in msg or "已达上限" in msg:
+                    self._json({"error": msg}, HTTPStatus.CONFLICT)
+                    return
+                raise
         elif method == "DELETE":
             ok = db.delete_category(cat_id, user_id)
             self._json({"ok": ok}, HTTPStatus.OK if ok else HTTPStatus.NOT_FOUND)

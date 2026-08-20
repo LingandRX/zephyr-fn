@@ -118,6 +118,12 @@ const statCards = computed(() => {
 
 const catName = (id) => cats.value.find((c) => c.id === id);
 
+// 分类图标已下线：头像区域改为显示订阅名称首字符
+function initialOf(name) {
+  const s = String(name ?? "").trim();
+  return s ? [...s][0].toUpperCase() : "?"; 
+}
+
 // ---------- 操作 ----------
 function openModal(sub = null) {
   editingId.value = sub?.id ?? null;
@@ -216,7 +222,7 @@ onMounted(loadAll);
       <div class="filter-selects">
         <select v-model="filterCat">
           <option value="">全部分类</option>
-          <option v-for="c in cats" :key="c.id" :value="c.id">{{ c.icon || "📁" }} {{ c.name }}</option>
+          <option v-for="c in cats" :key="c.id" :value="c.id">{{ c.name }}</option>
         </select>
         <select v-model="filterStatus">
           <option value="">全部状态</option>
@@ -255,7 +261,7 @@ onMounted(loadAll);
             <tr v-for="s in filtered" :key="s.id" class="sub-table-row">
               <td>
                 <div class="sub-cell">
-                  <div class="sub-avatar">{{ catName(s.category_id)?.icon || "💳" }}</div>
+                  <div class="sub-avatar">{{ initialOf(s.name) }}</div>
                   <div class="sub-info">
                     <span class="sub-title">{{ s.name }}</span>
                     <div class="sub-meta">
@@ -309,7 +315,7 @@ onMounted(loadAll);
         <div v-for="s in filtered" :key="s.id" class="sub-item-card">
           <div class="item-header">
             <div class="item-brand">
-              <span class="item-avatar">{{ catName(s.category_id)?.icon || "💳" }}</span>
+              <span class="item-avatar">{{ initialOf(s.name) }}</span>
               <div class="item-title-wrap">
                 <div class="item-name">{{ s.name }}</div>
                 <div class="item-cat-tag">{{ catName(s.category_id)?.name || "未分类" }}</div>
@@ -371,7 +377,7 @@ onMounted(loadAll);
             <label class="field"><span>分类</span>
               <select v-model="form.category_id">
                 <option value="">未分类</option>
-                <option v-for="c in cats" :key="c.id" :value="c.id">{{ c.icon || "" }} {{ c.name }}</option>
+                <option v-for="c in cats" :key="c.id" :value="c.id">{{ c.name }}</option>
               </select>
             </label>
             <label class="field"><span>货币</span>
