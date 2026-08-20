@@ -61,6 +61,8 @@ _SETTINGS_COLUMN_DEFINITIONS = {
     "last_rate_update": "TEXT",
 }
 
+_VALID_TABLE_NAMES = frozenset({"app_settings", "notification_logs", "subscriptions", "categories", "db_version"})
+
 # v9 迁移和启动时自修复共用：每个 identity 组只保留一条日志。
 # sent 优先；同一优先级下保留 created_at 最新、id 最大的记录。
 _NOTIFICATION_DEDUP_SQL = """
@@ -310,6 +312,8 @@ def _get_db_version() -> int:
 
 
 def _column_exists(table: str, column: str) -> bool:
+    if table not in _VALID_TABLE_NAMES:
+        raise ValueError(f"非法表名: {table}")
     conn = _require_conn()
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     return any(r[1] == column for r in rows)

@@ -247,12 +247,14 @@ def _check_reminders(reminder_days: int | None = None) -> None:
     if not subs:
         return
 
-    for sub in subs:
+    for i, sub in enumerate(subs):
         try:
             title, body = notifications.generate_notification_content(sub)
         except ValueError:
             continue
         _send_channels(settings, sub, title, body)
+        if i < len(subs) - 1:
+            time.sleep(1)  # 速率限制：每次发送间隔 1 秒，避免 SMTP/PushPlus 被限流
 
 
 def _legacy_claim(subscription_id: str, channel: str) -> str | None:
