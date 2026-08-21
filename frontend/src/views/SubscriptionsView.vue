@@ -66,8 +66,8 @@ watch(
   ([sd, pt]) => {
     const next = calcNextDueDate(sd, pt);
     if (next) form.value.next_due_date = next;
-    // 选择开始日期后，若首次付款日期为空则自动填充
-    if (sd && !form.value.first_payment_date) {
+    // 开始日期变化时，始终同步更新首次付款日期
+    if (sd) {
       form.value.first_payment_date = sd;
     }
   },
@@ -157,16 +157,22 @@ function initialOf(name) {
 function openModal(sub = null) {
   editingId.value = sub?.id ?? null;
   modalTitle.value = sub ? "编辑订阅" : "新增订阅";
-  form.value = sub
-    ? {
-        name: sub.name, category_id: sub.category_id || "", currency: sub.currency,
-        amount: centsToYuan(sub.amount), period_type: sub.period_type,
-        custom_value: sub.custom_period_value ?? "1", custom_unit: sub.custom_period_unit || "month",
-        auto_renew: !!sub.auto_renew, start_date: sub.start_date || "",
-        first_payment_date: sub.first_payment_date || "", next_due_date: sub.next_due_date || "",
-        notes: sub.notes || "",
-      }
-    : emptyForm();
+  if (sub) {
+    const sd = sub.start_date || "";
+    form.value = {
+      name: sub.name, category_id: sub.category_id || "", currency: sub.currency,
+      amount: centsToYuan(sub.amount), period_type: sub.period_type,
+      custom_value: sub.custom_period_value ?? "1", custom_unit: sub.custom_period_unit || "month",
+      auto_renew: !!sub.auto_renew, start_date: sd,
+      first_payment_date: sub.first_payment_date || sd || "",
+      next_due_date: sub.next_due_date || "",
+      notes: sub.notes || "",
+    };
+  } else {
+    const fresh = emptyForm();
+    fresh.first_payment_date = fresh.start_date;
+    form.value = fresh;
+  }
   modalOpen.value = true;
 }
 
