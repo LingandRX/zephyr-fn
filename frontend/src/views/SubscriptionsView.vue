@@ -37,6 +37,7 @@ function emptyForm() {
 }
 
 const notesLength = computed(() => Array.from(form.value.notes || "").length);
+const isEditingSubscription = ref(false);
 
 function limitNotes(event) {
   const notes = Array.from(event.target.value).slice(0, NOTES_MAX_LENGTH).join("");
@@ -64,8 +65,11 @@ function calcNextDueDate(startDate, periodType) {
 watch(
   () => [form.value.start_date, form.value.period_type],
   ([sd, pt]) => {
-    const next = calcNextDueDate(sd, pt);
-    if (next) form.value.next_due_date = next;
+    // 编辑模式下不自动计算 next_due_date，避免覆盖续费后的正确值
+    if (!isEditingSubscription.value) {
+      const next = calcNextDueDate(sd, pt);
+      if (next) form.value.next_due_date = next;
+    }
     // 开始日期变化时，始终同步更新首次付款日期
     if (sd) {
       form.value.first_payment_date = sd;
@@ -93,7 +97,10 @@ onActivated(() => {
 });
 
 // keep-alive 切走时关闭弹窗，避免返回后弹窗残留
-onDeactivated(() => { modalOpen.value = false; });
+onDeactivated(() => { modalOpen.value = false; isEditingSubscription.value = false; });
+
+// 弹窗关闭时重置编辑标志
+watch(modalOpen, (open) => { if (!open) isEditingSubscription.value = false; });
 
 async function loadAll() {
   loading.value = true;
@@ -157,6 +164,7 @@ function initialOf(name) {
 function openModal(sub = null) {
   editingId.value = sub?.id ?? null;
   modalTitle.value = sub ? "编辑订阅" : "新增订阅";
+  isEditingSubscription.value = !!sub;
   if (sub) {
     const sd = sub.start_date || "";
     form.value = {
@@ -205,6 +213,7 @@ async function save() {
     }
     toast(editingId.value ? "已保存" : "已新增");
     modalOpen.value = false;
+    isEditingSubscription.value = false;
     await loadAll();
   } catch (err) {
     toast(err.message, "err");
@@ -265,7 +274,10 @@ async function confirmRenew() {
   if (!sub) return;
   renewBusy.value = true;
   try {
-    await renewSubscription(sub.id);
+    const updated = await renewSubscription(sub.id);
+    // 立即用返回的最新数据更新 subs 数组，避免 loadAll 异步延迟期间编辑弹窗拿到旧数据
+    const idx = subs.value.findIndex((s) => s.id === updated.id);
+    if (idx !== -1) Object.assign(subs.value[idx], updated);
     toast("已续费到下一期");
     renewOpen.value = false;
     renewTarget.value = null;
