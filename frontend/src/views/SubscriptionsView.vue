@@ -176,14 +176,36 @@ async function save() {
   }
 }
 
-async function del(sub) {
-  if (!confirm(`确认删除「${sub.name}」？`)) return;
+// ---------- 删除确认弹窗 ----------
+const delOpen = ref(false);
+const delTarget = ref(null);     // 待删除的订阅对象
+const delBusy = ref(false);      // 防重复提交
+
+function askDel(sub) {
+  delTarget.value = sub;
+  delOpen.value = true;
+}
+
+function closeDel() {
+  if (delBusy.value) return;     // 删除进行中不允许关闭
+  delOpen.value = false;
+  delTarget.value = null;
+}
+
+async function confirmDel() {
+  const sub = delTarget.value;
+  if (!sub) return;
+  delBusy.value = true;
   try {
     await deleteSubscription(sub.id);
     toast("已删除");
+    delOpen.value = false;
+    delTarget.value = null;
     await loadAll();
   } catch (err) {
     toast(err.message, "err");
+  } finally {
+    delBusy.value = false;
   }
 }
 
@@ -302,7 +324,7 @@ onMounted(loadAll);
                 <div class="row-actions">
                   <button v-if="s.period_type !== 'once'" class="btn-action-renew" @click="renew(s)">续费</button>
                   <button @click="openModal(s)">编辑</button>
-                  <button class="danger" @click="del(s)">删除</button>
+                  <button class="danger" @click="askDel(s)">删除</button>
                 </div>
               </td>
             </tr>
@@ -350,7 +372,7 @@ onMounted(loadAll);
           <div class="item-actions">
             <button v-if="s.period_type !== 'once'" class="btn-m btn-m-renew" @click="renew(s)">续费</button>
             <button class="btn-m" @click="openModal(s)">编辑</button>
-            <button class="btn-m btn-m-danger" @click="del(s)">删除</button>
+            <button class="btn-m btn-m-danger" @click="askDel(s)">删除</button>
           </div>
         </div>
       </div>
@@ -434,6 +456,32 @@ onMounted(loadAll);
             <button type="submit" class="btn btn-primary">保存</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- 删除确认弹窗 -->
+    <div v-if="delOpen" class="modal" @click.self="closeDel">
+      <div class="modal-card modal-confirm">
+        <div class="modal-head">
+          <h2>删除订阅</h2>
+          <button class="modal-close" :disabled="delBusy" @click="closeDel">✕</button>
+        </div>
+        <div class="confirm-body">
+          <p class="confirm-text">
+            确认删除「<strong>{{ delTarget?.name }}</strong>」？此操作不可撤销。
+          </p>
+          <div v-if="delTarget" class="confirm-meta">
+            <span class="confirm-meta-item">{{ fmtCents(delTarget.amount, delTarget.currency) }}</span>
+            <span class="confirm-meta-item">{{ PERIOD_LABEL[delTarget.period_type] || delTarget.period_type }}</span>
+            <span class="confirm-meta-item">{{ delTarget.next_due_date || "无下次扣费" }}</span>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn" :disabled="delBusy" @click="closeDel">取消</button>
+          <button type="button" class="btn btn-danger" :disabled="delBusy" @click="confirmDel">
+            {{ delBusy ? "删除中…" : "确认删除" }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -821,4 +869,35 @@ onMounted(loadAll);
     border: none !important;
   }
 }
+
+/* ---------------- 删除确认弹窗 ---------------- */
+.modal-confirm { width: 420px; }
+.confirm-body { padding: 4px 0 2px; }
+.confirm-text {
+  margin: 0 0 14px;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  color: var(--text);
+}
+.confirm-text strong { color: var(--text); font-weight: 600; }
+.confirm-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.confirm-meta-item {
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+.btn-danger {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+.btn-danger:hover:not(:disabled) { filter: brightness(0.92); }
+.btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>

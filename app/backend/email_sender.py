@@ -11,29 +11,52 @@ except ImportError:  # pragma: no cover
     import db
 
 
-def send_email(to_address: str, subject: str, body: str) -> None:
-    settings = db.get_app_settings()
-    host = settings.get("smtp_host")
-    if not host:
+def send_email(
+    to_address: str,
+    subject: str,
+    body: str,
+    *,
+    host: str | None = None,
+    port: int | str | None = None,
+    username: str | None = None,
+    password: str | None = None,
+    from_address: str | None = None,
+) -> None:
+    settings = db.get_app_settings() if (
+        host is None or port is None or username is None or password is None or from_address is None
+    ) else {}
+
+    smtp_host = host if host is not None else settings.get("smtp_host")
+    if not smtp_host:
         raise RuntimeError("未配置 SMTP 服务器")
-    port = int(settings.get("smtp_port") or 465)
-    username = settings.get("smtp_username")
-    password = settings.get("smtp_password")
-    from_address = settings.get("smtp_from_address") or username
+
+    raw_port = port if port is not None else settings.get("smtp_port")
+    try:
+        smtp_port = int(raw_port or 465)
+    except (ValueError, TypeError):
+        smtp_port = 465
+
+    smtp_user = username if username is not None else settings.get("smtp_username")
+    smtp_pass = password if password is not None else settings.get("smtp_password")
+    smtp_from = from_address if from_address is not None else (settings.get("smtp_from_address") or smtp_user)
 
     msg = MIMEText(body, "plain", "utf-8")
     msg["Subject"] = Header(subject, "utf-8")
-    msg["From"] = from_address or "subscription@localhost"
+    msg["From"] = smtp_from or "subscription@localhost"
     msg["To"] = to_address
 
-    if port == 465:
-        server = smtplib.SMTP_SSL(host, port, timeout=15)
+    if smtp_port == 465:
+        server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15)
     else:
-        server = smtplib.SMTP(host, port, timeout=15)
+        server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
         server.starttls()
     try:
-        if username:
-            server.login(username, password)
-        server.sendmail(from_address, [to_address], msg.as_string())
+        if smtp_user:
+            server.login(smtp_user, smtp_pass or "")
+        server.sendmail(smtp_from or "subscription@localhost", [to_address], msg.as_string())
     finally:
-        server.quit()
+        try:
+            server.quit()
+        except Exception:
+            pass
+

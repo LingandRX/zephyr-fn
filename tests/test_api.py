@@ -282,6 +282,64 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("请求头重复", body.decode("utf-8"))
 
+    def test_test_email_endpoint(self):
+        # 普通用户无权调用
+        req = self._request_bytes(
+            "/api/notifications/test-email",
+            method="POST",
+            headers=self._identity_headers("alice", is_admin=False),
+            body=b"{}",
+        )
+        status, _, body = self._tcp_request(req)
+        self.assertEqual(status, 403)
+
+        # 管理员未配置 host 时报错
+        req = self._request_bytes(
+            "/api/notifications/test-email",
+            method="POST",
+            headers=self._identity_headers("admin", is_admin=True),
+            body=b"{}",
+        )
+        status, _, body = self._tcp_request(req)
+        self.assertEqual(status, 400)
+        self.assertIn("SMTP", body.decode("utf-8"))
+
+    def test_test_pushplus_endpoint(self):
+        # 普通用户无权调用
+        req = self._request_bytes(
+            "/api/notifications/test-pushplus",
+            method="POST",
+            headers=self._identity_headers("alice", is_admin=False),
+            body=b"{}",
+        )
+        status, _, body = self._tcp_request(req)
+        self.assertEqual(status, 403)
+
+        # 临时清空已配置的 token 进行测试
+        old_settings = db.get_app_settings()
+        with db._lock:
+            db._require_conn().execute("UPDATE app_settings SET pushplus_token=NULL WHERE id=1")
+            db._conn.commit()
+
+        try:
+            # 管理员未配置 token 且未传入 token 时报错
+            req = self._request_bytes(
+                "/api/notifications/test-pushplus",
+                method="POST",
+                headers=self._identity_headers("admin", is_admin=True),
+                body=b"{}",
+            )
+            status, _, body = self._tcp_request(req)
+            self.assertEqual(status, 400)
+            self.assertIn("PushPlus Token", body.decode("utf-8"))
+        finally:
+            with db._lock:
+                db._require_conn().execute(
+                    "UPDATE app_settings SET pushplus_token=? WHERE id=1",
+                    (old_settings.get("pushplus_token"),),
+                )
+                db._conn.commit()
+
     def test_unix_socket_without_identity_headers_is_rejected(self):
         self.assertFalse(server.ThreadingUnixServer.allow_headerless_local_identity)
         status, _response_headers, body = self._unix_request(

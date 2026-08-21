@@ -42,13 +42,15 @@ from http import HTTPStatus
 from pathlib import Path
 
 try:  # 支持 python -m app.backend.server 与直接执行 server.py 两种方式。
-    from . import backup, config, db, domain, notifications, scheduler, services
+    from . import backup, config, db, domain, email_sender, notifications, pushplus, scheduler, services
 except ImportError:  # pragma: no cover - 直接从 backend 目录启动时使用。
     import backup
     import config
     import db
     import domain
+    import email_sender
     import notifications
+    import pushplus
     import scheduler
     import services
 
@@ -87,6 +89,8 @@ class AccessDeniedError(Exception):
 
 _ADMIN_ONLY_PATHS = {
     "/api/settings": "系统设置",
+    "/api/notifications/test-email": "测试邮件通知",
+    "/api/notifications/test-pushplus": "测试 PushPlus 通知",
     "/api/backup": "全量备份",
     "/api/backup/export-json": "全量 JSON 导出",
     "/api/backup/files": "备份文件列表",
@@ -341,6 +345,10 @@ class Handler(socketserver.StreamRequestHandler):
                 self._raw_text(backup.export_csv(include_all=True), "text/csv; charset=utf-8")
             elif path == "/api/notifications/upcoming" and method == "GET":
                 self._json(_upcoming_notifications(user_id))
+            elif path == "/api/notifications/test-email" and method == "POST":
+                self._test_email(body)
+            elif path == "/api/notifications/test-pushplus" and method == "POST":
+                self._test_pushplus(body)
             elif path.startswith("/api/subscriptions/"):
                 self._route_subscription(method, path, user_id, body)
             elif path.startswith("/api/categories/"):
@@ -444,6 +452,91 @@ class Handler(socketserver.StreamRequestHandler):
             return True
         target = (root / rel).resolve()
         return self._is_path_within(root, target) and target.is_file()
+
+    # ----- 测试通知 -----
+
+    def _test_email(self, body: bytes) -> None:
+        payload = self._json_body(body)
+        settings = db.get_app_settings()
+
+        host = payload.get("smtp_host") or settings.get("smtp_host")
+        if not host:
+            raise ValueError("请先填写或配置 SMTP 服务器")
+
+        port = payload.get("smtp_port") or settings.get("smtp_port") or 465
+        username = payload.get("smtp_username") or settings.get("smtp_username")
+        from_address = (
+            payload.get("smtp_from_address")
+            or settings.get("smtp_from_address")
+            or username
+        )
+
+        password_draft = payload.get("smtp_password")
+        if password_draft and not db.is_secret_placeholder(password_draft):
+            password = password_draft
+        else:
+            password = settings.get("smtp_password")
+
+        to_address = (
+            payload.get("to_address")
+            or payload.get("smtp_to_address")
+            or from_address
+            or username
+        )
+        if not to_address:
+            raise ValueError("请提供测试接收邮箱（或配置发件人/用户名）")
+
+        subject = "【订阅管理】邮件通知测试"
+        content = (
+            "这是一封来自订阅管理系统的测试邮件。\n\n"
+            f"发送时间：{date.today().isoformat()}\n"
+            "如果您看到这封邮件，说明您的 SMTP 邮件通知配置正确并已成功生效。"
+        )
+
+        try:
+            email_sender.send_email(
+                to_address=to_address,
+                subject=subject,
+                body=content,
+                host=host,
+                port=port,
+                username=username,
+                password=password,
+                from_address=from_address,
+            )
+        except Exception as exc:
+            self._json({"ok": False, "error": f"邮件发送失败: {exc}"}, HTTPStatus.BAD_REQUEST)
+            return
+
+        self._json({"ok": True, "message": f"测试邮件已发送至 {to_address}"})
+
+    def _test_pushplus(self, body: bytes) -> None:
+        payload = self._json_body(body)
+        settings = db.get_app_settings()
+
+        token_draft = payload.get("pushplus_token")
+        if token_draft and not db.is_secret_placeholder(token_draft):
+            token = token_draft
+        else:
+            token = settings.get("pushplus_token")
+
+        if not token:
+            raise ValueError("请先填写或配置 PushPlus Token")
+
+        title = "【订阅管理】PushPlus 推送测试"
+        content = (
+            "<p>这是一条来自订阅管理系统的测试消息。</p>"
+            f"<p>发送时间：{date.today().isoformat()}</p>"
+            "<p>如果您看到此消息，说明您的 PushPlus 微信推送配置正确并已成功生效。</p>"
+        )
+
+        try:
+            pushplus.send_pushplus(token=token, title=title, content=content)
+        except Exception as exc:
+            self._json({"ok": False, "error": f"PushPlus 发送失败: {exc}"}, HTTPStatus.BAD_REQUEST)
+            return
+
+        self._json({"ok": True, "message": "测试推送已发送成功"})
 
     # ----- 静态文件 -----
 

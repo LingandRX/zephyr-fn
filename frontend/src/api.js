@@ -62,6 +62,8 @@ export const getCalendar = (year, month) => api(`/calendar?year=${year}&month=${
 export const getSettings = () => api("/settings");
 export const saveSettings = (body) => api("/settings", { method: "PUT", body });
 export const getUpcomingNotifications = () => api("/notifications/upcoming");
+export const testEmailNotification = (body) => api("/notifications/test-email", { method: "POST", body });
+export const testPushPlusNotification = (body) => api("/notifications/test-pushplus", { method: "POST", body });
 
 // ---------- 备份 / 导入导出 ----------
 export const backupNow = () => api("/backup", { method: "POST" });

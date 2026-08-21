@@ -5,6 +5,7 @@ import { ref, reactive, computed, watch, nextTick, onMounted } from "vue";
 import {
   getSettings, saveSettings, getCategories, createCategory, deleteCategory,
   backupNow, getBackupFiles, importJson, importCsv, download,
+  testEmailNotification, testPushPlusNotification,
 } from "../api.js";
 import { toast } from "../ui.js";
 
@@ -21,6 +22,10 @@ const saving = ref(false);
 const saveStatusText = ref("");
 const cats = ref([]);
 const backupFiles = ref([]);
+
+const testingEmail = ref(false);
+const testingPushplus = ref(false);
+const testEmailTarget = ref("");
 
 const form = reactive({
   default_currency: "CNY",
@@ -176,6 +181,47 @@ watch(
   },
   { deep: true },
 );
+
+// ---------- 测试通知 ----------
+async function testEmail() {
+  if (testingEmail.value) return;
+  testingEmail.value = true;
+  try {
+    const payload = {
+      smtp_host: form.smtp_host || undefined,
+      smtp_port: form.smtp_port ? parseInt(form.smtp_port, 10) : undefined,
+      smtp_username: form.smtp_username || undefined,
+      smtp_from_address: form.smtp_from_address || undefined,
+      to_address: testEmailTarget.value.trim() || undefined,
+    };
+    if (isSecretUpdate(form.smtp_password)) {
+      payload.smtp_password = form.smtp_password;
+    }
+    const res = await testEmailNotification(payload);
+    toast(res.message || "测试邮件发送成功");
+  } catch (err) {
+    toast(err.message, "err");
+  } finally {
+    testingEmail.value = false;
+  }
+}
+
+async function testPushPlus() {
+  if (testingPushplus.value) return;
+  testingPushplus.value = true;
+  try {
+    const payload = {};
+    if (isSecretUpdate(form.pushplus_token)) {
+      payload.pushplus_token = form.pushplus_token;
+    }
+    const res = await testPushPlusNotification(payload);
+    toast(res.message || "测试推送发送成功");
+  } catch (err) {
+    toast(err.message, "err");
+  } finally {
+    testingPushplus.value = false;
+  }
+}
 
 // ---------- 分类 ----------
 watch(() => newCat.name, (v) => {
@@ -357,6 +403,20 @@ onMounted(loadAll);
             <span>发件人地址</span>
             <input v-model="form.smtp_from_address" placeholder="user@example.com" />
           </label>
+          <div class="test-row">
+            <label class="field test-target-field">
+              <span>测试收件邮箱（选填，默认同发件人/用户名）</span>
+              <input v-model="testEmailTarget" placeholder="test@example.com" />
+            </label>
+            <button
+              type="button"
+              class="btn test-btn"
+              :disabled="testingEmail || (!form.smtp_host && !form.smtp_username)"
+              @click="testEmail"
+            >
+              {{ testingEmail ? "发送中..." : "✉️ 发送测试邮件" }}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -377,6 +437,16 @@ onMounted(loadAll);
               :placeholder="form.pushplus_token_configured ? '已配置，留空保持原 Token' : '填写从 pushplus.plus 获取的一对一或群组 Token'"
             />
           </label>
+          <div class="test-row single-action">
+            <button
+              type="button"
+              class="btn test-btn"
+              :disabled="testingPushplus || (!form.pushplus_token && !form.pushplus_token_configured)"
+              @click="testPushPlus"
+            >
+              {{ testingPushplus ? "发送中..." : "📲 发送测试消息" }}
+            </button>
+          </div>
         </div>
         <div class="sub-hint-row">
           <div class="muted sub-hint">更改后自动生效并保存</div>
@@ -590,6 +660,24 @@ onMounted(loadAll);
 }
 .save-status-badge.saving {
   color: var(--muted);
+}
+
+.test-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+}
+.test-row.single-action {
+  justify-content: flex-start;
+}
+.test-target-field {
+  flex: 1;
+  margin-bottom: 0;
+}
+.test-btn {
+  white-space: nowrap;
+  height: 38px;
 }
 
 /* 分类管理 */
