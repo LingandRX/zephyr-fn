@@ -484,6 +484,11 @@ onMounted(loadAll);
         </div>
       </div>
     </div>
+
+    <!-- 移动端悬浮新增按钮 (FAB) -->
+    <button class="fab-add" type="button" aria-label="新增订阅" title="新增订阅" @click="openModal()">
+      <span class="fab-icon">+</span>
+    </button>
   </div>
 </template>
 
@@ -867,6 +872,40 @@ onMounted(loadAll);
     padding: 0 !important;
     background: transparent !important;
     border: none !important;
+  }
+}
+
+/* ---------- 移动端悬浮新增按钮 FAB ---------- */
+.fab-add {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .fab-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    right: clamp(16px, 4vw, 24px);
+    bottom: clamp(80px, 12vw, 100px);
+    width: 56px;
+    height: 56px;
+    border: none;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+    z-index: 29;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+  .fab-add:hover {
+    background: var(--primary-2);
+  }
+  .fab-add:active {
+    transform: scale(0.94);
   }
 }
 

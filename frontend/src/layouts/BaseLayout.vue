@@ -168,6 +168,14 @@ onMounted(loadNotice);
         <h1>{{ viewTitle }}</h1>
         <div class="topbar-actions">
           <button
+            class="topbar-add"
+            title="新增订阅"
+            aria-label="新增订阅"
+            @click="createNew"
+          >
+            <span class="topbar-add-icon" aria-hidden="true">+</span>
+          </button>
+          <button
             class="theme-toggle"
             :title="themeLabel"
             :aria-label="themeLabel"
@@ -281,5 +289,36 @@ onMounted(loadNotice);
 
 .theme-toggle:active {
   transform: scale(0.95);
+}
+
+/* 移动端顶栏「新增订阅」按钮：桌面端由侧边栏提供入口，此处仅移动端显示 */
+.topbar-add {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .topbar-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--border);
+    background: var(--card-2);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 22px;
+    line-height: 1;
+    color: var(--text);
+    transition: all 0.15s ease;
+  }
+  .topbar-add:hover {
+    border-color: var(--primary);
+    background: var(--card);
+    color: var(--primary);
+  }
+  .topbar-add:active {
+    transform: scale(0.95);
+  }
 }
 </style>
