@@ -939,4 +939,57 @@ onMounted(loadAll);
 }
 .btn-danger:hover:not(:disabled) { filter: brightness(0.92); }
 .btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ---------------- 弹窗移动端适配 (<=860px) ---------------- */
+@media (max-width: 860px) {
+  /* 弹窗整体上下留足安全距离，避免被地址栏 / 键盘遮挡 */
+  .modal {
+    align-items: center;
+    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  }
+
+  /* 全宽弹窗：去掉固定宽度、加大圆角、内容可滚动 */
+  .modal-card,
+  .modal-confirm {
+    width: 100%;
+    max-width: 100%;
+    border-radius: var(--radius-lg);
+  }
+  .modal-card {
+    max-height: 90vh;
+    max-height: 90dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 表单单列布局，跨列字段不再跨列 */
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .span-2 {
+    grid-column: span 1;
+  }
+
+  /* 放大触控目标，字号不小于 16px 防止 iOS 自动缩放 */
+  .form-grid input:not([type="checkbox"]),
+  .form-grid select {
+    height: 44px;
+    font-size: 16px;
+  }
+  .form-grid textarea {
+    min-height: 80px;
+    font-size: 16px;
+  }
+
+  /* 操作按钮固定在弹窗底部，内容滚动时始终可见 */
+  .modal-foot {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    background: var(--card);
+    margin: var(--space-3) -20px 0;
+    padding: 12px 20px 6px;
+    border-top: 1px solid var(--border);
+  }
+}
 </style>
