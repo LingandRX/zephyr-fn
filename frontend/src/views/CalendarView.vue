@@ -559,6 +559,73 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   transform-origin: top left;
 }
 
+/* 移动端适配：年月选择器 */
+@media (max-width: 860px) {
+  .year-month-picker {
+    /* 在移动端居中显示，避免溢出 */
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(280px, calc(100vw - 32px));
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    transform-origin: center center;
+  }
+  
+  /* 调整弹出动画 */
+  .picker-pop-enter-from,
+  .picker-pop-leave-to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.92);
+  }
+  
+  /* 月份按钮增大触摸区域 */
+  .picker-month-btn {
+    padding: 12px 0;
+    min-height: 44px; /* iOS 推荐最小触摸目标 */
+  }
+  
+  /* 年份滚轮触摸优化 */
+  .picker-year-wheel {
+    -webkit-overflow-scrolling: touch;
+    scroll-padding: 0 calc(50% - 34px);
+  }
+  
+  .wheel-item {
+    min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* 导航按钮增大触摸区域 */
+  .picker-nav-btn {
+    width: 32px;
+    height: 32px;
+  }
+  
+  /* 底部按钮增大触摸区域 */
+  .picker-quick-btn {
+    padding: 10px 12px;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 360px) {
+  .year-month-picker {
+    padding: 10px 12px;
+    border-radius: 12px;
+  }
+  
+  .picker-grid {
+    gap: 4px;
+  }
+  
+  .picker-month-btn {
+    font-size: 11px;
+    padding: 10px 0;
+  }
+}
+
 /* iOS 风格年份滚轮容器 */
 .picker-wheel-wrap {
   position: relative;
