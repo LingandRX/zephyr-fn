@@ -66,6 +66,10 @@ watch(
   ([sd, pt]) => {
     const next = calcNextDueDate(sd, pt);
     if (next) form.value.next_due_date = next;
+    // 选择开始日期后，若首次付款日期为空则自动填充
+    if (sd && !form.value.first_payment_date) {
+      form.value.first_payment_date = sd;
+    }
   },
 );
 
