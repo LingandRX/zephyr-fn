@@ -44,6 +44,31 @@ function limitNotes(event) {
   form.value.notes = notes;
 }
 
+// 根据开始日期和周期类型自动计算下次扣费日期
+function calcNextDueDate(startDate, periodType) {
+  if (!startDate || !['month', 'quarter', 'year'].includes(periodType)) return null;
+  const [y, m, d] = startDate.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const months = periodType === 'month' ? 1 : periodType === 'quarter' ? 3 : 12;
+  // 目标月份和年份
+  const targetMonth = date.getMonth() + months;
+  const targetYear = date.getFullYear() + Math.floor(targetMonth / 12);
+  const modMonth = targetMonth % 12;
+  // 获取目标月份的最大天数，处理月末溢出（如 1月31日 → 2月28日）
+  const maxDay = new Date(targetYear, modMonth + 1, 0).getDate();
+  const targetDay = Math.min(d, maxDay);
+  const result = new Date(targetYear, modMonth, targetDay);
+  return `${result.getFullYear()}-${String(result.getMonth() + 1).padStart(2, '0')}-${String(result.getDate()).padStart(2, '0')}`;
+}
+
+watch(
+  () => [form.value.start_date, form.value.period_type],
+  ([sd, pt]) => {
+    const next = calcNextDueDate(sd, pt);
+    if (next) form.value.next_due_date = next;
+  },
+);
+
 // 侧边栏「新增订阅」按钮触发（跨组件响应式状态）
 watch(
   () => ui.showAddModal,
