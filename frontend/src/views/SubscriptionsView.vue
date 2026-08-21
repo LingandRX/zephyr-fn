@@ -479,7 +479,7 @@ onMounted(loadAll);
                 <option value="HKD">HKD (HK$)</option>
               </select>
             </label>
-            <label class="field"><span>金额（元）*</span>
+            <label class="field"><span>金额（{{ form.currency === 'USD' ? '美元' : form.currency === 'HKD' ? '港币' : '元' }}）*</span>
               <input v-model="form.amount" type="number" required min="0" step="0.01" placeholder="68" />
             </label>
             <label class="field"><span>周期</span>
