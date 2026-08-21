@@ -244,13 +244,36 @@ async function confirmDel() {
   }
 }
 
-async function renew(sub) {
+// ---------- 续费确认弹窗 ----------
+const renewOpen = ref(false);
+const renewTarget = ref(null);
+const renewBusy = ref(false);
+
+function askRenew(sub) {
+  renewTarget.value = sub;
+  renewOpen.value = true;
+}
+
+function closeRenew() {
+  if (renewBusy.value) return;
+  renewOpen.value = false;
+  renewTarget.value = null;
+}
+
+async function confirmRenew() {
+  const sub = renewTarget.value;
+  if (!sub) return;
+  renewBusy.value = true;
   try {
     await renewSubscription(sub.id);
     toast("已续费到下一期");
+    renewOpen.value = false;
+    renewTarget.value = null;
     await loadAll();
   } catch (err) {
     toast(err.message, "err");
+  } finally {
+    renewBusy.value = false;
   }
 }
 
@@ -357,7 +380,7 @@ onMounted(loadAll);
               </td>
               <td class="ta-r">
                 <div class="row-actions">
-                  <button v-if="s.period_type !== 'once'" class="btn-action-renew" @click="renew(s)">续费</button>
+                  <button v-if="s.period_type !== 'once'" class="btn-action-renew" @click="askRenew(s)">续费</button>
                   <button @click="openModal(s)">编辑</button>
                   <button class="danger" @click="askDel(s)">删除</button>
                 </div>
@@ -405,7 +428,7 @@ onMounted(loadAll);
           </div>
 
           <div class="item-actions">
-            <button v-if="s.period_type !== 'once'" class="btn-m btn-m-renew" @click="renew(s)">续费</button>
+            <button v-if="s.period_type !== 'once'" class="btn-m btn-m-renew" @click="askRenew(s)">续费</button>
             <button class="btn-m" @click="openModal(s)">编辑</button>
             <button class="btn-m btn-m-danger" @click="askDel(s)">删除</button>
           </div>
@@ -515,6 +538,32 @@ onMounted(loadAll);
           <button type="button" class="btn" :disabled="delBusy" @click="closeDel">取消</button>
           <button type="button" class="btn btn-danger" :disabled="delBusy" @click="confirmDel">
             {{ delBusy ? "删除中…" : "确认删除" }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 续费确认弹窗 -->
+    <div v-if="renewOpen" class="modal" @click.self="closeRenew">
+      <div class="modal-card modal-confirm">
+        <div class="modal-head">
+          <h2>续费确认</h2>
+          <button class="modal-close" :disabled="renewBusy" @click="closeRenew">✕</button>
+        </div>
+        <div class="confirm-body">
+          <p class="confirm-text">
+            确认将「<strong>{{ renewTarget?.name }}</strong>」续费到下一期？
+          </p>
+          <div v-if="renewTarget" class="confirm-meta">
+            <span class="confirm-meta-item">{{ fmtCents(renewTarget.amount, renewTarget.currency) }}</span>
+            <span class="confirm-meta-item">{{ PERIOD_LABEL[renewTarget.period_type] || renewTarget.period_type }}</span>
+            <span class="confirm-meta-item">当前扣费日 {{ renewTarget.next_due_date || "—" }}</span>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn" :disabled="renewBusy" @click="closeRenew">取消</button>
+          <button type="button" class="btn btn-primary" :disabled="renewBusy" @click="confirmRenew">
+            {{ renewBusy ? "续费中…" : "确认续费" }}
           </button>
         </div>
       </div>
