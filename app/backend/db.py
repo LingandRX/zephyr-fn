@@ -421,6 +421,35 @@ def _ensure_category_schema() -> None:
     )
 
 
+def _seed_default_categories() -> None:
+    """全新数据库时自动插入默认分类。"""
+    conn = _require_conn()
+    row = conn.execute(
+        "SELECT COUNT(DISTINCT user_id) FROM categories"
+    ).fetchone()
+    if row[0] > 0:
+        return
+    defaults = [
+        (new_id(), 'local', '流媒体', '🎬', 1),
+        (new_id(), 'local', '云存储', '☁️', 2),
+        (new_id(), 'local', 'AI 工具', '🤖', 3),
+        (new_id(), 'local', '音乐', '🎵', 4),
+        (new_id(), 'local', '办公', '💼', 5),
+        (new_id(), 'local', '开发工具', '🛠️', 6),
+        (new_id(), 'local', '游戏', '🎮', 7),
+        (new_id(), 'local', '健身', '💪', 8),
+        (new_id(), 'local', '电商会员', '🛒', 9),
+        (new_id(), 'local', '其他', '📦', 10),
+    ]
+    for cat_id, user_id, name, icon, sort_order in defaults:
+        conn.execute(
+            "INSERT OR IGNORE INTO categories "
+            "(id, user_id, name, icon, sort_order) VALUES (?,?,?,?,?)",
+            (cat_id, user_id, name, icon, sort_order),
+        )
+    _logger.info("seeded %d default categories", len(defaults))
+
+
 def _run_migrations() -> None:
     conn = _require_conn()
     conn.execute(
@@ -462,6 +491,7 @@ def _run_migrations() -> None:
     # 即使数据库版本号已经是最新，也修复手工创建/不完整升级的 schema。
     _ensure_settings_schema()
     _ensure_category_schema()
+    _seed_default_categories()
     conn.execute(
         "INSERT INTO db_version (id, version) VALUES (1, ?) "
         "ON CONFLICT(id) DO UPDATE SET version=excluded.version",
