@@ -106,11 +106,12 @@ body {
 .sidebar.collapsed {
   width: 64px; flex: 0 0 64px; padding: var(--space-4) var(--space-2);
 }
-.sidebar.collapsed .brand { padding: var(--space-1) 0 18px; justify-content: center; }
+/* 注意：label 以 width:0 + opacity 隐藏时，flex gap 仍会占位，需同步归零 gap 才能真正居中 */
+.sidebar.collapsed .brand { padding: var(--space-1) 0 18px; justify-content: center; gap: 0; }
 .sidebar.collapsed .brand-name { opacity: 0; width: 0; pointer-events: none; }
-.sidebar.collapsed .nav-item { padding: 0; justify-content: center; }
+.sidebar.collapsed .nav-item { padding: 0; justify-content: center; gap: 0; }
 .sidebar.collapsed .nav-label { opacity: 0; width: 0; pointer-events: none; position: absolute; }
-.sidebar.collapsed .sidebar-toggle { padding: 0; justify-content: center; }
+.sidebar.collapsed .sidebar-toggle { padding: 0; justify-content: center; gap: 0; }
 .sidebar.collapsed .toggle-icon { transform: rotate(180deg); }
 .sidebar.collapsed .toggle-label { opacity: 0; width: 0; pointer-events: none; position: absolute; }
 .sidebar.collapsed .btn-new-sub { width: 40px; height: 40px; padding: 0; margin: 0 auto; border-radius: 10px; justify-content: center; }
@@ -533,9 +534,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
   .sidebar.collapsed {
     width: 220px !important; flex-basis: 220px !important; padding: var(--space-4) var(--space-3);
   }
-  .sidebar.collapsed .brand { justify-content: flex-start; padding: var(--space-1) 6px 18px; }
+  /* 移动端抽屉为展开态，恢复 gap 保证图标与文字间距 */
+  .sidebar.collapsed .brand { justify-content: flex-start; padding: var(--space-1) 6px 18px; gap: 10px; }
   .sidebar.collapsed .brand-name { opacity: 1; width: auto; pointer-events: auto; }
-  .sidebar.collapsed .nav-item { padding: 0 10px; justify-content: flex-start; }
+  .sidebar.collapsed .nav-item { padding: 0 10px; justify-content: flex-start; gap: 10px; }
   .sidebar.collapsed .nav-label { opacity: 1; width: auto; pointer-events: auto; position: static; }
   .sidebar.collapsed .btn-new-sub { width: 100%; height: 38px; padding: 0 var(--space-3); border-radius: var(--radius-sm); }
 
