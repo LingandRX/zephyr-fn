@@ -147,6 +147,67 @@ class DbTests(unittest.TestCase):
         self.assertEqual(len(db.get_all_categories("u1")), 0)
 
 
+class DefaultCategorySeedTests(unittest.TestCase):
+    """按用户懒播种默认分类（v11 seeded_users 机制）。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        db.connect(Path(self.tmp.name) / "seed.db")
+
+    def tearDown(self):
+        db.close()
+        self.tmp.cleanup()
+
+    def test_new_user_gets_defaults_once(self):
+        self.assertTrue(db.ensure_default_categories_for_user("u-1000"))
+        cats = db.get_all_categories("u-1000")
+        self.assertGreaterEqual(len(cats), len(db._DEFAULT_CATEGORY_TEMPLATES))
+        names = {c["name"] for c in cats}
+        self.assertIn("流媒体", names)
+        # 幂等：同一用户第二次调用不再写入。
+        self.assertFalse(db.ensure_default_categories_for_user("u-1000"))
+        self.assertEqual(len(db.get_all_categories("u-1000")), len(cats))
+
+    def test_deleted_categories_not_resurrected(self):
+        db.ensure_default_categories_for_user("u-2000")
+        for cat in db.get_all_categories("u-2000"):
+            db.delete_category(cat["id"], "u-2000")
+        self.assertEqual(db.get_all_categories("u-2000"), [])
+        db.ensure_default_categories_for_user("u-2000")
+        self.assertEqual(db.get_all_categories("u-2000"), [])
+
+    def test_empty_user_id_is_noop(self):
+        self.assertFalse(db.ensure_default_categories_for_user(""))
+        self.assertFalse(db.ensure_default_categories_for_user("  "))
+
+    def test_local_seed_marked_on_fresh_db(self):
+        # 全新库启动后 'local' 已有种子分类且已打标。
+        self.assertGreater(len(db.get_all_categories("local")), 0)
+        self.assertFalse(db.ensure_default_categories_for_user("local"))
+
+    def test_upgrade_marks_existing_users(self):
+        # 模拟 v11 迁移语义：已有数据的老用户被标记，首次请求不再补种。
+        conn = db._conn
+        with db._lock:
+            marked = conn.execute(
+                "SELECT user_id FROM seeded_users WHERE user_id='legacy'"
+            ).fetchone()
+            if not marked:
+                conn.execute(
+                    "INSERT INTO subscriptions (id, user_id, name, amount, currency, "
+                    "period_type, start_date, created_at, updated_at) "
+                    "VALUES ('legacy-sub', 'legacy', '旧订阅', 1000, 'CNY', 'month', "
+                    "'2026-01-01', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
+                )
+                conn.execute(
+                    "INSERT INTO seeded_users (user_id, seeded_at) "
+                    "VALUES ('legacy', '2026-01-01T00:00:00Z')"
+                )
+                conn.commit()
+        self.assertFalse(db.ensure_default_categories_for_user("legacy"))
+        self.assertEqual(db.get_all_categories("legacy"), [])
+
+
 class ServicesTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

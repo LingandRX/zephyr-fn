@@ -29,7 +29,11 @@ _logger = logging.getLogger("subscription.db")
 _conn: sqlite3.Connection | None = None
 _transaction_state = threading.local()
 
-CURRENT_DB_VERSION = 10
+# 进程内已播种用户缓存：避免每个 API 请求都查询 seeded_users 表。
+# connect() 换库时必须清空。
+_seeded_users_cache: set[str] = set()
+
+CURRENT_DB_VERSION = 11
 MAX_NOTES_LENGTH = 120
 MAX_CATEGORY_NAME_LEN = 20
 MAX_CATEGORIES_PER_USER = 50
@@ -61,7 +65,22 @@ _SETTINGS_COLUMN_DEFINITIONS = {
     "last_rate_update": "TEXT",
 }
 
-_VALID_TABLE_NAMES = frozenset({"app_settings", "notification_logs", "subscriptions", "categories", "db_version"})
+_VALID_TABLE_NAMES = frozenset({"app_settings", "notification_logs", "subscriptions", "categories", "db_version", "seeded_users"})
+
+# 默认分类模板（名称, 图标, 排序）。'local' 开发身份与真实 NAS 用户的
+# 首次播种共用这份清单。
+_DEFAULT_CATEGORY_TEMPLATES = (
+    ("流媒体", "🎬", 1),
+    ("云存储", "☁️", 2),
+    ("AI 工具", "🤖", 3),
+    ("音乐", "🎵", 4),
+    ("办公", "💼", 5),
+    ("开发工具", "🛠️", 6),
+    ("游戏", "🎮", 7),
+    ("健身", "💪", 8),
+    ("电商会员", "🛒", 9),
+    ("其他", "📦", 10),
+)
 
 # v9 迁移和启动时自修复共用：每个 identity 组只保留一条日志。
 # sent 优先；同一优先级下保留 created_at 最新、id 最大的记录。
@@ -193,6 +212,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_cat_user_name
 CREATE INDEX IF NOT EXISTS idx_cat_user_sort
   ON categories(user_id, sort_order);
 """),
+    # v11：按用户播种默认分类。seeded_users 记录哪些 user_id 已经拥有过
+    # 默认分类；升级时把已有数据的老用户全部标记为“已播种”，避免首次
+    # 请求时向他们已有分类里再塞一套默认值。只有全新用户才会被补种。
+    (11, """
+CREATE TABLE IF NOT EXISTS seeded_users (
+    user_id TEXT PRIMARY KEY,
+    seeded_at TEXT NOT NULL
+);
+INSERT OR IGNORE INTO seeded_users (user_id, seeded_at)
+SELECT user_id, strftime('%Y-%m-%dT%H:%M:%SZ', 'now') FROM (
+    SELECT DISTINCT user_id FROM subscriptions
+    UNION
+    SELECT DISTINCT user_id FROM categories
+)
+WHERE user_id IS NOT NULL AND user_id <> '';
+"""),
 ]
 
 # 订阅可更新字段（白名单）
@@ -251,6 +286,7 @@ def connect(path: Path) -> None:
         _ensure_settings_schema()
         _ensure_notification_schema()
         _seed_default_settings()
+        _seeded_users_cache.clear()
         _conn.commit()
 
 
@@ -422,32 +458,67 @@ def _ensure_category_schema() -> None:
 
 
 def _seed_default_categories() -> None:
-    """全新数据库时自动插入默认分类。"""
+    """全新数据库时为本地开发身份 'local' 插入默认分类。
+
+    真实 NAS 用户（X-Trim-Userid）的默认分类由
+    :func:`ensure_default_categories_for_user` 在其首次访问 API 时补种，
+    不能写死在这里——网关注入的 user_id 只有运行时才知道。
+    """
     conn = _require_conn()
     row = conn.execute(
         "SELECT COUNT(DISTINCT user_id) FROM categories"
     ).fetchone()
     if row[0] > 0:
         return
-    defaults = [
-        (new_id(), 'local', '流媒体', '🎬', 1),
-        (new_id(), 'local', '云存储', '☁️', 2),
-        (new_id(), 'local', 'AI 工具', '🤖', 3),
-        (new_id(), 'local', '音乐', '🎵', 4),
-        (new_id(), 'local', '办公', '💼', 5),
-        (new_id(), 'local', '开发工具', '🛠️', 6),
-        (new_id(), 'local', '游戏', '🎮', 7),
-        (new_id(), 'local', '健身', '💪', 8),
-        (new_id(), 'local', '电商会员', '🛒', 9),
-        (new_id(), 'local', '其他', '📦', 10),
-    ]
-    for cat_id, user_id, name, icon, sort_order in defaults:
+    for name, icon, sort_order in _DEFAULT_CATEGORY_TEMPLATES:
         conn.execute(
             "INSERT OR IGNORE INTO categories "
             "(id, user_id, name, icon, sort_order) VALUES (?,?,?,?,?)",
-            (cat_id, user_id, name, icon, sort_order),
+            (new_id(), "local", name, icon, sort_order),
         )
-    _logger.info("seeded %d default categories", len(defaults))
+    conn.execute(
+        "INSERT OR IGNORE INTO seeded_users (user_id, seeded_at) VALUES (?,?)",
+        ("local", now_utc()),
+    )
+    _logger.info("seeded %d default categories", len(_DEFAULT_CATEGORY_TEMPLATES))
+
+
+def ensure_default_categories_for_user(user_id: str) -> bool:
+    """新用户首次访问时补种一份默认分类（幂等）。
+
+    - 以 ``seeded_users`` 表为标记：已播种的用户即使删光分类也不会复活；
+    - 升级场景下已有数据的老用户已在 v11 迁移中统一打标，不受影响；
+    - 进程内缓存避免每个请求都查表。
+
+    返回是否实际写入了默认分类。
+    """
+    target = str(user_id or "").strip()
+    if not target or target in _seeded_users_cache:
+        return False
+    conn = _require_conn()
+    with _lock:
+        if target in _seeded_users_cache:
+            return False
+        marked = conn.execute(
+            "SELECT 1 FROM seeded_users WHERE user_id=?", (target,)
+        ).fetchone()
+        if marked:
+            _seeded_users_cache.add(target)
+            return False
+        for name, icon, sort_order in _DEFAULT_CATEGORY_TEMPLATES:
+            conn.execute(
+                "INSERT OR IGNORE INTO categories "
+                "(id, user_id, name, icon, sort_order) VALUES (?,?,?,?,?)",
+                (new_id(), target, name, icon, sort_order),
+            )
+        conn.execute(
+            "INSERT OR IGNORE INTO seeded_users (user_id, seeded_at) VALUES (?,?)",
+            (target, now_utc()),
+        )
+        _commit()
+        _seeded_users_cache.add(target)
+    _logger.info("seeded default categories for user %s", target)
+    return True
 
 
 def _run_migrations() -> None:

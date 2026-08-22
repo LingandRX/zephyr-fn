@@ -303,6 +303,9 @@ class Handler(socketserver.StreamRequestHandler):
                 return
 
             user_id = identity.user_id
+            # 新用户首次访问 API 时补种默认分类（幂等，见 db.ensure_default_categories_for_user）。
+            if path.startswith("/api/"):
+                db.ensure_default_categories_for_user(user_id)
             if path == "/api/subscriptions" and method == "GET":
                 self._json([_with_status(s) for s in db.get_all_subscriptions(user_id)])
             elif path == "/api/subscriptions" and method == "POST":
