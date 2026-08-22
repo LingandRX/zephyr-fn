@@ -68,6 +68,12 @@ export const testPushPlusNotification = (body) => api("/notifications/test-pushp
 // ---------- 备份 / 导入导出 ----------
 export const backupNow = () => api("/backup", { method: "POST" });
 export const getBackupFiles = () => api("/backup/files");
+export const deleteBackupFile = (name) =>
+  api(`/backup/files?name=${encodeURIComponent(name)}`, { method: "DELETE" });
+/** 下载备份文件：浏览器导航触发下载 */
+export function downloadBackupFile(name) {
+  download(`/backup/files/download?name=${encodeURIComponent(name)}`, name);
+}
 export const importJson = (text) =>
   api("/backup/import-json", { method: "POST", text, headers: { "Content-Type": "application/json" } });
 export const importCsv = (text) =>

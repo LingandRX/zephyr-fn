@@ -22,6 +22,8 @@ API（与 zephyr-tarui 后端功能对齐）：
         POST          /api/backup/import-json
         POST          /api/backup/import-csv
         GET           /api/backup/files
+        DELETE        /api/backup/files?name=
+        GET           /api/backup/files/download?name=
         GET           /api/export/csv
   通知  GET           /api/notifications/upcoming
 """
@@ -94,6 +96,7 @@ _ADMIN_ONLY_PATHS = {
     "/api/backup": "全量备份",
     "/api/backup/export-json": "全量 JSON 导出",
     "/api/backup/files": "备份文件列表",
+    "/api/backup/files/download": "备份文件下载",
     "/api/export/csv": "全量 CSV 导出",
 }
 
@@ -341,6 +344,18 @@ class Handler(socketserver.StreamRequestHandler):
                 self._json(result)
             elif path == "/api/backup/files" and method == "GET":
                 self._json(_list_backup_files())
+            elif path == "/api/backup/files" and method == "DELETE":
+                ok = _delete_backup_file((query.get("name") or [""])[0])
+                self._json({"ok": ok}, HTTPStatus.OK if ok else HTTPStatus.NOT_FOUND)
+            elif path == "/api/backup/files/download" and method == "GET":
+                file_path = _resolve_backup_file((query.get("name") or [""])[0])
+                if not file_path.is_file():
+                    self._json({"error": "备份文件不存在"}, HTTPStatus.NOT_FOUND)
+                    return
+                self._raw(
+                    HTTPStatus.OK, "application/octet-stream", file_path.read_bytes(),
+                    content_disposition=f'attachment; filename="{file_path.name}"',
+                )
             elif path == "/api/export/csv" and method == "GET":
                 self._raw_text(backup.export_csv(include_all=True), "text/csv; charset=utf-8")
             elif path == "/api/notifications/upcoming" and method == "GET":
@@ -606,7 +621,8 @@ class Handler(socketserver.StreamRequestHandler):
     def _error(self, status, message: str) -> None:
         self._raw(status, "text/plain; charset=utf-8", message.encode("utf-8"))
 
-    def _raw(self, status, ctype: str, body: bytes, cache: bool = False) -> None:
+    def _raw(self, status, ctype: str, body: bytes, cache: bool = False,
+             content_disposition: str | None = None) -> None:
         code = int(status)
         phrase = HTTPStatus(code).phrase
         head = (
@@ -614,8 +630,9 @@ class Handler(socketserver.StreamRequestHandler):
             f"Content-Type: {ctype}\r\n"
             f"Content-Length: {len(body)}\r\n"
             f"{'Cache-Control: public, max-age=3600' if cache else 'Cache-Control: no-store'}\r\n"
-            f"Connection: close\r\n"
-            f"\r\n"
+            + (f"Content-Disposition: {content_disposition}\r\n" if content_disposition else "")
+            + f"Connection: close\r\n"
+            + "\r\n"
         )
         self.wfile.write(head.encode("latin-1"))
         self.wfile.write(body)
@@ -636,6 +653,32 @@ class Handler(socketserver.StreamRequestHandler):
 # --------------------------------------------------------------------------- #
 # 辅助
 # --------------------------------------------------------------------------- #
+
+def _resolve_backup_file(name: str) -> Path:
+    """把备份文件名解析为备份目录内的安全路径，防止路径穿越。
+
+    只接受 basename 形式的文件名，且必须匹配备份列表使用的
+    ``subscription-*`` 前缀；解析结果必须仍位于备份目录内。
+    """
+    filename = os.path.basename(str(name or "").strip())
+    if not filename.startswith("subscription-") or filename == "subscription-":
+        raise ValueError("非法的备份文件名")
+    if filename in (".", "..") or "/" in filename or "\\" in filename:
+        raise ValueError("非法的备份文件名")
+    backup_dir = config.backup_dir().resolve()
+    path = (backup_dir / filename).resolve()
+    if path.parent != backup_dir:
+        raise ValueError("非法的备份文件路径")
+    return path
+
+
+def _delete_backup_file(name: str) -> bool:
+    path = _resolve_backup_file(name)
+    if not path.is_file():
+        return False
+    path.unlink()
+    return True
+
 
 def _list_backup_files() -> list[dict]:
     backup_dir = config.backup_dir()

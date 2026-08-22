@@ -5,6 +5,7 @@ import { ref, reactive, computed, watch, nextTick, onMounted } from "vue";
 import {
   getSettings, saveSettings, getCategories, createCategory, deleteCategory,
   backupNow, getBackupFiles, importJson, importCsv, download,
+  deleteBackupFile, downloadBackupFile,
   testEmailNotification, testPushPlusNotification,
 } from "../api.js";
 import { toast } from "../ui.js";
@@ -275,6 +276,46 @@ async function doBackupNow() {
 function doExportJson() { download("/backup/export-json", "subscriptions.json"); }
 function doExportCsv() { download("/export/csv", "subscriptions.csv"); }
 
+const delBackupOpen = ref(false);
+const delBackupTarget = ref("");
+const delBackupBusy = ref(false);
+
+function doDownloadBackup(name) {
+  try {
+    downloadBackupFile(name);
+    toast("已开始下载");
+  } catch (err) {
+    toast(err.message, "err");
+  }
+}
+
+function doDeleteBackup(name) {
+  delBackupTarget.value = name;
+  delBackupBusy.value = false;
+  delBackupOpen.value = true;
+}
+
+function closeDeleteBackup() {
+  if (delBackupBusy.value) return;
+  delBackupOpen.value = false;
+}
+
+async function confirmDeleteBackup() {
+  const name = delBackupTarget.value;
+  if (!name || delBackupBusy.value) return;
+  delBackupBusy.value = true;
+  try {
+    await deleteBackupFile(name);
+    toast("备份已删除");
+    delBackupOpen.value = false;
+    backupFiles.value = await getBackupFiles();
+  } catch (err) {
+    toast(err.message, "err");
+  } finally {
+    delBackupBusy.value = false;
+  }
+}
+
 async function onImportFile(kind, event) {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -510,14 +551,39 @@ onMounted(loadAll);
         <h3>备份历史</h3>
         <div class="table-scroll">
           <table class="table backup-table">
-            <thead><tr><th>备份文件</th><th>大小</th></tr></thead>
+            <thead><tr><th>备份文件</th><th>大小</th><th>操作</th></tr></thead>
             <tbody>
               <tr v-for="f in backupFiles" :key="f.name">
                 <td>{{ f.name }}</td><td>{{ (f.size / 1024).toFixed(1) }} KB</td>
+                <td class="row-actions">
+                  <button class="btn btn-sm" :title="`下载 ${f.name}`" @click="doDownloadBackup(f.name)">下载</button>
+                  <button class="btn btn-sm btn-danger" :title="`删除 ${f.name}`" @click="doDeleteBackup(f.name)">删除</button>
+                </td>
               </tr>
-              <tr v-if="!backupFiles.length"><td colspan="2" class="muted">暂无备份</td></tr>
+              <tr v-if="!backupFiles.length"><td colspan="3" class="muted">暂无备份</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 删除备份确认弹窗 -->
+    <div v-if="delBackupOpen" class="modal" @click.self="closeDeleteBackup">
+      <div class="modal-card modal-confirm">
+        <div class="modal-head">
+          <h2>删除备份</h2>
+          <button class="modal-close" :disabled="delBackupBusy" @click="closeDeleteBackup">✕</button>
+        </div>
+        <div class="confirm-body">
+          <p class="confirm-text">
+            确认删除备份文件「<strong>{{ delBackupTarget }}</strong>」？此操作不可恢复。
+          </p>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn" :disabled="delBackupBusy" @click="closeDeleteBackup">取消</button>
+          <button type="button" class="btn btn-danger" :disabled="delBackupBusy" @click="confirmDeleteBackup">
+            {{ delBackupBusy ? "删除中…" : "确认删除" }}
+          </button>
         </div>
       </div>
     </div>
@@ -733,8 +799,34 @@ onMounted(loadAll);
   position: relative;
 }
 .backup-table {
-  min-width: 320px;
+  min-width: 420px;
 }
+.backup-table .row-actions {
+  display: flex;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+.btn.btn-sm {
+  padding: 4px 10px;
+  font-size: var(--fs-xs);
+}
+.btn-danger {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+.btn-danger:hover:not(:disabled) { filter: brightness(0.92); }
+.btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
+.modal-confirm { width: 420px; }
+.confirm-body { padding: 4px 0 2px; }
+.confirm-text {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  color: var(--text);
+  word-break: break-all;
+}
+.confirm-text strong { color: var(--text); font-weight: 600; }
 
 @media (max-width: 640px) {
   .form-row {
