@@ -38,7 +38,9 @@ try {
     ui.view = view;
     const html = await renderToString(createSSRApp(App));
 
-    const pages = (html.match(/class="page"/g) || []).length;
+    // 子页根元素统一为 `class="page"` 或带附加作用域类（如 `class="page cal-page"`）。
+    // 用「page 后跟空格或引号」匹配根类，避免误计 `page-host` / `page-title` 等内部类。
+    const pages = (html.match(/class="page( |")/g) || []).length;
     const scrollHost = html.includes('class="page-host"');
     const hasToggle = html.includes('class="sidebar-toggle"');
     const hasFooter = html.includes('class="sidebar-footer"');

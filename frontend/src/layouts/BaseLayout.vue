@@ -137,10 +137,6 @@ onMounted(loadNotice);
       </nav>
 
       <div class="sidebar-footer">
-        <button v-if="showNewBtn" class="btn btn-primary btn-block btn-new-sub" title="新增订阅" @click="createNew()">
-          <span class="btn-icon">+</span>
-          <span class="btn-label">新增订阅</span>
-        </button>
         <button
           class="sidebar-toggle"
           type="button"
@@ -186,6 +182,18 @@ onMounted(loadNotice);
       </div>
     </main>
   </div>
+
+  <!-- 右下角浮动「新增订阅」按钮（替代原侧边栏新增按钮，订阅列表/日历页可见） -->
+  <button
+    v-if="showNewBtn"
+    class="fab-add"
+    type="button"
+    aria-label="新增订阅"
+    title="新增订阅"
+    @click="createNew()"
+  >
+    <span class="fab-icon" aria-hidden="true">+</span>
+  </button>
 
   <!-- 浮动提醒：支持缩小动画，可收起为图标或直接关闭 -->
   <section
@@ -281,6 +289,36 @@ onMounted(loadNotice);
 
 .theme-toggle:active {
   transform: scale(0.95);
+}
+
+/* ---------- 右下角浮动「新增订阅」按钮 (FAB) ---------- */
+.fab-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  right: clamp(16px, 4vw, 24px);
+  bottom: clamp(80px, 12vw, 100px);
+  width: 56px;
+  height: 56px;
+  border: none;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  z-index: 29;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.fab-add:hover {
+  background: var(--primary-2);
+}
+
+.fab-add:active {
+  transform: scale(0.94);
 }
 
 </style>
