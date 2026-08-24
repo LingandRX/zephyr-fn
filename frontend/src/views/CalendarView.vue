@@ -1,6 +1,6 @@
 <script setup>
 // 日历视图：按月渲染扣费 / 服务到期事件
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onActivated, onBeforeUnmount } from "vue";
 import { getCalendar } from "../api.js";
 import { toast } from "../ui.js";
 
@@ -264,7 +264,10 @@ function pickerGoToday() {
 }
 
 watch(() => [selectedDateStr.value, selectedDayEvents.value.length], observeDetailsCard);
+// keep-alive 下「切换回本页」不会重新 onMounted，需在 onActivated 重新拉取当月数据，
+// 否则在其他页面新增订阅后切回时日历仍显示旧数据。
 onMounted(loadMonth);
+onActivated(loadMonth);
 onBeforeUnmount(() => detailsObserver?.disconnect());
 </script>
 
