@@ -477,6 +477,33 @@ onActivated(load);
 .desktop-cat-table {
   width: 100%;
   overflow-x: auto;
+  /* 极窄窗口万一溢出时，用细杆自定义滚动条代替浏览器默认滚动条 */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.desktop-cat-table::-webkit-scrollbar {
+  height: 6px;
+}
+.desktop-cat-table::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--border);
+}
+.desktop-cat-table::-webkit-scrollbar-track {
+  background: transparent;
+}
+/* 分类表仅 4 列且各占 25%，去掉全局 .table 的 640px 最小宽，
+   避免列宽不足时被撑出横向滚动条（桌面端双列布局下每列通常 < 640px） */
+.desktop-cat-table .table {
+  min-width: 0;
+}
+/* 长分类名省略号，防止 25% 列被内容撑开 */
+.cat-name {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 
 .cat-name-cell {
