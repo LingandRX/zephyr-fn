@@ -16,7 +16,7 @@ if [ ! -d frontend/node_modules ]; then
 fi
 
 echo "==> 构建 Vue 前端 (frontend/dist)"
-(cd frontend && npm run build)
+(cd frontend && npx vite build)
 
 echo "==> 同步 dist → app/www"
 rm -rf app/www

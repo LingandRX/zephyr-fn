@@ -731,17 +731,21 @@ def _upcoming_notifications(user_id: str) -> list[dict]:
 # 服务器类
 # --------------------------------------------------------------------------- #
 
-class ThreadingUnixServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
-    daemon_threads = True
-    allow_headerless_local_identity = False
+if hasattr(socketserver, "UnixStreamServer"):
+    class ThreadingUnixServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+        daemon_threads = True
+        allow_headerless_local_identity = False
 
-    def server_bind(self) -> None:
-        if os.path.exists(self.server_address):
-            try:
-                os.unlink(self.server_address)
-            except OSError:
-                pass
-        super().server_bind()
+        def server_bind(self) -> None:
+            if os.path.exists(self.server_address):
+                try:
+                    os.unlink(self.server_address)
+                except OSError:
+                    pass
+            super().server_bind()
+else:
+    # Windows 等平台没有 Unix domain socket 支持，Unix Socket 网关模式不可用
+    ThreadingUnixServer = None  # type: ignore
 
 
 class ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
@@ -791,6 +795,8 @@ def main() -> None:
 
     sock_path = args.uds
     if sock_path or os.environ.get("TRIM_APPDEST"):
+        if ThreadingUnixServer is None:
+            raise RuntimeError("Unix Socket 网关模式仅支持 Linux/macOS")
         sock_path = sock_path or str(Path(os.environ["TRIM_APPDEST"]) / "app.sock")
         server = ThreadingUnixServer(sock_path, Handler)
         log.info("监听统一网关 Unix Socket: %s", sock_path)
@@ -805,7 +811,7 @@ def main() -> None:
         log.info("退出")
     finally:
         server.server_close()
-        if isinstance(server, ThreadingUnixServer) and os.path.exists(sock_path):
+        if ThreadingUnixServer is not None and isinstance(server, ThreadingUnixServer) and os.path.exists(sock_path):
             os.unlink(sock_path)
 
 
