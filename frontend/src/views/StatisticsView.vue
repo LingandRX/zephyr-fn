@@ -258,7 +258,7 @@ onActivated(load);
 }
 
 .stat-card:hover {
-  border-color: rgba(99, 102, 241, 0.4);
+  border-color: rgba(var(--primary-rgb), 0.4);
 }
 
 .stat-card .label {
@@ -372,7 +372,7 @@ onActivated(load);
 .trend-bar {
   width: 100%;
   max-width: 28px;
-  background: linear-gradient(180deg, #818cf8, #4f46e5);
+  background: linear-gradient(180deg, var(--grad-a), var(--grad-b));
   border-radius: 4px 4px 0 0;
   position: relative;
   cursor: pointer;
@@ -382,7 +382,7 @@ onActivated(load);
 
 .trend-bar:hover,
 .trend-bar:focus {
-  background: linear-gradient(180deg, #a5b4fc, #6366f1);
+  background: linear-gradient(180deg, var(--grad-a), var(--primary));
   filter: brightness(1.1);
 }
 
@@ -548,7 +548,7 @@ onActivated(load);
 
 .pct-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--primary), #a855f7);
+  background: linear-gradient(90deg, var(--grad-a), var(--grad-b));
   border-radius: 3px;
   transition: width 0.4s ease;
 }

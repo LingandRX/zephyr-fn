@@ -11,8 +11,11 @@
   --border: #243458;
   --text: #e2e8f0;
   --muted: #94a3b8;
-  --primary: #6366f1;
-  --primary-2: #4f46e5;
+  --primary: #14b8a6;
+  --primary-2: #0f766e;
+  --primary-rgb: 20, 184, 166;  /* 主色 RGB 分量，供 rgba(var(--primary-rgb), alpha) 取半透明色 */
+  --grad-a: #2dd4bf;            /* 主渐变起点（比主色更亮） */
+  --grad-b: #0f766e;            /* 主渐变终点（与 --primary-2 同深） */
   --green: #22c55e;
   --amber: #f59e0b;
   --red: #ef4444;
@@ -62,6 +65,9 @@
   --muted: #64748b;
   --primary: #38bdf8;
   --primary-2: #0ea5e9;
+  --primary-rgb: 56, 189, 248;
+  --grad-a: #7dd3fc;
+  --grad-b: #0284c7;
   --green: #16a34a;
   --amber: #d97706;
   --red: #dc2626;

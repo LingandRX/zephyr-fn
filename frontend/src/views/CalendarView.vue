@@ -702,9 +702,9 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   color: var(--primary);
   font-size: 16px;
   font-weight: 700;
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.3);
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+  background: rgba(var(--primary-rgb), 0.08);
+  border: 1px solid rgba(var(--primary-rgb), 0.3);
+  box-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.15);
 }
 
 .picker-nav-btn {
@@ -763,8 +763,8 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
 }
 
 .picker-month-btn:hover:not(.is-selected) {
-  background: rgba(99, 102, 241, 0.08);
-  border-color: rgba(99, 102, 241, 0.3);
+  background: rgba(var(--primary-rgb), 0.08);
+  border-color: rgba(var(--primary-rgb), 0.3);
   color: var(--primary);
 }
 
@@ -774,7 +774,7 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   color: #ffffff !important;
   font-weight: 600;
   border-color: var(--primary);
-  box-shadow: 0 4px 10px rgba(99, 102, 241, 0.35);
+  box-shadow: 0 4px 10px rgba(var(--primary-rgb), 0.35);
 }
 
 /* 真实当月的高亮/角标 */
@@ -916,7 +916,7 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   cursor: pointer;
 }
 .cal-day:hover {
-  border-color: rgba(99, 102, 241, 0.4);
+  border-color: rgba(var(--primary-rgb), 0.4);
 }
 .cal-day.other {
   opacity: 0.3;
@@ -925,7 +925,7 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
 }
 .cal-day.today {
   border-color: var(--primary);
-  background: rgba(99, 102, 241, 0.05);
+  background: rgba(var(--primary-rgb), 0.05);
 }
 .cal-day.selected {
   border-color: var(--primary);
@@ -1131,7 +1131,7 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   padding: 8px 12px;
   background: var(--primary);
   color: #fff;
-  box-shadow: 0 6px 18px rgba(79, 70, 229, 0.28);
+  box-shadow: 0 6px 18px rgba(var(--primary-rgb), 0.28);
   cursor: pointer;
   font: inherit;
   font-size: var(--fs-xs);

@@ -85,7 +85,7 @@ body {
 .nav-icon { width: 20px; font-size: 16px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .nav-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nav-item:hover { background: var(--card); color: var(--text); }
-.nav-item.active { background: rgba(99, 102, 241, 0.15); color: #fff; font-weight: 500; }
+.nav-item.active { background: rgba(var(--primary-rgb), 0.15); color: #fff; font-weight: 500; }
 .nav-item.active::before {
   content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
   width: 3px; height: 20px; border-radius: 0 3px 3px 0; background: var(--primary);
