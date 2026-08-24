@@ -155,6 +155,12 @@ function scrollToDetails() {
   detailsCardRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+// 关闭扣费明细（浮层/并排两种模式共用）：清空选中日期即可
+function closeDetails() {
+  selectedDateStr.value = null;
+  detailsVisible.value = false;
+}
+
 function prevMonth(delta) {
   calMonth.value += delta;
   if (calMonth.value < 1) { calMonth.value = 12; calYear.value--; }
@@ -437,6 +443,13 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
             <span>📅 {{ selectedDateStr }} 扣费明细</span>
             <span class="details-count">共 {{ selectedDayEvents.length }} 笔 (合计 ¥{{ (selectedDayTotal / 100).toFixed(2) }})</span>
           </div>
+          <button
+            type="button"
+            class="details-close"
+            title="关闭扣费明细"
+            aria-label="关闭扣费明细"
+            @click="closeDetails"
+          >✕</button>
         </div>
         <div class="details-list">
           <div v-for="(e, idx) in selectedDayEvents" :key="idx" class="detail-item">
@@ -854,10 +867,11 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
 
 /* 日历卡片与网格 */
 .cal-content {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  /* 单列：日历占满整宽。桌面端（≥1025px）选中日期后明细以浮层叠在右上（方案A），
+     超宽屏（≥1200px）再恢复「日历 + 明细」并排第二列（方案C）。 */
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  align-items: start;
   min-width: 0;
 }
 .cal-content > .card {
@@ -1005,9 +1019,33 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   border-radius: var(--radius-md);
 }
 .details-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 10px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border);
+}
+.details-close {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.details-close:hover {
+  color: var(--text);
+  background: var(--bg-2);
 }
 .details-date {
   font-size: var(--fs-sm);
@@ -1132,6 +1170,8 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
     flex: 1 1 auto;
     min-height: 0;
     align-items: stretch;
+    /* 桌面端明细默认以浮层叠在日历右上（方案A）；超宽屏恢复并排（方案C） */
+    position: relative;
   }
   .cal-card {
     display: flex;
@@ -1152,15 +1192,41 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
     min-height: 0;
     /* 随视口拉伸，同时保留内部文字条的可用高度 */
   }
+  /* 方案A：明细浮层叠在日历右上角，日历保持整宽，7 列格子不被挤压 */
   .day-details-card {
-    align-self: stretch;
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: min(380px, 42%);
     max-height: 100%;
     overflow-y: auto;
     /* 明细过长时内部滚动，避免把日历挤出视口 */
     scrollbar-width: thin;
+    z-index: 15;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
   }
   .day-details-card::-webkit-scrollbar {
     width: 6px;
+  }
+}
+
+/* 方案C：主区足够宽时恢复「日历 + 明细」并排，明细不再浮层 */
+@media (min-width: 1200px) {
+  .cal-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+    gap: 12px;
+    align-items: stretch;
+    position: static;
+  }
+  .day-details-card {
+    position: static;
+    width: auto;
+    align-self: stretch;
+    max-height: 100%;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    box-shadow: none;
   }
   /* 无选中明细时日历独占整行，避免右侧空白轨 */
   .cal-content:not(:has(.day-details-card)) {
@@ -1174,10 +1240,6 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
     width: 100%;
     max-width: 760px;
     margin-inline: auto;
-  }
-  .cal-content {
-    display: flex;
-    flex-direction: column;
   }
   .cal-card,
   .day-details-card {
