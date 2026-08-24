@@ -349,7 +349,7 @@ def _loop(reminder_days: int | None) -> None:
         time.sleep(CHECK_INTERVAL)
 
 
-def start_scheduler(reminder_days: int | None) -> threading.Thread:
+def start_scheduler(reminder_days: int | None = None) -> threading.Thread:
     thread = threading.Thread(
         target=_loop, args=(reminder_days,), name="scheduler", daemon=True
     )

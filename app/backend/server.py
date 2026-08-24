@@ -699,7 +699,7 @@ def _list_backup_files() -> list[dict]:
 
 def _upcoming_notifications(user_id: str) -> list[dict]:
     settings = db.get_app_settings()
-    reminder_days = max(0, int(settings.get("notification_days") or 3))
+    reminder_days = max(0, int(settings.get("notification_days") or 7))
     from datetime import timedelta
     today = date.today()
     end = today + timedelta(days=reminder_days)
@@ -782,9 +782,8 @@ def main() -> None:
     _setup_logging(config.logs_dir())
     log.info("启动订阅管理 v%s (arch=%s)", config.app_version(), config.sys_arch())
 
-    scheduler.start_scheduler(config.reminder_days())
-    log.info("定时任务已启动 (提醒提前 %s 天, 备份目录 %s)",
-             config.reminder_days(), config.backup_dir())
+    scheduler.start_scheduler()
+    log.info("定时任务已启动 (备份目录 %s)", config.backup_dir())
 
     sock_path = args.uds
     if sock_path or os.environ.get("TRIM_APPDEST"):

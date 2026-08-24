@@ -46,7 +46,7 @@ _SETTINGS_COLUMN_DEFINITIONS = {
     "default_currency": "TEXT NOT NULL DEFAULT 'CNY'",
     "exchange_rate_usd": "REAL NOT NULL DEFAULT 7.2",
     "exchange_rate_hkd": "REAL NOT NULL DEFAULT 0.92",
-    "notification_days": "INTEGER NOT NULL DEFAULT 3",
+    "notification_days": "INTEGER NOT NULL DEFAULT 7",
     "do_not_disturb_start": "TEXT",
     "do_not_disturb_end": "TEXT",
     "auto_start": "INTEGER NOT NULL DEFAULT 0",
@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
     default_currency TEXT NOT NULL DEFAULT 'CNY',
     exchange_rate_usd REAL NOT NULL DEFAULT 7.2,
     exchange_rate_hkd REAL NOT NULL DEFAULT 0.92,
-    notification_days INTEGER NOT NULL DEFAULT 3,
+    notification_days INTEGER NOT NULL DEFAULT 7,
     do_not_disturb_start TEXT,
     do_not_disturb_end TEXT,
     auto_start INTEGER NOT NULL DEFAULT 0,
@@ -573,10 +573,19 @@ def _run_migrations() -> None:
 def _seed_default_settings() -> None:
     conn = _require_conn()
     now = now_utc()
+    try:
+        from . import config
+        days = config.reminder_days()
+    except Exception:  # pragma: no cover
+        try:
+            import config
+            days = config.reminder_days()
+        except Exception:
+            days = 7
     conn.execute(
         "INSERT OR IGNORE INTO app_settings "
-        "(id, created_at, updated_at) VALUES (1, ?, ?)",
-        (now, now),
+        "(id, notification_days, created_at, updated_at) VALUES (1, ?, ?, ?)",
+        (days, now, now),
     )
 
 

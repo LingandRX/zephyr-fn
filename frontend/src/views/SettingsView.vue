@@ -32,7 +32,7 @@ const form = reactive({
   default_currency: "CNY",
   exchange_rate_usd: 7.2,
   exchange_rate_hkd: 0.92,
-  notification_days: 3,
+  notification_days: 7,
   notification_enabled: true,
   do_not_disturb_start: "",
   do_not_disturb_end: "",

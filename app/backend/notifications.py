@@ -66,10 +66,10 @@ def _reminder_days(settings: dict, override: int | None) -> int:
     except (TypeError, ValueError):
         if override is not None:
             try:
-                return max(0, int(settings.get("notification_days") or 3))
+                return max(0, int(settings.get("notification_days") or 7))
             except (TypeError, ValueError):
-                return 3
-        return 3
+                return 7
+        return 7
 
 
 def get_subscriptions_needing_notification(
