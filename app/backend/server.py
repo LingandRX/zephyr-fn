@@ -768,11 +768,15 @@ def main() -> None:
     parser.add_argument("--www", help="前端静态目录")
     parser.add_argument("--share", help="备份目录")
     parser.add_argument("--init-db", action="store_true", help="仅初始化数据库后退出")
+    parser.add_argument("--reminder-days", type=int,
+                        help="安装向导提醒提前天数（配合 --init-db 使用）")
     args = parser.parse_args()
 
     config.override("DB_PATH", args.db)
     config.override("WWW_DIR", args.www)
     config.override("SHARE_DIR", args.share)
+    if args.reminder_days is not None:
+        config.override("wizard_reminder_days", str(args.reminder_days))
 
     db.connect(config.db_path())
     if args.init_db:

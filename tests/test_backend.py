@@ -10,6 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app" / "backend"))
 
+import config
 import db
 import domain
 import services
@@ -206,6 +207,49 @@ class DefaultCategorySeedTests(unittest.TestCase):
                 conn.commit()
         self.assertFalse(db.ensure_default_categories_for_user("legacy"))
         self.assertEqual(db.get_all_categories("legacy"), [])
+
+
+class ReminderDaysSeedTests(unittest.TestCase):
+    """安装向导提醒天数（_seed_default_settings）落库行为。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.tmp.name) / "seed.db"
+
+    def tearDown(self):
+        db.close()
+        config.override("wizard_reminder_days", None)
+        self.tmp.cleanup()
+
+    def _days(self):
+        return db.get_app_settings()["notification_days"]
+
+    def test_fresh_db_with_wizard_override(self):
+        # 安装向导填 4 -> 全新库首行即为 4
+        config.override("wizard_reminder_days", "4")
+        db.connect(self.db_path)
+        self.assertEqual(self._days(), 4)
+
+    def test_fresh_db_without_override_defaults_to_7(self):
+        db.connect(self.db_path)
+        self.assertEqual(self._days(), 7)
+
+    def test_existing_value_upserted_by_wizard_override(self):
+        # 模拟旧版残留 3 + 重装时向导再次传入 -> 应覆盖为 4
+        db.connect(self.db_path)
+        db.update_app_settings({"notification_days": 3})
+        db.close()
+        config.override("wizard_reminder_days", "4")
+        db.connect(self.db_path)
+        self.assertEqual(self._days(), 4)
+
+    def test_existing_value_preserved_without_override(self):
+        # 升级/普通启动无向导值 -> 不得覆盖用户已有设置
+        db.connect(self.db_path)
+        db.update_app_settings({"notification_days": 5})
+        db.close()
+        db.connect(self.db_path)
+        self.assertEqual(self._days(), 5)
 
 
 class ServicesTests(unittest.TestCase):

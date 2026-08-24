@@ -575,18 +575,30 @@ def _seed_default_settings() -> None:
     now = now_utc()
     try:
         from . import config
-        days = config.reminder_days()
+        days = config.reminder_days_override()
     except Exception:  # pragma: no cover
         try:
             import config
-            days = config.reminder_days()
+            days = config.reminder_days_override()
         except Exception:
-            days = 7
-    conn.execute(
-        "INSERT OR IGNORE INTO app_settings "
-        "(id, notification_days, created_at, updated_at) VALUES (1, ?, ?, ?)",
-        (days, now, now),
-    )
+            days = None
+    if days is not None:
+        # 安装/升级回调显式传入向导值时：覆盖已有值，确保重装/覆盖安装
+        # 场景下用户填写的提醒天数也能生效（而不是被旧值残留）。
+        conn.execute(
+            "INSERT INTO app_settings (id, notification_days, created_at, updated_at) "
+            "VALUES (1, ?, ?, ?) "
+            "ON CONFLICT(id) DO UPDATE SET "
+            "notification_days=excluded.notification_days, "
+            "updated_at=excluded.updated_at",
+            (days, now, now),
+        )
+    else:
+        # 无向导值：仅新建默认行，绝不覆盖用户已有设置（保持幂等）。
+        conn.execute(
+            "INSERT OR IGNORE INTO app_settings (id, created_at, updated_at) VALUES (1, ?, ?)",
+            (now, now),
+        )
 
 
 def _require_conn() -> sqlite3.Connection:

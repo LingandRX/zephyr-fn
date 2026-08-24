@@ -4,5 +4,10 @@ set -e
 PYTHON_BIN="/var/apps/python312/target/bin/python3"
 mkdir -p "${TRIM_PKGVAR}/logs" "${TRIM_PKGVAR}/backups"
 cd "${TRIM_APPDEST}/backend"
-"$PYTHON_BIN" server.py --init-db
+# 显式把安装向导值传给 --init-db，不依赖环境变量继承
+EXTRA_ARGS=()
+if [ -n "${wizard_reminder_days:-}" ]; then
+  EXTRA_ARGS+=(--reminder-days "$wizard_reminder_days")
+fi
+"$PYTHON_BIN" server.py --init-db "${EXTRA_ARGS[@]}"
 exit 0

@@ -74,13 +74,19 @@ def backup_dir() -> Path:
     return data_dir() / "backups"
 
 
-def reminder_days() -> int:
-    """到期提醒提前天数（安装向导 wizard_reminder_days，默认 7）。"""
-    raw = _get("wizard_reminder_days", "7") or "7"
+def reminder_days_override() -> int | None:
+    """安装向导显式传入的提醒提前天数（wizard_reminder_days）。
+
+    仅当安装/升级回调收到向导值时返回数字；否则返回 None，表示不覆盖
+    数据库中的已有设置。
+    """
+    raw = _get("wizard_reminder_days")
+    if raw is None:
+        return None
     try:
         return max(0, int(raw))
     except ValueError:
-        return 7
+        return None
 
 
 def gateway_prefix() -> str:
