@@ -97,7 +97,7 @@ async function loadAll() {
       default_currency: s.default_currency || "CNY",
       exchange_rate_usd: s.exchange_rate_usd ?? 7.2,
       exchange_rate_hkd: s.exchange_rate_hkd ?? 0.92,
-      notification_days: s.notification_days ?? 3,
+      notification_days: s.notification_days ?? 7,
       notification_enabled: !!s.notification_enabled,
       do_not_disturb_start: s.do_not_disturb_start || "",
       do_not_disturb_end: s.do_not_disturb_end || "",
@@ -136,11 +136,12 @@ watch(
       try {
         const smtpSecretDraft = isSecretUpdate(form.smtp_password);
         const pushplusSecretDraft = isSecretUpdate(form.pushplus_token);
+        const parsedNotificationDays = parseInt(form.notification_days, 10);
         const payload = {
           ...form,
           exchange_rate_usd: parseFloat(form.exchange_rate_usd) || 7.2,
           exchange_rate_hkd: parseFloat(form.exchange_rate_hkd) || 0.92,
-          notification_days: parseInt(form.notification_days, 10) || 3,
+          notification_days: Number.isNaN(parsedNotificationDays) ? 7 : parsedNotificationDays,
           smtp_port: form.smtp_port ? parseInt(form.smtp_port, 10) : null,
           do_not_disturb_start: form.do_not_disturb_start || null,
           do_not_disturb_end: form.do_not_disturb_end || null,
