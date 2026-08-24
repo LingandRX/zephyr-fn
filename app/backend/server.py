@@ -26,17 +26,20 @@ API（与 zephyr-tarui 后端功能对齐）：
         GET           /api/backup/files/download?name=
         GET           /api/export/csv
   通知  GET           /api/notifications/upcoming
+  日志  GET           /api/logs/tail?lines=200
 """
 from __future__ import annotations
 
 import argparse
 import json
 import logging
+import logging.handlers
 import mimetypes
 import os
 import socket
 import socketserver
 import sys
+import time
 import urllib.parse
 from dataclasses import dataclass
 from datetime import date
@@ -363,6 +366,13 @@ class Handler(socketserver.StreamRequestHandler):
                 self._raw_text(backup.export_csv(include_all=True), "text/csv; charset=utf-8")
             elif path == "/api/notifications/upcoming" and method == "GET":
                 self._json(_upcoming_notifications(user_id))
+            elif path == "/api/logs/tail" and method == "GET":
+                # 系统级日志尾读（不区分用户；多用户场景下如需隔离可后续按 user 过滤）
+                try:
+                    want = min(int((query.get("lines") or ["200"])[0]), 1000)
+                except ValueError:
+                    want = 200
+                self._json(_read_log_tail(config.logs_dir() / "app.log", want))
             elif path == "/api/notifications/test-email" and method == "POST":
                 self._test_email(body)
             elif path == "/api/notifications/test-pushplus" and method == "POST":
@@ -754,14 +764,77 @@ class ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     allow_headerless_local_identity = True
 
 
-def _setup_logging(log_dir: Path) -> None:
+def _setup_logging(log_dir: Path, console: bool) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
-    handler = logging.FileHandler(log_dir / "app.log", encoding="utf-8")
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    # A：轮转日志 —— 单文件上限 2MB，保留 5 份（与备份保留策略对齐）
+    handler = logging.handlers.RotatingFileHandler(
+        log_dir / "app.log",
+        maxBytes=_LOG_MAX_BYTES,
+        backupCount=_LOG_BACKUP_COUNT,
+        encoding="utf-8",
+    )
+    handler.setFormatter(formatter)
     root = logging.getLogger(scheduler.LOGGER_NAME)
-    root.setLevel(logging.INFO)
+    # C：SUBSCRIPTION_DEBUG=1 时输出 DEBUG 级日志（默认 INFO）
+    root.setLevel(logging.DEBUG if os.environ.get("SUBSCRIPTION_DEBUG") == "1" else logging.INFO)
     root.addHandler(handler)
-    root.addHandler(logging.StreamHandler(sys.stderr))
+    # B：仅本地 TCP 调试模式回显到终端；网关/真机只写 app.log，
+    #    避免与 cmd/main 的 nohup 重定向（server.log）双写内容重复。
+    if console:
+        console_handler = logging.StreamHandler(sys.stderr)
+        console_handler.setFormatter(formatter)
+        root.addHandler(console_handler)
+    _cleanup_old_logs(log_dir)
+
+
+_LOG_RETENTION_DAYS = 30
+_LOG_MAX_BYTES = 2 * 1024 * 1024
+_LOG_BACKUP_COUNT = 5
+
+
+def _cleanup_old_logs(log_dir: Path) -> None:
+    """启动时清理超过保留期的轮转/历史日志文件（app.log.*、server.log.*）。"""
+    try:
+        cutoff = time.time() - _LOG_RETENTION_DAYS * 86400
+        for p in log_dir.iterdir():
+            try:
+                if (
+                    p.is_file()
+                    and p.name.startswith(("app.log", "server.log"))
+                    and p.stat().st_mtime < cutoff
+                ):
+                    p.unlink(missing_ok=True)
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
+def _read_log_tail(log_path: Path, lines: int) -> dict:
+    """C2：从文件尾部倒读最近 N 行日志（避免整读大文件）。"""
+    if not log_path.is_file():
+        return {"file": log_path.name, "lines": [], "error": None}
+    try:
+        with open(log_path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            block = 8192
+            tail = b""
+            pos = size
+            # 每次向前读一块，直到累计换行数超过目标行数或读到头
+            while pos > 0:
+                take = min(block, pos)
+                pos -= take
+                f.seek(pos)
+                tail = f.read(take) + tail
+                if tail.count(b"\n") > lines:
+                    break
+        text = tail.decode("utf-8", errors="replace")
+        sliced = text.strip().splitlines()[-lines:]
+        return {"file": log_path.name, "lines": sliced, "error": None}
+    except OSError as exc:
+        return {"file": log_path.name, "lines": [], "error": str(exc)}
 
 
 def main() -> None:
@@ -787,14 +860,15 @@ def main() -> None:
         print(f"数据库就绪: {config.db_path()}")
         return
 
-    _setup_logging(config.logs_dir())
+    is_gateway = bool(args.uds or os.environ.get("TRIM_APPDEST"))
+    _setup_logging(config.logs_dir(), console=not is_gateway)
     log.info("启动订阅管理 v%s (arch=%s)", config.app_version(), config.sys_arch())
 
     scheduler.start_scheduler()
     log.info("定时任务已启动 (备份目录 %s)", config.backup_dir())
 
     sock_path = args.uds
-    if sock_path or os.environ.get("TRIM_APPDEST"):
+    if is_gateway:
         if ThreadingUnixServer is None:
             raise RuntimeError("Unix Socket 网关模式仅支持 Linux/macOS")
         sock_path = sock_path or str(Path(os.environ["TRIM_APPDEST"]) / "app.sock")

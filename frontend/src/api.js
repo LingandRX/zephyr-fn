@@ -65,6 +65,9 @@ export const getUpcomingNotifications = () => api("/notifications/upcoming");
 export const testEmailNotification = (body) => api("/notifications/test-email", { method: "POST", body });
 export const testPushPlusNotification = (body) => api("/notifications/test-pushplus", { method: "POST", body });
 
+// ---------- 日志 ----------
+export const getLogTail = (lines = 200) => api(`/logs/tail?lines=${lines}`);
+
 // ---------- 备份 / 导入导出 ----------
 export const backupNow = () => api("/backup", { method: "POST" });
 export const getBackupFiles = () => api("/backup/files");

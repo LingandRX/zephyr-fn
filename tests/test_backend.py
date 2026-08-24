@@ -328,5 +328,53 @@ class StaticServeTests(unittest.TestCase):
                 self.assertNotEqual(ctype, mimetypes.guess_type(str(f))[0])
 
 
+class LogTailTests(unittest.TestCase):
+    """运行日志尾读（_read_log_tail）。"""
+
+    def test_read_tail_lines_and_missing_file(self):
+        import server
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "app.log"
+            p.write_text("".join(f"line{i}\n" for i in range(1, 101)), encoding="utf-8")
+
+            # 取 1 行 -> 最后一行；取 5/200 行 -> 截到文件长度
+            r1 = server._read_log_tail(p, 1)
+            self.assertEqual(r1["lines"], ["line100"])
+            self.assertIsNone(r1["error"])
+            self.assertEqual(len(server._read_log_tail(p, 5)["lines"]), 5)
+            self.assertEqual(len(server._read_log_tail(p, 200)["lines"]), 100)
+
+            # 文件不存在 -> 空列表且无错误
+            missing = server._read_log_tail(Path(tmp) / "nope.log", 10)
+            self.assertEqual(missing["lines"], [])
+            self.assertIsNone(missing["error"])
+
+    def test_cleanup_old_logs(self):
+        import server
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            old = d / "app.log.3"
+            old.write_text("old", encoding="utf-8")
+            # 把 mtime 改为很久以前
+            import os
+            import time as _t
+            old_ts = _t.time() - (server._LOG_RETENTION_DAYS + 10) * 86400
+            os.utime(old, (old_ts, old_ts))
+            fresh = d / "app.log"
+            fresh.write_text("fresh", encoding="utf-8")
+            unrelated = d / "other.txt"
+            unrelated.write_text("keep", encoding="utf-8")
+
+            server._cleanup_old_logs(d)
+
+            self.assertFalse(old.exists(), "过期轮转日志应被清理")
+            self.assertTrue(fresh.exists(), "新日志保留")
+            self.assertTrue(unrelated.exists(), "非日志文件不动")
+
+
 if __name__ == "__main__":
     unittest.main()

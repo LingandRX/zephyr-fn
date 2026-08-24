@@ -142,6 +142,7 @@ appcenter-cli install-fpk subscription-0.1.0.fpk
 | `TRIM_DATA_SHARE_PATHS` | data-share 共享目录（备份落点） |
 | `TRIM_SYS_ARCH` | 设备架构 |
 | `wizard_reminder_days` | 安装向导设置的提醒提前天数 |
+| `SUBSCRIPTION_DEBUG` | 置为 `1` 时运行日志输出 DEBUG 级别（默认 INFO） |
 | `GATEWAY_PREFIX` | 统一网关前缀（默认 `/app/subscription`，须与 `app/ui/config` 的 `gatewayPrefix` 一致） |
 
 ## API 一览
@@ -160,6 +161,7 @@ appcenter-cli install-fpk subscription-0.1.0.fpk
 | GET | `/api/backup/export-json` / `/api/export/csv` | 导出 |
 | POST | `/api/backup/import-json` / `import-csv` | 导入（按名称+金额+周期去重） |
 | GET | `/api/notifications/upcoming` | 即将到期提醒 |
+| GET | `/api/logs/tail?lines=200` | 运行日志尾部读取 |
 
 ## 常见问题
 
@@ -196,7 +198,8 @@ appcenter-cli install-fpk subscription-0.1.0.fpk
 ## 数据与备份说明
 
 - 数据库：`$TRIM_PKGVAR/subscription.db`（WAL 模式，金额以「分」整数存储）
-- 日志：`$TRIM_PKGVAR/logs/app.log`
+- 日志：`$TRIM_PKGVAR/logs/app.log`（按大小轮转：单文件 2MB、保留 5 份；启动时清理超过 30 天的轮转日志）
+- 调试日志：`SUBSCRIPTION_DEBUG=1` 时输出 DEBUG 级别；本地 TCP 模式日志同时回显终端，网关模式只写文件
 - 自动备份：每天一次，JSON + SQLite 副本写入共享目录，保留最近 5 份
 - 升级：`upgrade_callback` 自动补迁数据库 schema（版本化迁移）
 

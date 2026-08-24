@@ -7,6 +7,7 @@ import {
   backupNow, getBackupFiles, importJson, importCsv, download,
   deleteBackupFile, downloadBackupFile,
   testEmailNotification, testPushPlusNotification,
+  getLogTail,
 } from "../api.js";
 import { toast } from "../ui.js";
 
@@ -15,6 +16,7 @@ const TABS = [
   { key: "notifications", label: "通知渠道", icon: "🔔" },
   { key: "categories", label: "分类管理", icon: "🏷️" },
   { key: "backup", label: "数据与备份", icon: "💾" },
+  { key: "logs", label: "运行日志", icon: "🧾" },
 ];
 
 const activeTab = ref("general");
@@ -27,6 +29,32 @@ const backupFiles = ref([]);
 const testingEmail = ref(false);
 const testingPushplus = ref(false);
 const testEmailTarget = ref("");
+
+// ---------- 运行日志 ----------
+const LOG_LINES = 200;
+const logLines = ref([]);
+const logFile = ref("");
+const logError = ref("");
+const logLoading = ref(false);
+
+async function loadLogTail() {
+  logLoading.value = true;
+  logError.value = "";
+  try {
+    const r = await getLogTail(LOG_LINES);
+    logLines.value = r.lines || [];
+    logFile.value = r.file || "";
+  } catch (err) {
+    logError.value = err.message;
+  } finally {
+    logLoading.value = false;
+  }
+}
+
+// 切到「运行日志」页签时自动加载
+watch(activeTab, (t) => {
+  if (t === "logs") loadLogTail();
+});
 
 const form = reactive({
   default_currency: "CNY",
@@ -415,51 +443,53 @@ onMounted(loadAll);
             <span>启用</span>
           </label>
         </div>
-        <div class="fields-group" :class="{ disabled: !form.email_enabled }">
-          <div class="form-row">
-            <label class="field flex-2">
-              <span>SMTP 服务器</span>
-              <input v-model="form.smtp_host" placeholder="smtp.example.com" />
-            </label>
-            <label class="field flex-1">
-              <span>SMTP 端口</span>
-              <input v-model="form.smtp_port" placeholder="465" />
-            </label>
-          </div>
-          <div class="form-row">
+        <Transition name="ch-collapse">
+          <div v-if="form.email_enabled" class="fields-group">
+            <div class="form-row">
+              <label class="field flex-2">
+                <span>SMTP 服务器</span>
+                <input v-model="form.smtp_host" placeholder="smtp.example.com" />
+              </label>
+              <label class="field flex-1">
+                <span>SMTP 端口</span>
+                <input v-model="form.smtp_port" placeholder="465" />
+              </label>
+            </div>
+            <div class="form-row">
+              <label class="field">
+                <span>用户名</span>
+                <input v-model="form.smtp_username" />
+              </label>
+              <label class="field">
+                <span>密码 / 授权码</span>
+                <input
+                  v-model="form.smtp_password"
+                  type="password"
+                  autocomplete="new-password"
+                  :placeholder="form.smtp_password_configured ? '已配置，留空保持原密码' : '输入 SMTP 密码 / 授权码'"
+                />
+              </label>
+            </div>
             <label class="field">
-              <span>用户名</span>
-              <input v-model="form.smtp_username" />
+              <span>发件人地址</span>
+              <input v-model="form.smtp_from_address" placeholder="user@example.com" />
             </label>
-            <label class="field">
-              <span>密码 / 授权码</span>
-              <input
-                v-model="form.smtp_password"
-                type="password"
-                autocomplete="new-password"
-                :placeholder="form.smtp_password_configured ? '已配置，留空保持原密码' : '输入 SMTP 密码 / 授权码'"
-              />
-            </label>
+            <div class="test-row">
+              <label class="field test-target-field">
+                <span>测试收件邮箱（选填，默认同发件人/用户名）</span>
+                <input v-model="testEmailTarget" placeholder="test@example.com" />
+              </label>
+              <button
+                type="button"
+                class="btn test-btn"
+                :disabled="testingEmail || (!form.smtp_host && !form.smtp_username)"
+                @click="testEmail"
+              >
+                {{ testingEmail ? "发送中..." : "✉️ 发送测试邮件" }}
+              </button>
+            </div>
           </div>
-          <label class="field">
-            <span>发件人地址</span>
-            <input v-model="form.smtp_from_address" placeholder="user@example.com" />
-          </label>
-          <div class="test-row">
-            <label class="field test-target-field">
-              <span>测试收件邮箱（选填，默认同发件人/用户名）</span>
-              <input v-model="testEmailTarget" placeholder="test@example.com" />
-            </label>
-            <button
-              type="button"
-              class="btn test-btn"
-              :disabled="testingEmail || (!form.smtp_host && !form.smtp_username)"
-              @click="testEmail"
-            >
-              {{ testingEmail ? "发送中..." : "✉️ 发送测试邮件" }}
-            </button>
-          </div>
-        </div>
+        </Transition>
       </div>
 
       <div class="card">
@@ -470,30 +500,34 @@ onMounted(loadAll);
             <span>启用</span>
           </label>
         </div>
-        <div class="fields-group" :class="{ disabled: !form.pushplus_enabled }">
-          <label class="field">
-            <span>PushPlus Token</span>
-            <input
-              v-model="form.pushplus_token"
-              autocomplete="off"
-              :placeholder="form.pushplus_token_configured ? '已配置，留空保持原 Token' : '填写从 pushplus.plus 获取的一对一或群组 Token'"
-            />
-          </label>
-          <div class="test-row single-action">
-            <button
-              type="button"
-              class="btn test-btn"
-              :disabled="testingPushplus || (!form.pushplus_token && !form.pushplus_token_configured)"
-              @click="testPushPlus"
-            >
-              {{ testingPushplus ? "发送中..." : "📲 发送测试消息" }}
-            </button>
+        <Transition name="ch-collapse">
+          <div v-if="form.pushplus_enabled" class="channel-body">
+            <div class="fields-group">
+              <label class="field">
+                <span>PushPlus Token</span>
+                <input
+                  v-model="form.pushplus_token"
+                  autocomplete="off"
+                  :placeholder="form.pushplus_token_configured ? '已配置，留空保持原 Token' : '填写从 pushplus.plus 获取的一对一或群组 Token'"
+                />
+              </label>
+              <div class="test-row single-action">
+                <button
+                  type="button"
+                  class="btn test-btn"
+                  :disabled="testingPushplus || (!form.pushplus_token && !form.pushplus_token_configured)"
+                  @click="testPushPlus"
+                >
+                  {{ testingPushplus ? "发送中..." : "📲 发送测试消息" }}
+                </button>
+              </div>
+            </div>
+            <div class="sub-hint-row">
+              <div class="muted sub-hint">更改后自动生效并保存</div>
+              <span v-if="saveStatusText" class="save-status-badge" :class="{ saving }">{{ saveStatusText }}</span>
+            </div>
           </div>
-        </div>
-        <div class="sub-hint-row">
-          <div class="muted sub-hint">更改后自动生效并保存</div>
-          <span v-if="saveStatusText" class="save-status-badge" :class="{ saving }">{{ saveStatusText }}</span>
-        </div>
+        </Transition>
       </div>
     </div>
 
@@ -565,6 +599,26 @@ onMounted(loadAll);
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- 子页面 5：运行日志 -->
+    <div v-show="activeTab === 'logs'" class="settings-section">
+      <div class="card">
+        <div class="section-header">
+          <h3>运行日志</h3>
+          <button class="btn btn-sm" :disabled="logLoading" @click="loadLogTail">
+            {{ logLoading ? "加载中…" : "刷新" }}
+          </button>
+        </div>
+        <p class="muted">
+          最近 {{ LOG_LINES }} 行（{{ logFile || "app.log" }}）。日志按大小轮转（单文件 2MB，保留 5 份），
+          超过 30 天自动清理。
+        </p>
+        <pre v-if="logLines.length" class="log-view">{{ logLines.join("\n") }}</pre>
+        <div v-else-if="logError" class="empty">加载失败：{{ logError }}</div>
+        <div v-else-if="logLoading" class="empty">加载中…</div>
+        <div v-else class="empty">暂无日志</div>
       </div>
     </div>
 
@@ -680,11 +734,6 @@ onMounted(loadAll);
 .fields-group {
   transition: opacity 0.2s ease;
 }
-.fields-group.disabled {
-  opacity: 0.55;
-  pointer-events: none;
-}
-
 .field {
   display: flex;
   flex-direction: column;
@@ -838,4 +887,33 @@ onMounted(loadAll);
     flex-direction: column;
   }
 }
+/* 通知渠道启用/关闭的内容折叠过渡 */
+.ch-collapse-enter-active,
+.ch-collapse-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.ch-collapse-enter-from,
+.ch-collapse-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+/* 运行日志展示区 */
+.log-view {
+  margin: 0;
+  padding: 12px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+  scrollbar-width: thin;
+}
+
 </style>
