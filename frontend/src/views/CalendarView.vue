@@ -119,6 +119,8 @@ const selectedDayEvents = computed(() => {
 const selectedDayTotal = computed(() => {
   return selectedDayEvents.value.reduce((acc, cur) => acc + (cur.amount || 0), 0);
 });
+// 明细展开态：选中且有事件的日期（供 details-collapsed 类驱动开合动画）
+const detailsOpen = computed(() => !!selectedDateStr.value && selectedDayEvents.value.length > 0);
 
 function observeDetailsCard() {
   detailsObserver?.disconnect();
@@ -385,8 +387,9 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
           <div v-for="(d, i) in ['日', '一', '二', '三', '四', '五', '六']" :key="'dow-' + i" class="cal-dow">{{ d }}</div>
           <div
             v-for="(c, i) in grid"
-            :key="i"
+            :key="c.dateStr"
             class="cal-day"
+            :style="{ '--d': 'calc(' + Math.floor(i / 7) * 18 + 'ms)' }"
             :class="{
               other: c.other,
               today: c.today,
@@ -431,13 +434,16 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
         </div>
       </div>
 
-      <!-- 选中日期明细：桌面端显示在日历右侧，窄屏显示在日历下方 -->
+      <!-- 选中日期明细：桌面端浮叠在日历右上/并排，窄屏显示在日历下方；
+          常驻元素 + details-collapsed 类控制收起态，桌面端开合带平滑动画 -->
       <div
-        v-if="selectedDateStr && selectedDayEvents.length"
         id="day-details"
         ref="detailsCardRef"
         class="card day-details-card"
+        :class="{ 'details-collapsed': !detailsOpen }"
       >
+        <!-- 内容容器以日期为 key：切换日期时仅内容淡入，宽度/位置不变 -->
+        <div :key="selectedDateStr" class="details-body">
         <div class="details-head">
           <div class="details-date">
             <span>📅 {{ selectedDateStr }} 扣费明细</span>
@@ -462,6 +468,7 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
               <span class="detail-amount">{{ e.amount_formatted }}</span>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -867,8 +874,8 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
 
 /* 日历卡片与网格 */
 .cal-content {
-  /* 单列：日历占满整宽。桌面端（≥1025px）选中日期后明细以浮层叠在右上（方案A），
-     超宽屏（≥1200px）再恢复「日历 + 明细」并排第二列（方案C）。 */
+  /* 单列（堆叠）为基座：日历在上、明细在下（≤1024px）。
+     桌面端（≥1025px）在下方 @media 中切换为 flex row 并排：日历在左、明细在右。 */
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -930,6 +937,22 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
 .cal-day.selected {
   border-color: var(--primary);
   box-shadow: 0 0 0 1px var(--primary);
+}
+
+/* 月切换时格子按行错峰浮现：格子以 dateStr 为 key，切月即重建触发动画 */
+@keyframes cal-day-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.cal-day {
+  animation: cal-day-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--d, 0ms);
 }
 
 /* 日期表头 */
@@ -1017,6 +1040,26 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   background: var(--card-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+}
+
+/* 收起态基座：≤1024px 堆叠布局下收起即不占位（无动画） */
+.day-details-card.details-collapsed {
+  display: none;
+}
+
+/* 切换日期时明细内容淡入（容器以日期为 key 重建触发） */
+.details-body {
+  animation: details-body-in 0.18s ease;
+}
+@keyframes details-body-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .details-head {
   display: flex;
@@ -1160,6 +1203,9 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
 }
 
 /* ---------- 桌面端：视口内一次展示全部 42 格（6 行 × 7 列） ---------- */
+/* 桌面端（≥1025px）：flex row 并排 —— 日历在左、明细在右。
+   Grid 轨道不可过渡，故用 flex + width 动画：明细栏 0↔340px 平滑展开/收起，
+   日历随之连续重排，打开明细时格子不会瞬时变窄。 */
 @media (min-width: 1025px) {
   .cal-page {
     flex: 1 1 auto;
@@ -1167,15 +1213,18 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
     height: 100%;
   }
   .cal-content {
+    display: flex;
+    flex-direction: row;
     flex: 1 1 auto;
     min-height: 0;
     align-items: stretch;
-    /* 桌面端明细默认以浮层叠在日历右上（方案A）；超宽屏恢复并排（方案C） */
-    position: relative;
+    gap: 0;
   }
   .cal-card {
     display: flex;
     flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
     min-height: 0;
     height: 100%;
     overflow: hidden;
@@ -1192,49 +1241,36 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
     min-height: 0;
     /* 随视口拉伸，同时保留内部文字条的可用高度 */
   }
-  /* 方案A：明细浮层叠在日历右上角，日历保持整宽，7 列格子不被挤压 */
   .day-details-card {
-    position: absolute;
-    right: 0;
-    top: 0;
-    width: min(380px, 42%);
+    flex: 0 0 auto;
+    width: 340px;
+    min-width: 0;
     max-height: 100%;
     overflow-y: auto;
-    /* 明细过长时内部滚动，避免把日历挤出视口 */
     scrollbar-width: thin;
-    z-index: 15;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+    box-shadow: none;
+    margin-left: 12px;
+    transition: width 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+      margin-left 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+      padding-inline 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 0.2s ease;
+  }
+  .day-details-card.details-collapsed {
+    display: block;
+    width: 0;
+    padding-inline: 0;
+    margin-left: 0;
+    border-inline-width: 0;
+    opacity: 0;
+    pointer-events: none;
+    overflow: hidden;
   }
   .day-details-card::-webkit-scrollbar {
     width: 6px;
   }
 }
 
-/* 方案C：主区足够宽时恢复「日历 + 明细」并排，明细不再浮层 */
-@media (min-width: 1200px) {
-  .cal-content {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
-    gap: 12px;
-    align-items: stretch;
-    position: static;
-  }
-  .day-details-card {
-    position: static;
-    width: auto;
-    align-self: stretch;
-    max-height: 100%;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    box-shadow: none;
-  }
-  /* 无选中明细时日历独占整行，避免右侧空白轨 */
-  .cal-content:not(:has(.day-details-card)) {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-/* ---------- 窄屏适配：空间不足时把明细移到日历下方 ---------- */
+/* ---------- 窄屏适配：空间不足时把明细移到日历下方（≤1024px 单列堆叠） ---------- */
 @media (max-width: 1024px) {
   .cal-page {
     width: 100%;
@@ -1395,6 +1431,16 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
 @media (prefers-reduced-motion: reduce) {
   .details-jump,
   .details-jump-arrow {
+    animation: none;
+  }
+  /* 明细开合动画在减少动效模式下禁播 */
+  .day-details-card,
+  .details-body {
+    transition: none !important;
+    animation: none;
+  }
+  /* 格子入场动画在减少动效模式下禁用 */
+  .cal-day {
     animation: none;
   }
 }
