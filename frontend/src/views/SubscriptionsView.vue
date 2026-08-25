@@ -463,7 +463,8 @@ onMounted(loadAll);
           <h2>{{ modalTitle }}</h2>
           <button class="modal-close" @click="modalOpen = false"><svg width="16" height="16" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M556.8 512L832 236.8c12.8-12.8 12.8-32 0-44.8-12.8-12.8-32-12.8-44.8 0L512 467.2l-275.2-277.333333c-12.8-12.8-32-12.8-44.8 0-12.8 12.8-12.8 32 0 44.8l275.2 277.333333-277.333333 275.2c-12.8 12.8-12.8 32 0 44.8 6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333L512 556.8 787.2 832c6.4 6.4 14.933333 8.533333 23.466667 8.533333s17.066667-2.133333 23.466666-8.533333c12.8-12.8 12.8-32 0-44.8L556.8 512z"/></svg></button>
         </div>
-        <form @submit.prevent="save">
+        <form class="modal-form" @submit.prevent="save">
+          <div class="modal-scroll">
           <div class="form-grid">
             <label class="field span-2"><span>名称 *</span><input v-model="form.name" required placeholder="如 Netflix" /></label>
             <label class="field"><span>分类</span>
@@ -521,6 +522,7 @@ onMounted(loadAll);
               </span>
             </label>
           </div>
+          </div>
           <div class="modal-foot">
             <button type="button" class="btn" @click="modalOpen = false">取消</button>
             <button type="submit" class="btn btn-primary">保存</button>
@@ -536,6 +538,7 @@ onMounted(loadAll);
           <h2>删除订阅</h2>
           <button class="modal-close" :disabled="delBusy" @click="closeDel"><svg width="16" height="16" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M556.8 512L832 236.8c12.8-12.8 12.8-32 0-44.8-12.8-12.8-32-12.8-44.8 0L512 467.2l-275.2-277.333333c-12.8-12.8-32-12.8-44.8 0-12.8 12.8-12.8 32 0 44.8l275.2 277.333333-277.333333 275.2c-12.8 12.8-12.8 32 0 44.8 6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333L512 556.8 787.2 832c6.4 6.4 14.933333 8.533333 23.466667 8.533333s17.066667-2.133333 23.466666-8.533333c12.8-12.8 12.8-32 0-44.8L556.8 512z"/></svg></button>
         </div>
+        <div class="modal-scroll">
         <div class="confirm-body">
           <p class="confirm-text">
             确认删除「<strong>{{ delTarget?.name }}</strong>」？此操作不可撤销。
@@ -545,6 +548,7 @@ onMounted(loadAll);
             <span class="confirm-meta-item">{{ PERIOD_LABEL[delTarget.period_type] || delTarget.period_type }}</span>
             <span class="confirm-meta-item">{{ delTarget.next_due_date || "无下次扣费" }}</span>
           </div>
+        </div>
         </div>
         <div class="modal-foot">
           <button type="button" class="btn" :disabled="delBusy" @click="closeDel">取消</button>
@@ -562,6 +566,7 @@ onMounted(loadAll);
           <h2>续费确认</h2>
           <button class="modal-close" :disabled="renewBusy" @click="closeRenew"><svg width="16" height="16" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M556.8 512L832 236.8c12.8-12.8 12.8-32 0-44.8-12.8-12.8-32-12.8-44.8 0L512 467.2l-275.2-277.333333c-12.8-12.8-32-12.8-44.8 0-12.8 12.8-12.8 32 0 44.8l275.2 277.333333-277.333333 275.2c-12.8 12.8-12.8 32 0 44.8 6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333L512 556.8 787.2 832c6.4 6.4 14.933333 8.533333 23.466667 8.533333s17.066667-2.133333 23.466666-8.533333c12.8-12.8 12.8-32 0-44.8L556.8 512z"/></svg></button>
         </div>
+        <div class="modal-scroll">
         <div class="confirm-body">
           <p class="confirm-text">
             确认将「<strong>{{ renewTarget?.name }}</strong>」续费到下一期？
@@ -571,6 +576,7 @@ onMounted(loadAll);
             <span class="confirm-meta-item">{{ PERIOD_LABEL[renewTarget.period_type] || renewTarget.period_type }}</span>
             <span class="confirm-meta-item">当前扣费日 {{ renewTarget.next_due_date || "—" }}</span>
           </div>
+        </div>
         </div>
         <div class="modal-foot">
           <button type="button" class="btn" :disabled="renewBusy" @click="closeRenew">取消</button>
@@ -1017,7 +1023,9 @@ onMounted(loadAll);
   .modal-card {
     max-height: 90vh;
     max-height: 90dvh;
-    overflow-y: auto;
+    overflow: hidden;
+  }
+  .modal-scroll {
     -webkit-overflow-scrolling: touch;
   }
 

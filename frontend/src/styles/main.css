@@ -445,14 +445,41 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
   position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: flex;
   align-items: center; justify-content: center; z-index: var(--z-modal); padding: var(--space-4);
 }
+/* 弹窗卡片：弹性纵布局，头尾固定、中部内容超高时内部滚动，小窗口不被截断 */
 .modal-card {
   background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
-  width: 560px; max-width: 100%; padding: 20px; box-shadow: var(--shadow-modal);
+  width: 560px; max-width: 100%; box-shadow: var(--shadow-modal);
+  display: flex; flex-direction: column;
+  max-height: calc(100vh - 40px);
+  overflow: hidden;
 }
-.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.modal-head {
+  flex: none;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 20px 0;
+  margin-bottom: 14px;
+}
 .modal-head h2 { margin: 0; font-size: var(--fs-md); }
 .modal-close { background: none; border: none; color: var(--muted); font-size: 16px; cursor: pointer; }
-.modal-foot { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); }
+/* 弹窗中部内容区：超高时在此滚动，头尾按钮保持可见 */
+.modal-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 20px;
+  scrollbar-width: thin;
+}
+.modal-form {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.modal-foot {
+  flex: none;
+  display: flex; justify-content: flex-end; gap: var(--space-2);
+  padding: 16px 20px 20px;
+}
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field span { color: var(--muted); font-size: var(--fs-xs); }
