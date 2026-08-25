@@ -111,7 +111,10 @@ def _public_settings(settings: dict) -> dict:
     public = dict(settings)
     for field in _SECRET_SETTING_FIELDS:
         value = public.pop(field, None)
-        public[f"{field}_configured"] = bool(value is not None and str(value).strip())
+        configured = bool(value is not None and str(value).strip())
+        public[f"{field}_configured"] = configured
+        # 只下发星号掩码（个数与真实密钥长度一致），供前端“输入多少显示多少”隐藏显示
+        public[f"{field}_masked"] = "*" * len(str(value)) if configured else ""
     return public
 
 

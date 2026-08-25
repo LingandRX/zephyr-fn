@@ -110,10 +110,18 @@ function validateCat(name) {
   return null;
 }
 
+// pushplus Token 掩码：显示星号个数与真实 Token 长度一致（输入多少显示多少），
+// 后端只下发 *_masked 掩码串，绝不回传明文。
+function isPushplusMask(v) {
+  return typeof v === "string" && /^\*+$/.test(v.trim());
+}
+
 function isSecretUpdate(value) {
   const text = String(value ?? "").trim();
   if (!text) return false;
-  if (/^(?:\*{3,}|[•·●]{3,})$/.test(text)) return false;
+  // 任意长度的纯掩码字符（* • · ●）都不视为新密钥，避免把 `**`、`****abc` 等
+  // 中间态当成真实输入提交；掩码由前端兜底防误存，后端 is_secret_placeholder 同样有保护。
+  if (/^(?:\*|[•·●])+$/.test(text)) return false;
   if (/已配置|configured|redacted|masked/i.test(text)) return false;
   return true;
 }
@@ -138,9 +146,10 @@ async function loadAll() {
       smtp_password_configured: !!s.smtp_password_configured,
       smtp_from_address: s.smtp_from_address || "",
       pushplus_enabled: !!s.pushplus_enabled,
-      pushplus_token: "",
+      pushplus_token: s.pushplus_token_configured ? (s.pushplus_token_masked || "***") : "",
       pushplus_token_configured: !!s.pushplus_token_configured,
     });
+    savedForm = snapshotForm();
     cats.value = c;
     backupFiles.value = files;
     await nextTick();
@@ -153,17 +162,60 @@ async function loadAll() {
 // 延迟自动保存（防抖 800ms，静默保存状态，避免频繁 toast 打扰）
 let saveTimer = null;
 let statusTimer = null;
+
+// 保存状态按卡片作用域显示：只有被修改的卡片才出现「保存中/保存成功」，
+// 避免在 SMTP 卡片上编辑、却在 PushPlus 卡片上看到保存提示。
+const SCOPE_FIELDS = {
+  general: [
+    "default_currency", "exchange_rate_usd", "exchange_rate_hkd",
+    "notification_days", "notification_enabled",
+    "do_not_disturb_start", "do_not_disturb_end",
+  ],
+  smtp: [
+    "email_enabled", "smtp_host", "smtp_port", "smtp_username",
+    "smtp_password", "smtp_password_configured", "smtp_from_address",
+  ],
+  pushplus: [
+    "pushplus_enabled", "pushplus_token", "pushplus_token_configured",
+  ],
+};
+const saveScopes = ref(new Set());
+let savedForm = {};
+
+function snapshotForm() {
+  const snap = {};
+  for (const key of Object.keys(form)) snap[key] = form[key];
+  return snap;
+}
+
+function dirtyScopes() {
+  const scopes = new Set();
+  for (const [scope, fields] of Object.entries(SCOPE_FIELDS)) {
+    if (fields.some((f) => savedForm[f] !== form[f])) scopes.add(scope);
+  }
+  return scopes;
+}
+
 watch(
   form,
   () => {
     if (!loaded.value) return;
     clearTimeout(saveTimer);
+    const scopes = dirtyScopes();
+    // 保存成功后内部字段回写（掩码 / configured 等）触发的变化不再进入保存流程
+    if (!scopes.size) return;
+    saveScopes.value = scopes;
     saving.value = true;
     saveStatusText.value = "正在保存...";
     saveTimer = setTimeout(async () => {
       try {
         const smtpSecretDraft = isSecretUpdate(form.smtp_password);
-        const pushplusSecretDraft = isSecretUpdate(form.pushplus_token);
+        const pushplusDraft = isSecretUpdate(form.pushplus_token);
+        // 输入框被清空且此前已配置 → 显式移除已保存的 Token 并保存
+        const pushplusCleared =
+          !pushplusDraft &&
+          String(form.pushplus_token ?? "").trim() === "" &&
+          form.pushplus_token_configured;
         const parsedNotificationDays = parseInt(form.notification_days, 10);
         const payload = {
           ...form,
@@ -177,30 +229,39 @@ watch(
           smtp_username: form.smtp_username || null,
           smtp_from_address: form.smtp_from_address || null,
         };
-        // 密钥输入框为空或包含掩码时不发送字段，后端会保留现有密钥。
+        // 密钥输入框为空或包含掩码时不发送字段，后端会保留现有密钥；
+        // 显式清空时发送 *_clear 标记，让后端移除已保存的密钥。
         delete payload.smtp_password;
         delete payload.pushplus_token;
         delete payload.smtp_password_configured;
         delete payload.pushplus_token_configured;
         if (smtpSecretDraft) payload.smtp_password = form.smtp_password;
-        if (pushplusSecretDraft) payload.pushplus_token = form.pushplus_token;
+        if (pushplusDraft) payload.pushplus_token = form.pushplus_token;
+        if (pushplusCleared) payload.pushplus_token_clear = true;
 
         await saveSettings(payload);
-        // 成功后清空前端草稿，降低密钥在页面内存中的停留时间；configured
-        // 标志保留，用户仍能看到“已配置，留空保持”的提示。
+        // 成功后收尾：SMTP 清空前端草稿；pushplus 用掩码 *** 代替显示已保存的
+        // Token，降低密钥在页面内存中的停留时间。
         if (smtpSecretDraft) {
           form.smtp_password = "";
           form.smtp_password_configured = true;
         }
-        if (pushplusSecretDraft) {
-          form.pushplus_token = "";
+        if (pushplusDraft) {
+          const typed = String(form.pushplus_token ?? "");
+          form.pushplus_token = typed ? "*".repeat(typed.length) : "";
           form.pushplus_token_configured = true;
+        } else if (pushplusCleared) {
+          form.pushplus_token = "";
+          form.pushplus_token_configured = false;
         }
+        // 与回写后的表单状态对齐，避免回写再次触发保存
+        savedForm = snapshotForm();
         saving.value = false;
         saveStatusText.value = "✓ 设置已保存";
         clearTimeout(statusTimer);
         statusTimer = setTimeout(() => {
           saveStatusText.value = "";
+          saveScopes.value = new Set();
         }, 2000);
       } catch (err) {
         saving.value = false;
@@ -213,6 +274,31 @@ watch(
 );
 
 // ---------- 测试通知 ----------
+
+// pushplus 掩码输入辅助：聚焦时全选，从掩码开始输入时以新输入为准（防止拼接脏草稿）。
+let pushplusLastValue = "";
+
+function onPushplusFocus(e) {
+  pushplusLastValue = e.target.value;
+  if (isPushplusMask(form.pushplus_token)) e.target.select();
+}
+
+function onPushplusInput(e) {
+  const el = e.target;
+  const prev = pushplusLastValue;
+  const v = el.value;
+  pushplusLastValue = v;
+  // 掩码状态下继续输入：去掉星号前缀，避免“***abc”这类拼接内容被当成新 Token。
+  if (isPushplusMask(prev) && v !== "" && !isPushplusMask(v)) {
+    const fresh = v.replace(/^\*+/, "");
+    if (fresh) {
+      el.value = fresh;
+      form.pushplus_token = fresh;
+      pushplusLastValue = fresh;
+    }
+  }
+}
+
 async function testEmail() {
   if (testingEmail.value) return;
   testingEmail.value = true;
@@ -428,7 +514,7 @@ onMounted(loadAll);
         </div>
         <div class="sub-hint-row">
           <div class="muted sub-hint">更改后自动生效并保存</div>
-          <span v-if="saveStatusText" class="save-status-badge" :class="{ saving }">{{ saveStatusText }}</span>
+          <span v-if="saveStatusText && saveScopes.has('general')" class="save-status-badge" :class="{ saving }">{{ saveStatusText }}</span>
         </div>
       </div>
     </div>
@@ -488,6 +574,10 @@ onMounted(loadAll);
                 {{ testingEmail ? "发送中..." : "✉️ 发送测试邮件" }}
               </button>
             </div>
+            <div class="sub-hint-row">
+              <div class="muted sub-hint">更改后自动生效并保存</div>
+              <span v-if="saveStatusText && saveScopes.has('smtp')" class="save-status-badge" :class="{ saving }">{{ saveStatusText }}</span>
+            </div>
           </div>
         </Transition>
       </div>
@@ -508,7 +598,10 @@ onMounted(loadAll);
                 <input
                   v-model="form.pushplus_token"
                   autocomplete="off"
-                  :placeholder="form.pushplus_token_configured ? '已配置，留空保持原 Token' : '填写从 pushplus.plus 获取的一对一或群组 Token'"
+                  spellcheck="false"
+                  @focus="onPushplusFocus"
+                  @input="onPushplusInput"
+                  :placeholder="form.pushplus_token_configured ? '已配置 Token（星号数量与 Token 长度一致）' : '填写从 pushplus.plus 获取的一对一或群组 Token'"
                 />
               </label>
               <div class="test-row single-action">
@@ -524,7 +617,7 @@ onMounted(loadAll);
             </div>
             <div class="sub-hint-row">
               <div class="muted sub-hint">更改后自动生效并保存</div>
-              <span v-if="saveStatusText" class="save-status-badge" :class="{ saving }">{{ saveStatusText }}</span>
+              <span v-if="saveStatusText && saveScopes.has('pushplus')" class="save-status-badge" :class="{ saving }">{{ saveStatusText }}</span>
             </div>
           </div>
         </Transition>

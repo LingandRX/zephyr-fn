@@ -1217,8 +1217,16 @@ def get_app_settings() -> dict:
 def update_app_settings(data: dict) -> dict:
     conn = _require_conn()
     updates: dict = {}
+    # 前端「清空输入框即移除」需要显式删除已保存的密钥：
+    # 携带 {field}_clear=true 时写入 NULL，而不是被空值/掩码的“保持原密钥”规则跳过。
+    cleared_fields = {
+        field for field in _SECRET_SETTING_FIELDS
+        if data.get(f"{field}_clear")
+    }
+    for field in cleared_fields:
+        updates[field] = None
     for field in SETTINGS_FIELDS:
-        if field not in data:
+        if field not in data or field in cleared_fields:
             continue
         value = data[field]
         if field in _SECRET_SETTING_FIELDS and is_secret_placeholder(value):

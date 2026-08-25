@@ -177,6 +177,9 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertNotIn("pushplus_token", public)
         self.assertTrue(public["smtp_password_configured"])
         self.assertTrue(public["pushplus_token_configured"])
+        # 只暴露与真实长度一致的星号掩码，不泄露原文
+        self.assertEqual(public["pushplus_token_masked"], "*" * len("push-initial-token"))
+        self.assertEqual(public["smtp_password_masked"], "*" * len("smtp-initial-secret"))
 
         # 页面自动保存时可能携带空值或掩码；这类更新不能清空原密钥。
         status, _response_headers, _body = self._tcp_request(
@@ -213,6 +216,32 @@ class ApiSecurityTests(unittest.TestCase):
         raw = db.get_app_settings()
         self.assertEqual(raw["smtp_password"], "smtp-new-secret")
         self.assertEqual(raw["pushplus_token"], "push-new-token")
+
+        # 前端「清空输入框即移除」：显式 *_clear 标记才能删除已保存密钥，
+        # 空值/掩码仍然只是“保持原密钥”。
+        status, _response_headers, _body = self._tcp_request(
+            self._request_bytes(
+                "/api/settings",
+                method="PUT",
+                headers=headers,
+                body=json.dumps({
+                    "pushplus_token_clear": True,
+                }).encode("utf-8"),
+            )
+        )
+        self.assertEqual(status, 200)
+        raw = db.get_app_settings()
+        self.assertIsNone(raw["pushplus_token"])
+        self.assertEqual(raw["smtp_password"], "smtp-new-secret")
+
+        status, _response_headers, body = self._tcp_request(
+            self._request_bytes("/api/settings", headers=headers)
+        )
+        self.assertEqual(status, 200)
+        public = json.loads(body)
+        self.assertNotIn("pushplus_token", public)
+        self.assertFalse(public["pushplus_token_configured"])
+        self.assertEqual(public["pushplus_token_masked"], "")
 
     def test_user_subscription_api_stays_isolated_and_exports_are_protected(self):
         user_headers = self._identity_headers("alice")
