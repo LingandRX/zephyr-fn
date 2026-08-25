@@ -446,7 +446,10 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
         <div :key="selectedDateStr" class="details-body">
         <div class="details-head">
           <div class="details-date">
-            <span>📅 {{ selectedDateStr }} 扣费明细</span>
+            <span class="details-date-label">
+              <svg class="detail-cal-icon" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M853.333333 149.333333h-138.666666V106.666667c0-17.066667-14.933333-32-32-32s-32 14.933333-32 32v42.666666h-277.333334V106.666667c0-17.066667-14.933333-32-32-32s-32 14.933333-32 32v42.666666H170.666667c-40.533333 0-74.666667 34.133333-74.666667 74.666667v618.666667C96 883.2 130.133333 917.333333 170.666667 917.333333h682.666666c40.533333 0 74.666667-34.133333 74.666667-74.666666v-618.666667C928 183.466667 893.866667 149.333333 853.333333 149.333333zM170.666667 213.333333h138.666666v64c0 17.066667 14.933333 32 32 32s32-14.933333 32-32v-64h277.333334v64c0 17.066667 14.933333 32 32 32s32-14.933333 32-32v-64H853.333333c6.4 0 10.666667 4.266667 10.666667 10.666667v194.133333c-4.266667-2.133333-6.4-2.133333-10.666667-2.133333H170.666667c-4.266667 0-6.4 0-10.666667 2.133333v-194.133333c0-6.4 4.266667-10.666667 10.666667-10.666667z m682.666666 640H170.666667c-6.4 0-10.666667-4.266667-10.666667-10.666666V477.866667c4.266667 2.133333 6.4 2.133333 10.666667 2.133333h682.666666c4.266667 0 6.4 0 10.666667-2.133333v364.8c0 6.4-4.266667 10.666667-10.666667 10.666666z"/><path d="M384 608h-85.333333c-17.066667 0-32 14.933333-32 32s14.933333 32 32 32h85.333333c17.066667 0 32-14.933333 32-32s-14.933333-32-32-32zM725.333333 608h-192c-17.066667 0-32 14.933333-32 32s14.933333 32 32 32h192c17.066667 0 32-14.933333 32-32s-14.933333-32-32-32z"/></svg>
+              {{ selectedDateStr }} 扣费明细
+            </span>
             <span class="details-count">共 {{ selectedDayEvents.length }} 笔 (合计 ¥{{ (selectedDayTotal / 100).toFixed(2) }})</span>
           </div>
           <button
@@ -455,7 +458,7 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
             title="关闭扣费明细"
             aria-label="关闭扣费明细"
             @click="closeDetails"
-          >✕</button>
+          ><svg class="detail-close-icon" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M556.8 512L832 236.8c12.8-12.8 12.8-32 0-44.8-12.8-12.8-32-12.8-44.8 0L512 467.2l-275.2-277.333333c-12.8-12.8-32-12.8-44.8 0-12.8 12.8-12.8 32 0 44.8l275.2 277.333333-277.333333 275.2c-12.8 12.8-12.8 32 0 44.8 6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333L512 556.8 787.2 832c6.4 6.4 14.933333 8.533333 23.466667 8.533333s17.066667-2.133333 23.466666-8.533333c12.8-12.8 12.8-32 0-44.8L556.8 512z"/></svg></button>
         </div>
         <div class="details-list">
           <div v-for="(e, idx) in selectedDayEvents" :key="idx" class="detail-item">
@@ -1085,6 +1088,17 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   align-items: center;
   justify-content: center;
   transition: color 0.15s ease, background 0.15s ease;
+}
+.detail-close-icon {
+  width: 14px;
+  height: 14px;
+}
+.detail-cal-icon {
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  vertical-align: -2px;
+  flex-shrink: 0;
 }
 .details-close:hover {
   color: var(--text);
