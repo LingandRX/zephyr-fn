@@ -6,6 +6,7 @@ import {
 } from "../api.js";
 import { fmtCents, daysLeft, PERIOD_LABEL, CUSTOM_UNIT_LABEL, yuanToCents, centsToYuan } from "../format.js";
 import { ui, toast, openNewSub } from "../ui.js";
+import CustomSelect from "../components/CustomSelect.vue";
 
 const subs = ref([]);
 const cats = ref([]);
@@ -16,6 +17,21 @@ const search = ref("");
 const filterCat = ref("");
 const filterStatus = ref("");
 const NOTES_MAX_LENGTH = 120;
+
+const statusOptions = [
+  { label: "全部状态", value: "" },
+  { label: "活跃", value: "active" },
+  { label: "即将到期", value: "expiring" },
+  { label: "待支付", value: "in_payment" },
+  { label: "宽限期", value: "grace_period" },
+  { label: "已取消", value: "canceled" },
+  { label: "已过期", value: "expired" },
+];
+
+const catOptions = computed(() => [
+  { label: "全部分类", value: "" },
+  ...cats.value.map((c) => ({ label: c.name, value: c.id })),
+]);
 
 // ---------- 弹窗状态 ----------
 const modalOpen = ref(false);
@@ -312,19 +328,16 @@ onMounted(loadAll);
         <input v-model="search" type="search" placeholder="搜索订阅名称、备注..." />
       </div>
       <div class="filter-selects">
-        <select v-model="filterCat">
-          <option value="">全部分类</option>
-          <option v-for="c in cats" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
-        <select v-model="filterStatus">
-          <option value="">全部状态</option>
-          <option value="active">活跃</option>
-          <option value="expiring">即将到期</option>
-          <option value="in_payment">待支付</option>
-          <option value="grace_period">宽限期</option>
-          <option value="canceled">已取消</option>
-          <option value="expired">已过期</option>
-        </select>
+        <CustomSelect
+          v-model="filterCat"
+          :options="catOptions"
+          placeholder="全部分类"
+        />
+        <CustomSelect
+          v-model="filterStatus"
+          :options="statusOptions"
+          placeholder="全部状态"
+        />
       </div>
     </div>
 
@@ -639,11 +652,14 @@ onMounted(loadAll);
   gap: 10px;
   flex-shrink: 0;
 }
+.filter-selects select,
+.filter-selects :deep(.custom-select) {
+  min-width: 130px;
+}
 .filter-selects select {
   height: 38px;
   box-sizing: border-box;
   padding: 0 12px;
-  min-width: 130px;
   font-size: var(--fs-sm);
   border-radius: var(--radius-sm);
 }
@@ -961,7 +977,8 @@ onMounted(loadAll);
     width: 100% !important;
     gap: 8px !important;
   }
-  .filter-selects select {
+  .filter-selects select,
+  .filter-selects :deep(.custom-select) {
     flex: 1 1 50% !important;
     width: 50% !important;
     min-width: 0 !important;
