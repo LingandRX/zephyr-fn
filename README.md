@@ -40,26 +40,42 @@
 │   └── install_callback      # 初始化数据库（幂等）
 ├── wizard/install            # 安装向导（到期提醒提前天数）
 ├── app/
-│   ├── backend/              # Python 后端
+│   ├── backend/              # Python 后端（分层架构）
 │   │   ├── server.py         # HTTP 服务 + API 路由（网关 Socket / TCP 双模式）
-│   │   ├── db.py             # SQLite 连接 / 迁移 / CRUD
-│   │   ├── domain.py         # 周期推进 / 续费策略 / 状态派生 / 日历逻辑
-│   │   ├── services.py       # 统计与日历服务
-│   │   ├── backup.py         # JSON / CSV 导入导出、DB 合并
-│   │   ├── notifications.py  # 到期筛选 / 免打扰 / 文案
-│   │   ├── email_sender.py   # SMTP 邮件
-│   │   ├── pushplus.py       # PushPlus 推送
-│   │   └── scheduler.py      # 每小时提醒 + 每日备份
-│   ├── www/                  # 前端产物目录（git 基线为 vanilla 原生版；打包前由 build.sh 覆盖为 Vue 产物）
+│   │   ├── config.py         # 运行环境与路径配置
+│   │   ├── core/             # 核心领域层（领域模型、周期推进、状态派生、校验）
+│   │   │   └── domain.py
+│   │   ├── services/         # 业务应用服务层
+│   │   │   ├── statistics.py # 统计报表与日历事件
+│   │   │   ├── notifications.py # 到期提醒与通知派发
+│   │   │   ├── backup.py     # 备份导入导出与合并
+│   │   │   └── scheduler.py  # 轮询定时任务与调度
+│   │   ├── storage/          # 持久化存储层
+│   │   │   └── db.py         # SQLite 连接、迁移与 CRUD
+│   │   ├── utils/            # 基础设施与通用工具层
+│   │   │   ├── channels/     # 通知渠道（Email、PushPlus）
+│   │   │   │   ├── email.py
+│   │   │   │   └── pushplus.py
+│   │   │   └── file_utils.py # 文件写入与落盘工具
+│   │   └── *.py              # 兼容门面模块（保持原有导入无缝兼容）
+│   ├── www/                  # 前端产物目录（由 build.sh 同步生成）
 │   └── ui/
 │       ├── config            # 统一网关入口（/app/subscription）
 │       └── images/           # 入口图标
-├── frontend/                 # Vue 3 + Vite 前端（默认前端，架构与开发详见 frontend/README.md）
+├── frontend/                 # Vue 3 + Vite 前端
+│   ├── src/
+│   │   ├── layouts/          # 页面布局壳
+│   │   ├── views/            # 页面视图组件
+│   │   ├── components/       # 通用 UI 组件
+│   │   ├── services/         # 前端 API 业务服务
+│   │   └── utils/            # 格式化、UI状态与交互工具
 ├── dev.sh                    # 一键本地预览（Vue 或 vanilla）
 ├── tools/
 │   ├── gen_icons.py          # 图标生成脚本（纯 Python）
+│   ├── seed_demo_data.py     # 演示数据生成与灌库脚本
 │   └── build.sh              # 打包前构建：Vite build → 同步 app/www → 清理 __pycache__
-└── tests/test_backend.py     # 单元测试（17 个）
+└── tests/                    # 测试套件（单元测试、安全测试、回归测试）
+
 ```
 
 ## 前端架构

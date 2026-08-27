@@ -1,4 +1,4 @@
-"""统计与日历服务（移植自 zephyr-tarui 的 services.rs）。
+"""统计与日历服务。
 
 口径与参考项目一致：
 - monthly_expense      每月名义支出（按周期折算，非自动续费只计首付月一次）
@@ -15,11 +15,15 @@ import math
 from datetime import date, timedelta
 from typing import Any
 
-try:  # 包模式与直接从 backend 目录启动模式兼容。
-    from . import db, domain
-except ImportError:  # pragma: no cover
-    import db
-    import domain
+try:
+    from ..core import domain
+    from ..storage import db
+except (ImportError, ValueError):
+    try:
+        from .. import db, domain
+    except (ImportError, ValueError):
+        import db  # type: ignore[no-redef]
+        import domain  # type: ignore[no-redef]
 
 
 def _divide_round(amount: int, divisor: int) -> int:
@@ -142,7 +146,6 @@ def _count_cycles_in_range(sub: dict, range_start: date, range_end: date) -> int
 
     fixed_days = _fixed_cycle_days(sub)
     if fixed_days:
-        # 序列以 next_due_date（或首次到期日）为锚点，且不能早于首次到期日。
         lower = max(range_start, first_due, start_date + timedelta(days=1))
         if lower > range_end:
             return 0
@@ -219,7 +222,6 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
     month_end = _month_end(now)
     year_start = date(now.year, 1, 1)
     year_end = date(now.year, 12, 31)
-    # 未来 30 天
     future_end = now + timedelta(days=30)
 
     for sub in subs:
@@ -272,7 +274,6 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
         cat_monthly[cat_id] = cat_monthly.get(cat_id, 0) + cny_monthly
         cat_yearly[cat_id] = cat_yearly.get(cat_id, 0) + cny_yearly
 
-        # 月度趋势（按实际到期/发生扣费统计）
         for ms, me in zip(month_starts, month_ends):
             m_key = ms.strftime("%Y-%m")
             if sub["auto_renew"]:
@@ -326,7 +327,7 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
 
 
 def get_calendar_events(user_id: str, year: int, month: int) -> list[dict]:
-    """按月生成日历事件（移植 generate_events_for_month）。"""
+    """按月生成日历事件。"""
     subs = db.get_all_subscriptions(user_id)
     events: list[dict] = []
     for sub in subs:
@@ -372,7 +373,6 @@ def _events_for_month(sub: dict, year: int, month: int) -> list[dict]:
 
     fixed_days = _fixed_cycle_days(sub)
     if fixed_days:
-        # 对日/周周期直接定位到目标月份的第一条事件，避免从 start_date 逐日追赶。
         offset = max(0, (target_start - start_date).days)
         index = (offset + fixed_days - 1) // fixed_days
         current = start_date + timedelta(days=index * fixed_days)
