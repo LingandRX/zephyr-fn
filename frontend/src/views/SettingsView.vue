@@ -8,8 +8,9 @@ import {
   deleteBackupFile, downloadBackupFile,
   testEmailNotification, testPushPlusNotification,
   getLogTail,
-} from "../api.js";
-import { toast } from "../ui.js";
+} from "../services/api.js";
+import { toast } from "../utils/ui.js";
+
 import CustomSelect from "../components/CustomSelect.vue";
 import CustomTimePicker from "../components/CustomTimePicker.vue";
 

@@ -3,9 +3,10 @@ import { ref, computed, onMounted, watch, onDeactivated, onActivated } from "vue
 import {
   getSubscriptions, getCategories, getStatistics,
   createSubscription, updateSubscription, deleteSubscription, renewSubscription,
-} from "../api.js";
-import { fmtCents, daysLeft, PERIOD_LABEL, CUSTOM_UNIT_LABEL, yuanToCents, centsToYuan } from "../format.js";
-import { ui, toast, openNewSub } from "../ui.js";
+} from "../services/api.js";
+import { fmtCents, daysLeft, PERIOD_LABEL, CUSTOM_UNIT_LABEL, yuanToCents, centsToYuan } from "../utils/format.js";
+import { ui, toast, openNewSub } from "../utils/ui.js";
+
 import CustomSelect from "../components/CustomSelect.vue";
 import CustomDatePicker from "../components/CustomDatePicker.vue";
 

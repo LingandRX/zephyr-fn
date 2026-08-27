@@ -11,11 +11,9 @@ try:
     from ..core import domain
     from ..storage import db
 except (ImportError, ValueError):
-    try:
-        from .. import db, domain
-    except (ImportError, ValueError):
-        import db  # type: ignore[no-redef]
-        import domain  # type: ignore[no-redef]
+    from core import domain  # type: ignore[no-redef]
+    from storage import db  # type: ignore[no-redef]
+
 
 LOGGER_NAME = "subscription"
 NOTIFICATION_CLAIM_TTL_SECONDS = 6 * 60 * 60

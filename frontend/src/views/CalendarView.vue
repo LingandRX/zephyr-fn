@@ -1,9 +1,10 @@
 <script setup>
 // 日历视图：按月渲染扣费 / 服务到期事件
 import { ref, computed, watch, nextTick, onMounted, onActivated, onBeforeUnmount } from "vue";
-import { getCalendar } from "../api.js";
-import { toast } from "../ui.js";
+import { getCalendar } from "../services/api.js";
+import { toast } from "../utils/ui.js";
 import CustomDatePicker from "../components/CustomDatePicker.vue";
+
 
 const now = new Date();
 const calYear = ref(now.getFullYear());

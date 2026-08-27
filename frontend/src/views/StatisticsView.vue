@@ -1,9 +1,10 @@
 <script setup>
 // 统计视图：大盘指标卡片 + 近 12 个月趋势（CSS 柱状图带交互 Tooltip）+ 分类支出占比
 import { ref, computed, onMounted, onActivated } from "vue";
-import { getStatistics } from "../api.js";
-import { fmtCents } from "../format.js";
-import { toast } from "../ui.js";
+import { getStatistics } from "../services/api.js";
+import { fmtCents } from "../utils/format.js";
+import { toast } from "../utils/ui.js";
+
 
 const stats = ref(null);
 const loading = ref(true);

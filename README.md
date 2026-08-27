@@ -57,8 +57,8 @@
 │   │   │   │   ├── email.py
 │   │   │   │   └── pushplus.py
 │   │   │   └── file_utils.py # 文件写入与落盘工具
-│   │   └── *.py              # 兼容门面模块（保持原有导入无缝兼容）
 │   ├── www/                  # 前端产物目录（由 build.sh 同步生成）
+
 │   └── ui/
 │       ├── config            # 统一网关入口（/app/subscription）
 │       └── images/           # 入口图标

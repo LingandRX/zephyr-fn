@@ -32,7 +32,9 @@ console.error = (...args) => warnings.push(args.join(" "));
 
 try {
   const { default: App } = await server.ssrLoadModule("/src/App.vue");
-  const { ui } = await server.ssrLoadModule("/src/ui.js");
+  const { ui } = await server.ssrLoadModule("/src/utils/ui.js");
+
+
 
   for (const view of ["subscriptions", "calendar", "statistics", "settings"]) {
     ui.view = view;

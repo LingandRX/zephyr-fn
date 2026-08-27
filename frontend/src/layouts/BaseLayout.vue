@@ -3,9 +3,10 @@
 //   侧边栏（导航 / 新增按钮 / 折叠按钮）+ 顶栏 + 浮动到期提醒 + 主区（Sub Page 插槽）+ Toast
 //   切换导航 = 切换本壳下的 Sub Page（keep-alive 保留各页状态）
 import { computed, ref, watch, onMounted } from "vue";
-import { ui, toastState, toast, openNewSub, setTheme } from "../ui.js";
-import { getUpcomingNotifications } from "../api.js";
+import { ui, toastState, toast, openNewSub, setTheme } from "../utils/ui.js";
+import { getUpcomingNotifications } from "../services/api.js";
 import logo from "../assets/icon_64.png";
+
 import SubscriptionsView from "../views/SubscriptionsView.vue";
 import CalendarView from "../views/CalendarView.vue";
 import StatisticsView from "../views/StatisticsView.vue";

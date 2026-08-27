@@ -11,9 +11,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app" / "backend"))
 
 import config
-import db
-import domain
 import services
+from core import domain
+from storage import db
+
 
 
 class DomainTests(unittest.TestCase):

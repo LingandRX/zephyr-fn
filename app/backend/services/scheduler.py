@@ -21,22 +21,15 @@ try:
     send_email = channels.send_email
     send_pushplus = channels.send_pushplus
 except (ImportError, ValueError):
-    try:
-        from .. import backup as backup_service
-        from .. import config, db, email_sender, notifications, pushplus
-        from ..utils.file_utils import atomic_write_json, fsync_directory
-        send_email = email_sender.send_email
-        send_pushplus = pushplus.send_pushplus
-    except (ImportError, ValueError):
-        import backup as backup_service  # type: ignore[no-redef]
-        import config  # type: ignore[no-redef]
-        import db  # type: ignore[no-redef]
-        import email_sender  # type: ignore[no-redef]
-        import notifications  # type: ignore[no-redef]
-        import pushplus  # type: ignore[no-redef]
-        from utils.file_utils import atomic_write_json, fsync_directory  # type: ignore[no-redef]
-        send_email = email_sender.send_email
-        send_pushplus = pushplus.send_pushplus
+    import config  # type: ignore[no-redef]
+    from services import backup as backup_service  # type: ignore[no-redef]
+    from services import notifications  # type: ignore[no-redef]
+    from storage import db  # type: ignore[no-redef]
+    from utils import channels  # type: ignore[no-redef]
+    from utils.file_utils import atomic_write_json, fsync_directory  # type: ignore[no-redef]
+    send_email = channels.send_email
+    send_pushplus = channels.send_pushplus
+
 
 CHECK_INTERVAL = 3600          # 通知检查间隔 1 小时
 BACKUP_INTERVAL = 24 * 3600    # 备份间隔 24 小时

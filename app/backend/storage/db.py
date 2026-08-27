@@ -22,10 +22,8 @@ from typing import Any
 try:
     from ..core import domain
 except (ImportError, ValueError):
-    try:
-        from .. import domain
-    except (ImportError, ValueError):
-        import domain  # type: ignore[no-redef]
+    from core import domain  # type: ignore[no-redef]
+
 
 _lock = threading.RLock()
 _logger = logging.getLogger("subscription.db")

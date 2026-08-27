@@ -17,8 +17,9 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app" / "backend"))
 
 import config
-import db
 import server
+from storage import db
+
 
 
 class ApiSecurityTests(unittest.TestCase):

@@ -8,10 +8,8 @@ from email.mime.text import MIMEText
 try:
     from ...storage import db
 except (ImportError, ValueError):
-    try:
-        from ... import db
-    except (ImportError, ValueError):
-        import db  # type: ignore[no-redef]
+    from storage import db  # type: ignore[no-redef]
+
 
 
 def send_email(

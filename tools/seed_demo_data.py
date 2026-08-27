@@ -132,14 +132,16 @@ def main() -> None:
           f"分类 {len(data['categories'])} 个）")
 
     if args.db:
-        import db
+        from services.backup import import_from_json
+        from storage import db
         db.connect(Path(args.db))
-        result = __import__("backup").import_from_json(
+        result = import_from_json(
             json.dumps(data, ensure_ascii=False), args.user
         )
         print(f"已灌入数据库 {args.db}: 新增订阅 {result['success_count']} 条，"
               f"跳过重复 {result['skipped_duplicates']} 条，"
               f"新增分类 {result['added_categories']} 个")
+
 
 
 if __name__ == "__main__":

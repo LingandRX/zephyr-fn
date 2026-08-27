@@ -47,19 +47,20 @@ from http import HTTPStatus
 from pathlib import Path
 
 try:  # 支持 python -m app.backend.server 与直接执行 server.py 两种方式。
-    from . import backup, config, db, domain, email_sender, notifications, pushplus, scheduler, services
+    from . import config
+    from .core import domain
+    from .services import backup, notifications, scheduler, statistics
+    from .storage import db
+    from .utils.channels import email as email_sender, pushplus
 except ImportError:  # pragma: no cover - 直接从 backend 目录启动时使用。
-    import backup
     import config
-    import db
-    import domain
-    import email_sender
-    import notifications
-    import pushplus
-    import scheduler
-    import services
+    from core import domain
+    from services import backup, notifications, scheduler, statistics
+    from storage import db
+    from utils.channels import email as email_sender, pushplus
 
 log = logging.getLogger(scheduler.LOGGER_NAME)
+
 
 
 # 请求边界。该服务使用 socketserver 自己解析 HTTP，请求头和请求体都必须
@@ -336,11 +337,12 @@ class Handler(socketserver.StreamRequestHandler):
                 self._json(_public_settings(db.update_app_settings(payload)))
             elif path == "/api/statistics" and method == "GET":
                 mode = (query.get("mode") or ["nominal"])[0]
-                self._json(services.calculate_statistics(user_id, mode))
+                self._json(statistics.calculate_statistics(user_id, mode))
             elif path == "/api/calendar" and method == "GET":
                 year = int((query.get("year") or [date.today().year])[0])
                 month = int((query.get("month") or [date.today().month])[0])
-                self._json(services.get_calendar_events(user_id, year, month))
+                self._json(statistics.get_calendar_events(user_id, year, month))
+
             elif path == "/api/backup" and method == "POST":
                 self._json(scheduler.backup_now(include_all=True))
             elif path == "/api/backup/export-json" and method == "GET":
