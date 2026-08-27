@@ -33,6 +33,30 @@ const catOptions = computed(() => [
   ...cats.value.map((c) => ({ label: c.name, value: c.id })),
 ]);
 
+const CURRENCY_OPTIONS = [
+  { label: "CNY (¥)", value: "CNY" },
+  { label: "USD ($)", value: "USD" },
+  { label: "HKD (HK$)", value: "HKD" },
+];
+
+const periodTypeOptions = [
+  { label: "月付", value: "month" },
+  { label: "季付", value: "quarter" },
+  { label: "年付", value: "year" },
+  { label: "一次性", value: "once" },
+  { label: "自定义", value: "custom" },
+];
+
+const formCatOptions = computed(() => [
+  { label: "未分类", value: "" },
+  ...cats.value.map((c) => ({ label: c.name, value: c.id })),
+]);
+
+const customUnitOptions = Object.entries(CUSTOM_UNIT_LABEL).map(([unit, label]) => ({
+  label,
+  value: unit,
+}));
+
 // ---------- 弹窗状态 ----------
 const modalOpen = ref(false);
 const modalTitle = ref("新增订阅");
@@ -480,39 +504,40 @@ onMounted(loadAll);
           <div class="modal-scroll">
           <div class="form-grid">
             <label class="field span-2"><span>名称 *</span><input v-model="form.name" required placeholder="如 Netflix" /></label>
-            <label class="field"><span>分类</span>
-              <select v-model="form.category_id">
-                <option value="">未分类</option>
-                <option v-for="c in cats" :key="c.id" :value="c.id">{{ c.name }}</option>
-              </select>
-            </label>
-            <label class="field"><span>货币</span>
-              <select v-model="form.currency">
-                <option value="CNY">CNY (¥)</option>
-                <option value="USD">USD ($)</option>
-                <option value="HKD">HKD (HK$)</option>
-              </select>
-            </label>
+            <div class="field"><span>分类</span>
+              <CustomSelect
+                v-model="form.category_id"
+                :options="formCatOptions"
+                placeholder="未分类"
+              />
+            </div>
+            <div class="field"><span>货币</span>
+              <CustomSelect
+                v-model="form.currency"
+                :options="CURRENCY_OPTIONS"
+                :clearable="false"
+              />
+            </div>
             <label class="field"><span>金额（{{ form.currency === 'USD' ? '美元' : form.currency === 'HKD' ? '港币' : '元' }}）*</span>
               <input v-model="form.amount" type="number" required min="0" step="0.01" placeholder="68" />
             </label>
-            <label class="field"><span>周期</span>
-              <select v-model="form.period_type">
-                <option value="month">月付</option>
-                <option value="quarter">季付</option>
-                <option value="year">年付</option>
-                <option value="once">一次性</option>
-                <option value="custom">自定义</option>
-              </select>
-            </label>
-            <label v-if="form.period_type === 'custom'" class="field span-2"><span>自定义周期</span>
+            <div class="field"><span>周期</span>
+              <CustomSelect
+                v-model="form.period_type"
+                :options="periodTypeOptions"
+                :clearable="false"
+              />
+            </div>
+            <div v-if="form.period_type === 'custom'" class="field span-2"><span>自定义周期</span>
               <span class="inline">
                 <input v-model="form.custom_value" type="number" min="1" />
-                <select v-model="form.custom_unit">
-                  <option v-for="(label, u) in CUSTOM_UNIT_LABEL" :key="u" :value="u">{{ label }}</option>
-                </select>
+                <CustomSelect
+                  v-model="form.custom_unit"
+                  :options="customUnitOptions"
+                  :clearable="false"
+                />
               </span>
-            </label>
+            </div>
             <label class="field checkbox span-2">
               <input v-model="form.auto_renew" type="checkbox" />
               <span>自动续费</span>
@@ -1056,7 +1081,8 @@ onMounted(loadAll);
 
   /* 放大触控目标，字号不小于 16px 防止 iOS 自动缩放 */
   .form-grid input:not([type="checkbox"]),
-  .form-grid select {
+  .form-grid select,
+  .form-grid :deep(.custom-select-trigger) {
     height: 44px;
     font-size: 16px;
   }

@@ -10,6 +10,13 @@ import {
   getLogTail,
 } from "../api.js";
 import { toast } from "../ui.js";
+import CustomSelect from "../components/CustomSelect.vue";
+
+const CURRENCY_OPTIONS = [
+  { label: "CNY (¥)", value: "CNY" },
+  { label: "USD ($)", value: "USD" },
+  { label: "HKD (HK$)", value: "HKD" },
+];
 
 const TABS = [
   { key: "general", label: "常规设置", svg: [
@@ -491,14 +498,14 @@ onMounted(loadAll);
     <div v-show="activeTab === 'general'" class="settings-section">
       <div class="card">
         <h3>通用与汇率</h3>
-        <label class="field">
+        <div class="field">
           <span>默认货币</span>
-          <select v-model="form.default_currency">
-            <option value="CNY">CNY (¥)</option>
-            <option value="USD">USD ($)</option>
-            <option value="HKD">HKD (HK$)</option>
-          </select>
-        </label>
+          <CustomSelect
+            v-model="form.default_currency"
+            :options="CURRENCY_OPTIONS"
+            :clearable="false"
+          />
+        </div>
         <div class="form-row">
           <label class="field">
             <span>USD → CNY 汇率</span>

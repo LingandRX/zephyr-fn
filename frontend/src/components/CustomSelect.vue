@@ -37,7 +37,7 @@ const normalizedOptions = computed(() => {
   return props.options.map((opt) => {
     if (typeof opt === "object" && opt !== null) {
       return {
-        label: opt.label !== undefined ? opt.label : opt.name || String(opt.value),
+        label: opt.label !== undefined ? opt.label : opt.name || String(opt.value ?? ""),
         value: opt.value !== undefined ? opt.value : opt.id,
       };
     }
@@ -50,7 +50,7 @@ const selectedOption = computed(() => {
 });
 
 const hasValue = computed(() => {
-  return props.modelValue !== "" && props.modelValue !== null && props.modelValue !== undefined;
+  return props.modelValue !== "" && props.modelValue !== null && props.modelValue !== undefined && props.modelValue !== props.clearValue;
 });
 
 const canClear = computed(() => {
@@ -73,7 +73,11 @@ function closeDropdown() {
   isOpen.value = false;
 }
 
-function selectOption(opt) {
+function selectOption(opt, e) {
+  if (e) {
+    e.stopPropagation();
+    e.preventDefault();
+  }
   if (props.disabled) return;
   emit("update:modelValue", opt.value);
   emit("change", opt.value);
@@ -163,14 +167,16 @@ onBeforeUnmount(() => {
     </div>
 
     <transition name="dropdown-fade">
-      <div v-if="isOpen" class="custom-select-dropdown">
+      <div v-if="isOpen" class="custom-select-dropdown" @click.stop>
         <ul class="custom-select-options">
           <li
             v-for="opt in normalizedOptions"
             :key="opt.value"
             class="custom-select-option"
             :class="{ 'is-selected': opt.value === modelValue }"
-            @click="selectOption(opt)"
+            @pointerdown.stop
+            @mousedown.stop
+            @click.stop="selectOption(opt, $event)"
           >
             <span class="option-label">{{ opt.label }}</span>
             <span v-if="opt.value === modelValue" class="option-check" aria-hidden="true">
@@ -188,10 +194,15 @@ onBeforeUnmount(() => {
 <style scoped>
 .custom-select {
   position: relative;
-  display: inline-block;
-  min-width: 130px;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
   user-select: none;
   font-size: var(--fs-sm);
+}
+
+.custom-select.is-open {
+  z-index: 50;
 }
 
 .custom-select-trigger {
