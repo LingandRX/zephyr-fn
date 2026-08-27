@@ -89,14 +89,14 @@ frontend/src/
 前端有两套实现，默认使用 **Vue 3 版**（`frontend/`），原生零构建版（`app/www/`）保留作对照：
 
 ```bash
-# 一键预览（自动：初始化数据库 -> 构建 Vue 前端 -> 启动服务）
+# 一键热更新开发（自动拉起 Python 后端 API 5001 + Vite dev 5173，支持 HMR 热更新）
 ./dev.sh
+# 访问地址 http://localhost:5173/
+
+# 静态构建预览（构建 dist 后由后端 8000 服务，与线上行为一致）
+BUILD=1 ./dev.sh
 # 默认地址 http://127.0.0.1:8000/app/subscription/
 # FRONTEND=vanilla ./dev.sh  可预览原生版；PORT=9000 / DB=/tmp/t.db 可自定义
-
-# 开发 Vue 前端（HMR，代理 /api 到后端 5001）
-python3 app/backend/server.py --http 5001 --db ./data/subscription.db --www app/www --share ./data/backups
-cd frontend && npm install && npm run dev   # http://localhost:5173/
 
 # 前端回归检查（BaseLayout/Sub Page 隔离、折叠按钮、滚动容器断言）
 cd frontend && npm run check:views

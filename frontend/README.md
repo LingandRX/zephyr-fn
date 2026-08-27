@@ -74,17 +74,18 @@ npm run check:views
 > 输出，与真机网关行为一致。官方示例采用"dev 也带前缀 + 全前缀 proxy"的写法，
 > 在 Vite 6 下 proxy 会吞掉 Vite 自身模块请求而失效，本工程已避开该坑（见 vite.config.mjs 注释）。
 
-### 一键预览 / 打包（在仓库根目录）
+### 一键热更新开发 / 预览 / 打包（在仓库根目录）
 
 ```bash
-./dev.sh                      # 一键本地预览（构建后由后端直服，与线上一致）
+./dev.sh                           # 一键热更新开发（Vite dev 5173 + 后端 API 5001，支持 HMR）
+BUILD=1 ./dev.sh                   # 静态构建预览（构建后由后端直服，与线上一致）
 ./tools/build.sh && fnpack build   # 构建产物同步到 app/www 后打包 fpk
 ```
 
 ## 官方约束落实情况
 
 | 约束（官方文档） | 本前端 |
-|---|---|
+| --- | --- |
 | Vite `base` 对齐 gatewayPrefix | build 时 `base: "/app/subscription/"` ✓（dev 用根路径避免 proxy 冲突） |
 | 资源不写死域名、经前缀/import 加载 | 图片等经 import 由 Vite 按 base 重写 ✓ |
 | API 不携带用户身份 | api.js 只发路径，身份由后端取 `X-Trim-*` Header ✓ |
