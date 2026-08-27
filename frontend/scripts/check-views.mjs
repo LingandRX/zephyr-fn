@@ -34,8 +34,6 @@ try {
   const { default: App } = await server.ssrLoadModule("/src/App.vue");
   const { ui } = await server.ssrLoadModule("/src/utils/ui.js");
 
-
-
   for (const view of ["subscriptions", "calendar", "statistics", "settings"]) {
     ui.view = view;
     const html = await renderToString(createSSRApp(App));
@@ -47,14 +45,21 @@ try {
     const hasToggle = html.includes('class="sidebar-toggle"');
     const hasFooter = html.includes('class="sidebar-footer"');
     const titleOk = html.includes(`>${TITLES[view]}</h1>`);
-    const activeNav = html.includes(`class="active nav-item"`) &&
+    const activeNav =
+      html.includes(`class="active nav-item"`) &&
       html.includes(`>${TITLES[view]}</span>`);
 
-    const pass = pages === 1 && scrollHost && hasToggle && hasFooter && titleOk && activeNav;
+    const pass =
+      pages === 1 &&
+      scrollHost &&
+      hasToggle &&
+      hasFooter &&
+      titleOk &&
+      activeNav;
     failed ||= !pass;
     console.log(
       `view=${view.padEnd(13)} sub-page=${pages} 滚动容器=${scrollHost} 折叠按钮=${hasToggle} ` +
-        `footer=${hasFooter} 标题=「${TITLES[view]}」高亮=${activeNav}  ${pass ? "✓" : "✗"}`
+        `footer=${hasFooter} 标题=「${TITLES[view]}」高亮=${activeNav}  ${pass ? "✓" : "✗"}`,
     );
   }
 } finally {
@@ -67,5 +72,9 @@ if (warnings.length) {
   console.log(`\nVue 警告 ${warnings.length} 条（应为 0）：`);
   warnings.slice(0, 5).forEach((w) => console.log("  ", w.slice(0, 160)));
 }
-console.log(failed ? "\n=== BasePage/Sub Page 检查失败 ===" : "\n=== BasePage/Sub Page 检查通过（4 状态全部通过） ===");
+console.log(
+  failed
+    ? "\n=== BasePage/Sub Page 检查失败 ==="
+    : "\n=== BasePage/Sub Page 检查通过（4 状态全部通过） ===",
+);
 process.exit(failed ? 1 : 0);
