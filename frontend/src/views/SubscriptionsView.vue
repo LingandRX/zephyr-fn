@@ -130,6 +130,7 @@ watch(
 );
 
 onActivated(() => {
+  loadAll();
   if (ui.showAddModal) {
     openModal();
     ui.showAddModal = false;
