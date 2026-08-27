@@ -112,7 +112,14 @@ function buildGrid() {
 }
 
 function selectDay(cell) {
-  if (cell.other) return;
+  if (cell.other) {
+    const [y, m] = cell.dateStr.split("-").map(Number);
+    calYear.value = y;
+    calMonth.value = m;
+    selectedDateStr.value = cell.dateStr;
+    loadMonth();
+    return;
+  }
   selectedDateStr.value = cell.dateStr;
 }
 
@@ -448,9 +455,12 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   border-color: rgba(var(--primary-rgb), 0.4);
 }
 .cal-day.other {
-  opacity: 0.3;
+  opacity: 0.35;
   background: transparent;
-  cursor: default;
+  cursor: pointer;
+}
+.cal-day.other:hover {
+  opacity: 0.7;
 }
 .cal-day.today {
   border-color: var(--primary);
