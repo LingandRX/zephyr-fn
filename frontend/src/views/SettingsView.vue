@@ -11,6 +11,7 @@ import {
 } from "../api.js";
 import { toast } from "../ui.js";
 import CustomSelect from "../components/CustomSelect.vue";
+import CustomTimePicker from "../components/CustomTimePicker.vue";
 
 const CURRENCY_OPTIONS = [
   { label: "CNY (¥)", value: "CNY" },
@@ -531,9 +532,9 @@ onMounted(loadAll);
         <div class="field dnd">
           <span>免打扰时段</span>
           <div class="dnd-inputs">
-            <input v-model="form.do_not_disturb_start" type="time" />
-            <span>—</span>
-            <input v-model="form.do_not_disturb_end" type="time" />
+            <CustomTimePicker v-model="form.do_not_disturb_start" placeholder="开始时间" />
+            <span class="dnd-separator">—</span>
+            <CustomTimePicker v-model="form.do_not_disturb_end" placeholder="结束时间" />
           </div>
         </div>
         <div class="sub-hint-row">
@@ -883,8 +884,17 @@ onMounted(loadAll);
 }
 .dnd-inputs {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
+}
+.dnd-inputs :deep(.custom-time-picker) {
+  flex: 1;
+  min-width: 0;
+}
+.dnd-separator {
+  color: var(--muted);
+  flex-shrink: 0;
+  font-size: var(--fs-sm);
 }
 
 .sub-hint-row {
