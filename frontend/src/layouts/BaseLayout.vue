@@ -27,7 +27,7 @@ const THEME_ICONS = {
 const THEME_LABELS = { dark: "深色模式", light: "浅色模式", system: "跟随系统" };
 
 const NAV = [
-  { key: "subscriptions", icon: "list", label: "订阅列表", title: "订阅列表" },
+  { key: "subscriptions", icon: "list", label: "订阅", title: "订阅" },
   { key: "calendar", icon: "calendar", label: "日历", title: "日历" },
   { key: "statistics", icon: "statistics", label: "统计", title: "统计" },
   { key: "settings", icon: "settings", label: "设置", title: "设置" },

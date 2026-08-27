@@ -6,9 +6,13 @@ const props = defineProps({
     type: String,
     default: "",
   },
+  type: {
+    type: String,
+    default: "date", // 'date' | 'month'
+  },
   placeholder: {
     type: String,
-    default: "选择日期",
+    default: "",
   },
   disabled: {
     type: Boolean,
@@ -22,6 +26,10 @@ const props = defineProps({
     type: String,
     default: "",
   },
+  displayFormatter: {
+    type: Function,
+    default: null,
+  },
 });
 
 const emit = defineEmits(["update:modelValue", "change", "clear"]);
@@ -30,6 +38,7 @@ const isOpen = ref(false);
 const datePickerRef = ref(null);
 const dropdownRef = ref(null);
 const dropdownPos = ref({ top: 0, left: 0, placement: "bottom" });
+const viewMode = ref(props.type === "month" ? "month" : "date"); // 'date' | 'month'
 
 function getTodayParts() {
   const d = new Date();
@@ -47,20 +56,27 @@ function formatYearMonthDay(y, m, d) {
 const currentYear = ref(getTodayParts().year);
 const currentMonth = ref(getTodayParts().month);
 
-// 当外部 modelValue 变动时，若已选日期有效则同步日历面板的年月
+// 当外部 modelValue 变动时若格式有效则同步日历面板年月
 watch(
   () => props.modelValue,
   (val) => {
-    if (val && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
-      const [y, m] = val.split("-").map(Number);
-      currentYear.value = y;
-      currentMonth.value = m;
+    if (val) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(val) || /^\d{4}-\d{2}$/.test(val)) {
+        const [y, m] = val.split("-").map(Number);
+        currentYear.value = y;
+        currentMonth.value = m;
+      }
     }
   },
   { immediate: true },
 );
 
 const hasValue = computed(() => {
+  if (props.type === "month") {
+    const t = getTodayParts();
+    const thisMonthStr = `${t.year}-${String(t.month).padStart(2, "0")}`;
+    return Boolean(props.modelValue && props.modelValue !== thisMonthStr);
+  }
   return Boolean(props.modelValue && props.modelValue !== props.clearValue);
 });
 
@@ -68,8 +84,15 @@ const canClear = computed(() => {
   return props.clearable && !props.disabled && hasValue.value;
 });
 
+const defaultPlaceholder = computed(() => {
+  return props.placeholder || (props.type === "month" ? "选择月份" : "选择日期");
+});
+
 const displayLabel = computed(() => {
-  return props.modelValue || props.placeholder;
+  if (props.displayFormatter) {
+    return props.displayFormatter(props.modelValue);
+  }
+  return props.modelValue || defaultPlaceholder.value;
 });
 
 const weekdays = ["一", "二", "三", "四", "五", "六", "日"];
@@ -136,6 +159,17 @@ const calendarDays = computed(() => {
   return days;
 });
 
+function isThisMonth(m) {
+  const t = getTodayParts();
+  return t.year === currentYear.value && t.month === m;
+}
+
+function isMonthSelected(m) {
+  if (!props.modelValue) return false;
+  const parts = props.modelValue.split("-").map(Number);
+  return parts[0] === currentYear.value && parts[1] === m;
+}
+
 function updatePosition() {
   if (!isOpen.value || !datePickerRef.value) return;
   const rect = datePickerRef.value.getBoundingClientRect();
@@ -183,6 +217,7 @@ function updatePosition() {
 
 watch(isOpen, async (open) => {
   if (open) {
+    viewMode.value = props.type === "month" ? "month" : "date";
     await nextTick();
     updatePosition();
     window.addEventListener("scroll", updatePosition, true);
@@ -197,7 +232,8 @@ function toggleDropdown() {
   if (props.disabled) return;
   isOpen.value = !isOpen.value;
   if (isOpen.value) {
-    if (props.modelValue && /^\d{4}-\d{2}-\d{2}$/.test(props.modelValue)) {
+    viewMode.value = props.type === "month" ? "month" : "date";
+    if (props.modelValue && (/^\d{4}-\d{2}-\d{2}$/.test(props.modelValue) || /^\d{4}-\d{2}$/.test(props.modelValue))) {
       const [y, m] = props.modelValue.split("-").map(Number);
       currentYear.value = y;
       currentMonth.value = m;
@@ -250,17 +286,43 @@ function selectDay(dayItem, e) {
   closeDropdown();
 }
 
-function selectToday(e) {
+function selectMonth(m, e) {
+  if (e) {
+    e.stopPropagation();
+    e.preventDefault();
+  }
+  if (props.disabled) return;
+  currentMonth.value = m;
+  if (props.type === "month") {
+    const formattedMonth = `${currentYear.value}-${String(m).padStart(2, "0")}`;
+    emit("update:modelValue", formattedMonth);
+    emit("change", formattedMonth);
+    closeDropdown();
+  } else {
+    viewMode.value = "date";
+  }
+}
+
+function selectCurrent(e) {
   if (e) {
     e.stopPropagation();
     e.preventDefault();
   }
   if (props.disabled) return;
   const t = getTodayParts();
-  const todayStr = formatYearMonthDay(t.year, t.month, t.day);
-  emit("update:modelValue", todayStr);
-  emit("change", todayStr);
-  closeDropdown();
+  currentYear.value = t.year;
+  currentMonth.value = t.month;
+  if (props.type === "month") {
+    const monthStr = `${t.year}-${String(t.month).padStart(2, "0")}`;
+    emit("update:modelValue", monthStr);
+    emit("change", monthStr);
+    closeDropdown();
+  } else {
+    const todayStr = formatYearMonthDay(t.year, t.month, t.day);
+    emit("update:modelValue", todayStr);
+    emit("change", todayStr);
+    closeDropdown();
+  }
 }
 
 function handleClear(e) {
@@ -269,10 +331,21 @@ function handleClear(e) {
     e.preventDefault();
   }
   if (props.disabled) return;
-  emit("update:modelValue", props.clearValue);
-  emit("change", props.clearValue);
-  emit("clear");
-  closeDropdown();
+  if (props.type === "month") {
+    const t = getTodayParts();
+    const thisMonthStr = `${t.year}-${String(t.month).padStart(2, "0")}`;
+    currentYear.value = t.year;
+    currentMonth.value = t.month;
+    emit("update:modelValue", thisMonthStr);
+    emit("change", thisMonthStr);
+    emit("clear");
+    closeDropdown();
+  } else {
+    emit("update:modelValue", props.clearValue);
+    emit("change", props.clearValue);
+    emit("clear");
+    closeDropdown();
+  }
 }
 
 function handleKeydown(e) {
@@ -369,66 +442,119 @@ onBeforeUnmount(() => {
         >
           <!-- 日历头部导航 -->
           <div class="calendar-header">
-          <div class="nav-btn-group">
-            <button type="button" class="nav-btn" title="上一年" @click.stop="prevYear">
-              <svg width="12" height="12" viewBox="0 0 1024 1024" fill="currentColor">
-                <path d="M512 512l275.2-277.333333c12.8-12.8 12.8-32 0-44.8s-32-12.8-44.8 0L444.8 489.6c-12.8 12.8-12.8 32 0 44.8l297.6 299.733333c12.8 12.8 32 12.8 44.8 0s12.8-32 0-44.8L512 512z M277.333333 512l275.2-277.333333c12.8-12.8 12.8-32 0-44.8s-32-12.8-44.8 0L210.133333 489.6c-12.8 12.8-12.8 32 0 44.8l297.6 299.733333c12.8 12.8 32 12.8 44.8 0s12.8-32 0-44.8L277.333333 512z"/>
-              </svg>
-            </button>
-            <button type="button" class="nav-btn" title="上个月" @click.stop="prevMonth">
-              <svg width="12" height="12" viewBox="0 0 1024 1024" fill="currentColor">
-                <path d="M640 768a32 32 0 0 1-22.6-9.4l-320-320a32 32 0 0 1 0-45.2l320-320a32 32 0 1 1 45.2 45.2L387.2 512l275.4 275.4A32 32 0 0 1 640 768z" />
-              </svg>
-            </button>
+            <!-- 日期模式下的头部 -->
+            <template v-if="viewMode === 'date'">
+              <div class="nav-btn-group">
+                <button type="button" class="nav-btn" title="上一年" @click.stop="prevYear">
+                  <svg width="12" height="12" viewBox="0 0 1024 1024" fill="currentColor">
+                    <path d="M512 512l275.2-277.333333c12.8-12.8 12.8-32 0-44.8s-32-12.8-44.8 0L444.8 489.6c-12.8 12.8-12.8 32 0 44.8l297.6 299.733333c12.8 12.8 32 12.8 44.8 0s12.8-32 0-44.8L512 512z M277.333333 512l275.2-277.333333c12.8-12.8 12.8-32 0-44.8s-32-12.8-44.8 0L210.133333 489.6c-12.8 12.8-12.8 32 0 44.8l297.6 299.733333c12.8 12.8 32 12.8 44.8 0s12.8-32 0-44.8L277.333333 512z"/>
+                  </svg>
+                </button>
+                <button type="button" class="nav-btn" title="上个月" @click.stop="prevMonth">
+                  <svg width="12" height="12" viewBox="0 0 1024 1024" fill="currentColor">
+                    <path d="M640 768a32 32 0 0 1-22.6-9.4l-320-320a32 32 0 0 1 0-45.2l320-320a32 32 0 1 1 45.2 45.2L387.2 512l275.4 275.4A32 32 0 0 1 640 768z" />
+                  </svg>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                class="calendar-title-btn"
+                title="选择月份"
+                @click.stop="viewMode = 'month'"
+              >
+                {{ currentYear }}年 {{ currentMonth }}月
+                <span class="title-arrow">▾</span>
+              </button>
+
+              <div class="nav-btn-group">
+                <button type="button" class="nav-btn" title="下个月" @click.stop="nextMonth">
+                  <svg width="12" height="12" viewBox="0 0 1024 1024" fill="currentColor">
+                    <path d="M384 768a32 32 0 0 1-22.6-54.6L636.8 512 361.4 236.6a32 32 0 1 1 45.2-45.2l320 320a32 32 0 0 1 0 45.2l-320 320a32 32 0 0 1-22.6 9.4z" />
+                  </svg>
+                </button>
+                <button type="button" class="nav-btn" title="下一年" @click.stop="nextYear">
+                  <svg width="12" height="12" viewBox="0 0 1024 1024" fill="currentColor">
+                    <path d="M444.8 512L169.6 234.666667c-12.8-12.8-12.8-32 0-44.8s32-12.8 44.8 0l297.6 299.733333c12.8 12.8 12.8 32 0 44.8l-297.6 299.733333c-12.8 12.8-32 12.8-44.8 0s-12.8-32 0-44.8L444.8 512z M679.466667 512L404.266667 234.666667c-12.8-12.8-12.8-32 0-44.8s32-12.8 44.8 0l297.6 299.733333c12.8 12.8 12.8 32 0 44.8l-297.6 299.733333c-12.8 12.8-32 12.8-44.8 0s-12.8-32 0-44.8L679.466667 512z"/>
+                  </svg>
+                </button>
+              </div>
+            </template>
+
+            <!-- 月份模式下的头部 -->
+            <template v-else>
+              <button type="button" class="nav-btn" title="上一年" @click.stop="prevYear">
+                <svg width="12" height="12" viewBox="0 0 1024 1024" fill="currentColor">
+                  <path d="M512 512l275.2-277.333333c12.8-12.8 12.8-32 0-44.8s-32-12.8-44.8 0L444.8 489.6c-12.8 12.8-12.8 32 0 44.8l297.6 299.733333c12.8 12.8 32 12.8 44.8 0s12.8-32 0-44.8L512 512z M277.333333 512l275.2-277.333333c12.8-12.8 12.8-32 0-44.8s-32-12.8-44.8 0L210.133333 489.6c-12.8 12.8-12.8 32 0 44.8l297.6 299.733333c12.8 12.8 32 12.8 44.8 0s12.8-32 0-44.8L277.333333 512z"/>
+                </svg>
+              </button>
+
+              <div class="calendar-title">
+                {{ currentYear }}年
+              </div>
+
+              <button type="button" class="nav-btn" title="下一年" @click.stop="nextYear">
+                <svg width="12" height="12" viewBox="0 0 1024 1024" fill="currentColor">
+                  <path d="M444.8 512L169.6 234.666667c-12.8-12.8-12.8-32 0-44.8s32-12.8 44.8 0l297.6 299.733333c12.8 12.8 12.8 32 0 44.8l-297.6 299.733333c-12.8 12.8-32 12.8-44.8 0s-12.8-32 0-44.8L444.8 512z M679.466667 512L404.266667 234.666667c-12.8-12.8-12.8-32 0-44.8s32-12.8 44.8 0l297.6 299.733333c12.8 12.8 12.8 32 0 44.8l-297.6 299.733333c-12.8 12.8-32 12.8-44.8 0s-12.8-32 0-44.8L679.466667 512z"/>
+                </svg>
+              </button>
+            </template>
           </div>
 
-          <div class="calendar-title">
-            {{ currentYear }}年 {{ currentMonth }}月
-          </div>
+          <!-- 日期视图 -->
+          <template v-if="viewMode === 'date'">
+            <!-- 星期标题行 -->
+            <div class="calendar-weekdays">
+              <span v-for="w in weekdays" :key="w" class="weekday-cell">{{ w }}</span>
+            </div>
 
-          <div class="nav-btn-group">
-            <button type="button" class="nav-btn" title="下个月" @click.stop="nextMonth">
-              <svg width="12" height="12" viewBox="0 0 1024 1024" fill="currentColor">
-                <path d="M384 768a32 32 0 0 1-22.6-54.6L636.8 512 361.4 236.6a32 32 0 1 1 45.2-45.2l320 320a32 32 0 0 1 0 45.2l-320 320a32 32 0 0 1-22.6 9.4z" />
-              </svg>
+            <!-- 日期网格 -->
+            <div class="calendar-grid">
+              <button
+                v-for="d in calendarDays"
+                :key="d.dateStr"
+                type="button"
+                class="day-cell"
+                :class="{
+                  'is-current-month': d.isCurrentMonth,
+                  'is-other-month': !d.isCurrentMonth,
+                  'is-today': d.isToday,
+                  'is-selected': d.isSelected,
+                }"
+                @click.stop="selectDay(d, $event)"
+              >
+                {{ d.day }}
+              </button>
+            </div>
+          </template>
+
+          <!-- 月份视图 (4列 x 3行) -->
+          <template v-else>
+            <div class="calendar-month-grid">
+              <button
+                v-for="m in 12"
+                :key="m"
+                type="button"
+                class="month-cell"
+                :class="{
+                  'is-this-month': isThisMonth(m),
+                  'is-selected': isMonthSelected(m),
+                }"
+                @click.stop="selectMonth(m, $event)"
+              >
+                <span class="month-text">{{ m }}月</span>
+                <span v-if="isThisMonth(m) && !isMonthSelected(m)" class="this-month-dot" title="本月"></span>
+              </button>
+            </div>
+          </template>
+
+          <!-- 日历快捷底部栏 -->
+          <div class="calendar-footer">
+            <button type="button" class="quick-btn" @click.stop="selectCurrent">
+              {{ type === 'month' ? '本月' : '今天' }}
             </button>
-            <button type="button" class="nav-btn" title="下一年" @click.stop="nextYear">
-              <svg width="12" height="12" viewBox="0 0 1024 1024" fill="currentColor">
-                <path d="M444.8 512L169.6 234.666667c-12.8-12.8-12.8-32 0-44.8s32-12.8 44.8 0l297.6 299.733333c12.8 12.8 12.8 32 0 44.8l-297.6 299.733333c-12.8 12.8-32 12.8-44.8 0s-12.8-32 0-44.8L444.8 512z M679.466667 512L404.266667 234.666667c-12.8-12.8-12.8-32 0-44.8s32-12.8 44.8 0l297.6 299.733333c12.8 12.8 12.8 32 0 44.8l-297.6 299.733333c-12.8 12.8-32 12.8-44.8 0s-12.8-32 0-44.8L679.466667 512z"/>
-              </svg>
-            </button>
+            <button v-if="canClear" type="button" class="quick-btn clear" @click.stop="handleClear">清除</button>
           </div>
-        </div>
-
-        <!-- 星期标题行 -->
-        <div class="calendar-weekdays">
-          <span v-for="w in weekdays" :key="w" class="weekday-cell">{{ w }}</span>
-        </div>
-
-        <!-- 日期网格 -->
-        <div class="calendar-grid">
-          <button
-            v-for="d in calendarDays"
-            :key="d.dateStr"
-            type="button"
-            class="day-cell"
-            :class="{
-              'is-current-month': d.isCurrentMonth,
-              'is-other-month': !d.isCurrentMonth,
-              'is-today': d.isToday,
-              'is-selected': d.isSelected,
-            }"
-            @click.stop="selectDay(d, $event)"
-          >
-            {{ d.day }}
-          </button>
-        </div>
-
-        <!-- 日历快捷底部栏 -->
-        <div class="calendar-footer">
-          <button type="button" class="quick-btn" @click.stop="selectToday">今天</button>
-          <button v-if="canClear" type="button" class="quick-btn clear" @click.stop="handleClear">清除</button>
-        </div>
       </div>
     </transition>
     </Teleport>
@@ -561,6 +687,31 @@ onBeforeUnmount(() => {
   color: var(--text);
 }
 
+.calendar-title-btn {
+  border: none;
+  background: transparent;
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.calendar-title-btn:hover {
+  background-color: var(--card-2);
+  color: var(--primary);
+}
+
+.title-arrow {
+  font-size: 10px;
+  color: var(--muted);
+}
+
 .nav-btn-group {
   display: flex;
   align-items: center;
@@ -642,6 +793,58 @@ onBeforeUnmount(() => {
   background-color: var(--primary) !important;
   color: #ffffff !important;
   font-weight: 600;
+}
+
+/* 月份 4x3 网格 */
+.calendar-month-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.month-cell {
+  position: relative;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: var(--card-2);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.month-cell:hover:not(.is-selected) {
+  border-color: var(--border);
+  color: var(--primary);
+}
+
+.month-cell.is-this-month:not(.is-selected) {
+  border-color: var(--amber);
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.month-cell.is-selected {
+  background: var(--primary) !important;
+  color: #ffffff !important;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.3);
+}
+
+.this-month-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--amber);
 }
 
 .calendar-footer {

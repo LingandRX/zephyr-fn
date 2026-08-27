@@ -3,6 +3,7 @@
 import { ref, computed, watch, nextTick, onMounted, onActivated, onBeforeUnmount } from "vue";
 import { getCalendar } from "../api.js";
 import { toast } from "../ui.js";
+import CustomDatePicker from "../components/CustomDatePicker.vue";
 
 const now = new Date();
 const calYear = ref(now.getFullYear());
@@ -14,21 +15,26 @@ const detailsVisible = ref(false);
 const detailsVisibilityReady = ref(false);
 let detailsObserver = null;
 
-// ===== 年月选择器状态 =====
-const showYearMonthPicker = ref(false);
-const pickerYear = ref(calYear.value);
-const yearWheelRef = ref(null);
-const months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+// 格式化顶部日历年月显示
+function formatCalHeader(val) {
+  if (!val) return `${calYear.value} 年 ${calMonth.value} 月`;
+  const [y, m] = val.split("-").map(Number);
+  return `${y} 年 ${m} 月`;
+}
 
-// 生成前后各 30 年的年份列表供滚轮选择
-const yearRange = computed(() => {
-  const current = now.getFullYear();
-  const start = current - 30;
-  const end = current + 30;
-  const list = [];
-  for (let y = start; y <= end; y++) list.push(y);
-  return list;
+const calendarPickerDate = computed({
+  get: () => `${calYear.value}-${String(calMonth.value).padStart(2, "0")}`,
+  set: (val) => {
+    if (!val) return;
+    const [y, m] = val.split("-").map(Number);
+    const monthChanged = calYear.value !== y || calMonth.value !== m;
+    calYear.value = y;
+    calMonth.value = m;
+    selectedDateStr.value = `${y}-${String(m).padStart(2, "0")}-01`;
+    if (monthChanged) {
+      loadMonth();
+    }
+  },
 });
 
 // 6 行 7 列 = 42 格
@@ -167,6 +173,7 @@ function prevMonth(delta) {
   calMonth.value += delta;
   if (calMonth.value < 1) { calMonth.value = 12; calYear.value--; }
   if (calMonth.value > 12) { calMonth.value = 1; calYear.value++; }
+  selectedDateStr.value = `${calYear.value}-${String(calMonth.value).padStart(2, "0")}-01`;
   loadMonth();
 }
 
@@ -174,100 +181,8 @@ function goToday() {
   const n = new Date();
   calYear.value = n.getFullYear();
   calMonth.value = n.getMonth() + 1;
-  loadMonth();
-}
-
-// ===== 年月选择器方法 =====
-const ITEM_WIDTH = 68; // 每个年份项的宽度
-
-function toggleYearMonthPicker() {
-  if (!showYearMonthPicker.value) {
-    pickerYear.value = calYear.value;
-    showYearMonthPicker.value = true;
-    scrollToCurrentYear();
-  } else {
-    showYearMonthPicker.value = false;
-  }
-}
-
-function scrollToCurrentYear(smooth = false) {
-  nextTick(() => {
-    const el = yearWheelRef.value;
-    if (!el) return;
-    const index = yearRange.value.indexOf(pickerYear.value);
-    if (index !== -1) {
-      // 瞬间精确定位，不带任何动画或滚动过渡
-      const scrollLeft = index * ITEM_WIDTH;
-      if (smooth) {
-        el.scrollTo({ left: scrollLeft, behavior: "smooth" });
-      } else {
-        // 关闭平滑滚动属性，瞬间赋值后恢复
-        const oldBehavior = el.style.scrollBehavior;
-        el.style.scrollBehavior = "auto";
-        el.scrollLeft = scrollLeft;
-        el.style.scrollBehavior = oldBehavior;
-      }
-    }
-  });
-}
-
-function selectYear(y) {
-  pickerYear.value = y;
-  scrollToCurrentYear(true);
-}
-
-let scrollTimer = null;
-function onYearWheelScroll(e) {
-  // 防抖检测当前最居中的年份
-  clearTimeout(scrollTimer);
-  scrollTimer = setTimeout(() => {
-    const el = yearWheelRef.value;
-    if (!el) return;
-    const containerRect = el.getBoundingClientRect();
-    const centerX = containerRect.left + containerRect.width / 2;
-    
-    const items = el.querySelectorAll('.wheel-item');
-    let closestYear = pickerYear.value;
-    let minDistance = Infinity;
-
-    items.forEach(item => {
-      const rect = item.getBoundingClientRect();
-      const itemCenterX = rect.left + rect.width / 2;
-      const distance = Math.abs(centerX - itemCenterX);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestYear = parseInt(item.getAttribute('data-year'), 10);
-      }
-    });
-
-    if (closestYear && closestYear !== pickerYear.value) {
-      pickerYear.value = closestYear;
-    }
-  }, 50);
-}
-
-function closeYearMonthPicker() {
-  showYearMonthPicker.value = false;
-}
-
-function pickerYearDelta(delta) {
-  pickerYear.value += delta;
-  scrollToCurrentYear(true);
-}
-
-function selectMonth(month) {
-  calYear.value = pickerYear.value;
-  calMonth.value = month;
-  showYearMonthPicker.value = false;
-  loadMonth();
-}
-
-function pickerGoToday() {
-  const n = new Date();
-  pickerYear.value = n.getFullYear();
-  calYear.value = n.getFullYear();
-  calMonth.value = n.getMonth() + 1;
-  showYearMonthPicker.value = false;
+  const todayStr = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  selectedDateStr.value = todayStr;
   loadMonth();
 }
 
@@ -283,97 +198,19 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   <div class="page cal-page">
     <div class="cal-head">
       <div class="cal-nav">
-        <button class="btn btn-sm" @click="prevMonth(-1)">‹</button>
+        <button class="btn btn-sm" title="上一月" @click="prevMonth(-1)">‹</button>
         <div class="cal-title-wrap">
-          <button
-            class="cal-title-btn"
-            type="button"
-            :class="{ active: showYearMonthPicker }"
-            @click="toggleYearMonthPicker"
-          >
-            <span>{{ calYear }} 年 {{ calMonth }} 月</span>
-            <span class="picker-arrow" :class="{ open: showYearMonthPicker }">▾</span>
-          </button>
-
-          <!-- 年月选择器弹窗 (基于遮罩与气泡定位) -->
-          <div v-if="showYearMonthPicker" class="picker-backdrop" @click="closeYearMonthPicker"></div>
-          <Transition name="picker-pop">
-            <div v-if="showYearMonthPicker" class="year-month-picker" role="dialog" aria-label="选择年份和月份">
-              <!-- iOS 风格横向滚轮年份选择器 -->
-              <div class="picker-wheel-wrap">
-                <button
-                  class="picker-nav-btn prev-btn"
-                  type="button"
-                  title="上一年"
-                  @click="pickerYearDelta(-1)"
-                >
-                  ‹
-                </button>
-                <div
-                  ref="yearWheelRef"
-                  class="picker-year-wheel"
-                  @scroll="onYearWheelScroll"
-                >
-                  <div class="wheel-spacer"></div>
-                  <div
-                    v-for="y in yearRange"
-                    :key="y"
-                    class="wheel-item"
-                    :data-year="y"
-                    :class="{ active: y === pickerYear }"
-                    @click="selectYear(y)"
-                  >
-                    {{ y }}
-                  </div>
-                  <div class="wheel-spacer"></div>
-                </div>
-                <button
-                  class="picker-nav-btn next-btn"
-                  type="button"
-                  title="下一年"
-                  @click="pickerYearDelta(1)"
-                >
-                  ›
-                </button>
-              </div>
-
-              <!-- 月份网格 (4列x3行) -->
-              <div class="picker-grid">
-                <button
-                  v-for="(m, idx) in months"
-                  :key="m"
-                  type="button"
-                  class="picker-month-btn"
-                  :class="{
-                    'is-selected': pickerYear === calYear && m === calMonth,
-                    'is-current-month': pickerYear === now.getFullYear() && m === (now.getMonth() + 1)
-                  }"
-                  @click="selectMonth(m)"
-                >
-                  <span class="m-text">{{ monthNames[idx] }}</span>
-                  <span
-                    v-if="pickerYear === now.getFullYear() && m === (now.getMonth() + 1)"
-                    class="current-month-badge"
-                    title="本月"
-                  >今</span>
-                </button>
-              </div>
-
-              <!-- 底部操作栏（已去除emoji/icon） -->
-              <div class="picker-footer">
-                <button
-                  class="picker-quick-btn"
-                  type="button"
-                  @click="pickerGoToday"
-                >
-                  回到本月 ({{ now.getFullYear() }}年{{ now.getMonth() + 1 }}月)
-                </button>
-              </div>
-            </div>
-          </Transition>
+          <CustomDatePicker
+            v-model="calendarPickerDate"
+            type="month"
+            :clearable="true"
+            :display-formatter="formatCalHeader"
+            placeholder="选择月份"
+            @clear="goToday"
+          />
         </div>
-        <button class="btn btn-sm" @click="prevMonth(1)">›</button>
-        <button class="btn btn-sm btn-ghost today-btn" @click="goToday">今天</button>
+        <button class="btn btn-sm" title="下一月" @click="prevMonth(1)">›</button>
+        <!-- <button class="btn btn-sm btn-ghost today-btn" @click="goToday">今天</button> -->
       </div>
       <div class="cal-legend">
         <span class="legend-item"><i class="dot dot-due"></i>扣费</span>
@@ -519,341 +356,23 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   position: relative;
   display: inline-flex;
   align-items: center;
+  min-width: 140px;
 }
-.cal-title-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  margin: 0 2px;
-  font-size: var(--fs-md);
+.cal-title-wrap :deep(.custom-date-picker-trigger) {
+  height: 32px;
+  padding: 0 10px;
   font-weight: 600;
-  min-width: 130px;
-  text-align: center;
+  font-size: var(--fs-md);
   background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 4px 10px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  color: var(--text);
-  font: inherit;
-  user-select: none;
 }
-.cal-title-btn:hover,
-.cal-title-btn.active {
+.cal-title-wrap :deep(.custom-date-picker-trigger:hover) {
   background: var(--bg-2);
-  border-color: var(--primary);
-  color: var(--primary);
-}
-.picker-arrow {
-  font-size: 10px;
-  color: var(--muted);
-  transition: transform 0.2s ease;
-}
-.picker-arrow.open {
-  transform: rotate(180deg);
-  color: var(--primary);
 }
 .today-btn {
   font-size: var(--fs-xs);
   padding: 4px 10px;
 }
 
-/* 遮罩层 */
-.picker-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 99;
-  background: rgba(0, 0, 0, 0.04);
-  backdrop-filter: blur(0.5px);
-}
-
-/* 年月选择器现代化气泡卡片 */
-.year-month-picker {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.16), 0 6px 16px -4px rgba(0, 0, 0, 0.08);
-  padding: 12px 14px;
-  z-index: 100;
-  width: 280px;
-  box-sizing: border-box;
-  transform-origin: top left;
-}
-
-/* 移动端适配：年月选择器 */
-@media (max-width: 860px) {
-  .year-month-picker {
-    /* 在移动端居中显示，避免溢出 */
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: min(280px, calc(100vw - 32px));
-    max-height: calc(100vh - 48px);
-    overflow-y: auto;
-    transform-origin: center center;
-  }
-  
-  /* 调整弹出动画 */
-  .picker-pop-enter-from,
-  .picker-pop-leave-to {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.92);
-  }
-  
-  /* 月份按钮增大触摸区域 */
-  .picker-month-btn {
-    padding: 12px 0;
-    min-height: 44px; /* iOS 推荐最小触摸目标 */
-  }
-  
-  /* 年份滚轮触摸优化 */
-  .picker-year-wheel {
-    -webkit-overflow-scrolling: touch;
-    scroll-padding: 0 calc(50% - 34px);
-  }
-  
-  .wheel-item {
-    min-height: 44px;
-    -webkit-tap-highlight-color: transparent;
-  }
-  
-  /* 导航按钮增大触摸区域 */
-  .picker-nav-btn {
-    width: 32px;
-    height: 32px;
-  }
-  
-  /* 底部按钮增大触摸区域 */
-  .picker-quick-btn {
-    padding: 10px 12px;
-    min-height: 44px;
-  }
-}
-
-@media (max-width: 360px) {
-  .year-month-picker {
-    padding: 10px 12px;
-    border-radius: 12px;
-  }
-  
-  .picker-grid {
-    gap: 4px;
-  }
-  
-  .picker-month-btn {
-    font-size: 11px;
-    padding: 10px 0;
-  }
-}
-
-/* iOS 风格年份滚轮容器 */
-.picker-wheel-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-  margin-bottom: 12px;
-  padding: 4px 0 10px;
-  border-bottom: 1px solid var(--border);
-  overflow: hidden;
-}
-
-.picker-year-wheel {
-  position: relative;
-  display: flex;
-  align-items: center;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  width: 100%;
-  padding: 4px 0;
-  z-index: 2;
-  mask-image: linear-gradient(to right, transparent 0%, black 20%, black 80%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 20%, black 80%, transparent 100%);
-}
-.picker-year-wheel::-webkit-scrollbar {
-  display: none;
-}
-
-.wheel-spacer {
-  flex: 0 0 calc(50% - 34px);
-  pointer-events: none;
-}
-
-.wheel-item {
-  flex: 0 0 68px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--muted);
-  scroll-snap-align: center;
-  cursor: pointer;
-  user-select: none;
-  border-radius: 6px;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.wheel-item:hover:not(.active) {
-  color: var(--text);
-  background: var(--bg-2);
-}
-
-/* 选中的年份自带高亮背景边框与加粗字号，完美绑定 */
-.wheel-item.active {
-  color: var(--primary);
-  font-size: 16px;
-  font-weight: 700;
-  background: rgba(var(--primary-rgb), 0.08);
-  border: 1px solid rgba(var(--primary-rgb), 0.3);
-  box-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.15);
-}
-
-.picker-nav-btn {
-  position: relative;
-  z-index: 3;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  background: var(--card);
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-}
-
-.picker-nav-btn:hover {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: #fff;
-  transform: scale(1.08);
-}
-
-/* 月份 4x3 网格 */
-.picker-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  margin-bottom: 10px;
-}
-
-.picker-month-btn {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 9px 0;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: var(--bg-2);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text);
-  transition: all 0.15s ease;
-  user-select: none;
-}
-
-.picker-month-btn:hover:not(.is-selected) {
-  background: rgba(var(--primary-rgb), 0.08);
-  border-color: rgba(var(--primary-rgb), 0.3);
-  color: var(--primary);
-}
-
-/* 选中当前查看的月份 */
-.picker-month-btn.is-selected {
-  background: var(--primary);
-  color: #ffffff !important;
-  font-weight: 600;
-  border-color: var(--primary);
-  box-shadow: 0 4px 10px rgba(var(--primary-rgb), 0.35);
-}
-
-/* 真实当月的高亮/角标 */
-.picker-month-btn.is-current-month:not(.is-selected) {
-  border-color: var(--amber);
-  color: var(--amber);
-  background: rgba(245, 158, 11, 0.06);
-  font-weight: 600;
-}
-
-.current-month-badge {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  font-size: 9px;
-  line-height: 1;
-  padding: 1px 3px;
-  border-radius: 4px;
-  background: var(--amber);
-  color: #fff;
-  font-weight: 600;
-  transform: scale(0.85);
-}
-
-.picker-month-btn.is-selected .current-month-badge {
-  background: rgba(255, 255, 255, 0.3);
-  color: #fff;
-}
-
-/* 底部快速回到今天 */
-.picker-footer {
-  display: flex;
-  justify-content: stretch;
-  border-top: 1px solid var(--border);
-  padding-top: 8px;
-}
-
-.picker-quick-btn {
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-2);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.picker-quick-btn:hover {
-  background: var(--card);
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-/* 弹出动画 */
-.picker-pop-enter-active,
-.picker-pop-leave-active {
-  transition: opacity 0.16s ease, transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.picker-pop-enter-from,
-.picker-pop-leave-to {
-  opacity: 0;
-  transform: translateY(-6px) scale(0.96);
-}
 .cal-legend {
   display: flex;
   align-items: center;

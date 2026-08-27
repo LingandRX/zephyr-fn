@@ -19,7 +19,7 @@ const server = await createServer({
 });
 
 const TITLES = {
-  subscriptions: "订阅列表",
+  subscriptions: "订阅",
   calendar: "日历",
   statistics: "统计",
   settings: "设置",
