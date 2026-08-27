@@ -41,8 +41,20 @@ const calendarPickerDate = computed({
 const grid = ref([]);
 
 async function loadMonth() {
+  const y = calYear.value;
+  const m = calMonth.value;
+  const prevY = m === 1 ? y - 1 : y;
+  const prevM = m === 1 ? 12 : m - 1;
+  const nextY = m === 12 ? y + 1 : y;
+  const nextM = m === 12 ? 1 : m + 1;
+
   try {
-    events.value = await getCalendar(calYear.value, calMonth.value);
+    const [prevEvents, curEvents, nextEvents] = await Promise.all([
+      getCalendar(prevY, prevM),
+      getCalendar(y, m),
+      getCalendar(nextY, nextM),
+    ]);
+    events.value = [...prevEvents, ...curEvents, ...nextEvents];
   } catch (err) {
     toast(err.message, "err");
     events.value = [];
@@ -69,11 +81,15 @@ function buildGrid() {
   for (let i = 0; i < startDow; i++) {
     const d = new Date(year, month - 1, -startDow + i + 1);
     const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const dayEvents = byDate[ds] || [];
     cells.push({
       day: d.getDate(),
       dateStr: ds,
       other: true,
-      events: byDate[ds] || [],
+      today: ds === todayStr,
+      events: dayEvents,
+      visibleEvents: dayEvents.slice(0, 2),
+      more: dayEvents.length > 2 ? dayEvents.length - 2 : 0,
     });
   }
   // 当月
@@ -95,11 +111,15 @@ function buildGrid() {
   const nextMonthNum = month === 12 ? 1 : month + 1;
   for (let i = 1; cells.length < 42; i++) {
     const ds = `${nextMonthYear}-${String(nextMonthNum).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+    const dayEvents = byDate[ds] || [];
     cells.push({
       day: i,
       dateStr: ds,
       other: true,
-      events: byDate[ds] || [],
+      today: ds === todayStr,
+      events: dayEvents,
+      visibleEvents: dayEvents.slice(0, 2),
+      more: dayEvents.length > 2 ? dayEvents.length - 2 : 0,
     });
   }
 
@@ -265,7 +285,7 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
             </div>
 
             <!-- 移动端：精致圆点模式 -->
-            <div class="mobile-dots" v-if="!c.other && c.events && c.events.length">
+            <div class="mobile-dots" v-if="c.events && c.events.length">
               <span
                 v-for="(e, j) in c.events.slice(0, 3)"
                 :key="j"
