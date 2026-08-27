@@ -14,7 +14,9 @@ function loadTheme() {
 
 function getSystemTheme() {
   if (typeof window === "undefined") return "dark";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
 }
 
 function applyTheme(theme) {
@@ -73,5 +75,7 @@ export function toast(msg, type = "ok") {
   toastState.type = type;
   toastState.visible = true;
   clearTimeout(_t);
-  _t = setTimeout(() => { toastState.visible = false; }, 2600);
+  _t = setTimeout(() => {
+    toastState.visible = false;
+  }, 2600);
 }

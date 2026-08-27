@@ -9,7 +9,10 @@
 export const API_BASE = import.meta.env.DEV ? "/api" : "/app/subscription/api";
 
 export async function api(path, options = {}) {
-  const opts = { method: options.method || "GET", headers: options.headers || {} };
+  const opts = {
+    method: options.method || "GET",
+    headers: options.headers || {},
+  };
   if (options.body !== undefined) {
     opts.headers["Content-Type"] = "application/json";
     opts.body = JSON.stringify(options.body);
@@ -46,24 +49,34 @@ export function download(path, filename) {
 
 // ---------- 订阅 ----------
 export const getSubscriptions = () => api("/subscriptions");
-export const createSubscription = (body) => api("/subscriptions", { method: "POST", body });
-export const updateSubscription = (id, body) => api(`/subscriptions/${id}`, { method: "PUT", body });
-export const deleteSubscription = (id) => api(`/subscriptions/${id}`, { method: "DELETE" });
-export const renewSubscription = (id) => api(`/subscriptions/${id}/renew`, { method: "POST" });
+export const createSubscription = (body) =>
+  api("/subscriptions", { method: "POST", body });
+export const updateSubscription = (id, body) =>
+  api(`/subscriptions/${id}`, { method: "PUT", body });
+export const deleteSubscription = (id) =>
+  api(`/subscriptions/${id}`, { method: "DELETE" });
+export const renewSubscription = (id) =>
+  api(`/subscriptions/${id}/renew`, { method: "POST" });
 
 // ---------- 分类 ----------
 export const getCategories = () => api("/categories");
-export const createCategory = (body) => api("/categories", { method: "POST", body });
-export const deleteCategory = (id) => api(`/categories/${id}`, { method: "DELETE" });
+export const createCategory = (body) =>
+  api("/categories", { method: "POST", body });
+export const deleteCategory = (id) =>
+  api(`/categories/${id}`, { method: "DELETE" });
 
 // ---------- 统计 / 日历 / 设置 / 提醒 ----------
-export const getStatistics = (mode = "nominal") => api(`/statistics?mode=${mode}`);
-export const getCalendar = (year, month) => api(`/calendar?year=${year}&month=${month}`);
+export const getStatistics = (mode = "nominal") =>
+  api(`/statistics?mode=${mode}`);
+export const getCalendar = (year, month) =>
+  api(`/calendar?year=${year}&month=${month}`);
 export const getSettings = () => api("/settings");
 export const saveSettings = (body) => api("/settings", { method: "PUT", body });
 export const getUpcomingNotifications = () => api("/notifications/upcoming");
-export const testEmailNotification = (body) => api("/notifications/test-email", { method: "POST", body });
-export const testPushPlusNotification = (body) => api("/notifications/test-pushplus", { method: "POST", body });
+export const testEmailNotification = (body) =>
+  api("/notifications/test-email", { method: "POST", body });
+export const testPushPlusNotification = (body) =>
+  api("/notifications/test-pushplus", { method: "POST", body });
 
 // ---------- 日志 ----------
 export const getLogTail = (lines = 200) => api(`/logs/tail?lines=${lines}`);
@@ -78,6 +91,14 @@ export function downloadBackupFile(name) {
   download(`/backup/files/download?name=${encodeURIComponent(name)}`, name);
 }
 export const importJson = (text) =>
-  api("/backup/import-json", { method: "POST", text, headers: { "Content-Type": "application/json" } });
+  api("/backup/import-json", {
+    method: "POST",
+    text,
+    headers: { "Content-Type": "application/json" },
+  });
 export const importCsv = (text) =>
-  api("/backup/import-csv", { method: "POST", text, headers: { "Content-Type": "text/csv" } });
+  api("/backup/import-csv", {
+    method: "POST",
+    text,
+    headers: { "Content-Type": "text/csv" },
+  });

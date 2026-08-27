@@ -2,9 +2,18 @@
 
 export const CURRENCY_SYMBOL = { CNY: "¥", USD: "$", HKD: "HK$" };
 export const PERIOD_LABEL = {
-  month: "月付", quarter: "季付", year: "年付", once: "一次性", custom: "自定义",
+  month: "月付",
+  quarter: "季付",
+  year: "年付",
+  once: "一次性",
+  custom: "自定义",
 };
-export const CUSTOM_UNIT_LABEL = { day: "天", week: "周", month: "月", year: "年" };
+export const CUSTOM_UNIT_LABEL = {
+  day: "天",
+  week: "周",
+  month: "月",
+  year: "年",
+};
 
 export function fmtCents(cents, currency) {
   const sym = CURRENCY_SYMBOL[currency];
@@ -32,6 +41,9 @@ export function centsToYuan(c) {
 
 export function esc(s) {
   return String(s ?? "")
-    .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
