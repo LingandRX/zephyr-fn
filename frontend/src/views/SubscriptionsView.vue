@@ -7,6 +7,7 @@ import {
 import { fmtCents, daysLeft, PERIOD_LABEL, CUSTOM_UNIT_LABEL, yuanToCents, centsToYuan } from "../format.js";
 import { ui, toast, openNewSub } from "../ui.js";
 import CustomSelect from "../components/CustomSelect.vue";
+import CustomDatePicker from "../components/CustomDatePicker.vue";
 
 const subs = ref([]);
 const cats = ref([]);
@@ -543,9 +544,30 @@ onMounted(loadAll);
               <input v-model="form.auto_renew" type="checkbox" />
               <span>自动续费</span>
             </label>
-            <label class="field"><span>开始日期 *</span><input v-model="form.start_date" type="date" required /></label>
-            <label class="field"><span>首次付款日</span><input v-model="form.first_payment_date" type="date" /></label>
-            <label class="field span-2"><span>下次扣费日</span><input v-model="form.next_due_date" type="date" /></label>
+            <div class="field">
+              <span>开始日期 *</span>
+              <CustomDatePicker
+                v-model="form.start_date"
+                placeholder="选择开始日期"
+                :clearable="false"
+              />
+            </div>
+            <div class="field">
+              <span>首次付款日</span>
+              <CustomDatePicker
+                v-model="form.first_payment_date"
+                placeholder="首次付款日"
+                :clearable="true"
+              />
+            </div>
+            <div class="field span-2">
+              <span>下次扣费日</span>
+              <CustomDatePicker
+                v-model="form.next_due_date"
+                placeholder="下次扣费日"
+                :clearable="true"
+              />
+            </div>
             <label class="field span-2 notes-field">
               <span>备注</span>
               <textarea
@@ -1083,7 +1105,8 @@ onMounted(loadAll);
   /* 放大触控目标，字号不小于 16px 防止 iOS 自动缩放 */
   .form-grid input:not([type="checkbox"]),
   .form-grid select,
-  .form-grid :deep(.custom-select-trigger) {
+  .form-grid :deep(.custom-select-trigger),
+  .form-grid :deep(.custom-date-picker-trigger) {
     height: 44px;
     font-size: 16px;
   }
