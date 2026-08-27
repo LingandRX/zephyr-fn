@@ -1,11 +1,11 @@
 appname=subscription
-version=0.1.1
+version=0.1.2
 display_name=订阅管理
-desc=记录订阅服务、费用与到期时间，支持多用户、到期提醒与自动备份
+desc=记录订阅服务、费用与到期时间
 source=thirdparty
 platform=all
 
-maintainer=Your Name
+maintainer=雨霖铃
 maintainer_url=https://example.com
 
 os_min_version=1.2.0

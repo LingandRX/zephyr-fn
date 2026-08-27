@@ -50,7 +50,7 @@
 │   │   ├── email_sender.py   # SMTP 邮件
 │   │   ├── pushplus.py       # PushPlus 推送
 │   │   └── scheduler.py      # 每小时提醒 + 每日备份
-│   ├── www/                  # 前端产物目录（git 基线为 vanilla 原生版；打包前由 tools/build.sh 覆盖为 Vue 产物）
+│   ├── www/                  # 前端产物目录（git 基线为 vanilla 原生版；打包前由 build.sh 覆盖为 Vue 产物）
 │   └── ui/
 │       ├── config            # 统一网关入口（/app/subscription）
 │       └── images/           # 入口图标
@@ -116,14 +116,14 @@ python3 -m unittest discover -s tests -v
 
 ```bash
 # 1. 前置：构建 Vue 前端并同步到 app/www（同时清理 __pycache__）
-./tools/build.sh
+./build.sh
 
 # 2. 生成图标（如未生成）
 python3 tools/gen_icons.py
 
 # 3. 打包（需安装 fnpack，见 https://developer.fnnas.com/docs/cli/fnpack/）
 fnpack build
-# 产出 subscription.fpk；注意：打包前务必先运行 ./tools/build.sh，
+# 产出 subscription.fpk；注意：打包前务必先运行 ./build.sh，
 # 否则 app/www 不是 Vue 产物（git 中的 baseline 是 vanilla 原生版）
 
 # 4. 在飞牛 fnOS 设备上安装

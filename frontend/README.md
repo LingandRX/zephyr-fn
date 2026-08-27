@@ -79,7 +79,7 @@ npm run check:views
 ```bash
 ./dev.sh                           # 一键热更新开发（Vite dev 5173 + 后端 API 5001，支持 HMR）
 BUILD=1 ./dev.sh                   # 静态构建预览（构建后由后端直服，与线上一致）
-./tools/build.sh && fnpack build   # 构建产物同步到 app/www 后打包 fpk
+./build.sh && fnpack build         # 构建产物同步到 app/www 后打包 fpk
 ```
 
 ## 官方约束落实情况

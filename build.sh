@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # 打包前构建：将 Vue 前端产物同步到 app/www（fnOS 打包器直接收录 app/www）
 #
-#   ./tools/build.sh          # 完整流程：npm install(如缺) → vite build → 同步 app/www
+#   ./build.sh                # 完整流程：npm install(如缺) → vite build → 同步 app/www
 #   之后运行 fnpack build 即可产出 fpk。
 #
 # 注意：本脚本会覆盖 app/www（vanilla 原生版保留在 git 历史中，
 # 如需恢复执行：git checkout -- app/www）。
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")"
 
 command -v node >/dev/null || { echo "错误：打包前端需要 node/npm" >&2; exit 1; }
 if [ ! -d frontend/node_modules ]; then
