@@ -27,17 +27,16 @@ class RequestIdentity:
     is_local: bool = False
 
 
-# 管理员专属路径
-ADMIN_ONLY_PATHS = {
-    "/api/settings": "系统设置",
-    "/api/notifications/test-email": "测试邮件通知",
-    "/api/notifications/test-pushplus": "测试 PushPlus 通知",
-    "/api/backup": "全量备份",
-    "/api/backup/export-json": "全量 JSON 导出",
-    "/api/backup/files": "备份文件列表",
-    "/api/backup/files/download": "备份文件下载",
-    "/api/export/csv": "全量 CSV 导出",
-}
+# 管理员专属路径：前缀匹配（含子路径）或精确匹配
+_ADMIN_PREFIXES = (
+    "/api/settings",
+    "/api/backup",
+    "/api/export/",
+)
+_ADMIN_EXACT = frozenset({
+    "/api/notifications/test-email",
+    "/api/notifications/test-pushplus",
+})
 
 _SECRET_SETTING_FIELDS = ("smtp_password", "pushplus_token")
 
@@ -96,9 +95,13 @@ def parse_identity() -> None:
 
 def check_admin_only() -> None:
     """管理员专属路径权限校验。"""
-    protected = ADMIN_ONLY_PATHS.get(request.path)
-    if protected and not g.identity.is_admin:
-        raise ForbiddenError(f"仅管理员可访问{protected}")
+    path = request.path
+    is_protected = (
+        path in _ADMIN_EXACT
+        or any(path == p or path.startswith(p + "/") for p in _ADMIN_PREFIXES)
+    )
+    if is_protected and not g.identity.is_admin:
+        raise ForbiddenError("仅管理员可访问")
 
 
 def ensure_default_categories() -> None:
@@ -126,18 +129,23 @@ class GatewayPrefixMiddleware:
     def __init__(self, wsgi_app: Any, prefix: str, www_dir: Path) -> None:
         self.wsgi_app = wsgi_app
         self.prefix = prefix
-        self.www_dir = www_dir
+        self.www_dir = www_dir.resolve()
+        # 启动时一次性扫描，避免每请求 stat 文件系统
+        self._static_files: frozenset[str] = self._scan_static_files()
+
+    def _scan_static_files(self) -> frozenset[str]:
+        if not self.www_dir.is_dir():
+            return frozenset()
+        return frozenset(
+            "/" + p.relative_to(self.www_dir).as_posix()
+            for p in self.www_dir.rglob("*") if p.is_file()
+        )
 
     def _is_internal_path(self, path: str) -> bool:
         """判断剥离候选前缀后的路径是否确实是本应用内部路径。"""
         if path == "/" or path.startswith("/api/"):
             return True
-        root = self.www_dir.resolve()
-        rel = path.lstrip("/")
-        if not rel:
-            return True
-        target = (root / rel).resolve()
-        return is_path_within(root, target) and target.is_file()
+        return path in self._static_files
 
     def __call__(self, environ: dict, start_response) -> Any:
         path = environ.get("PATH_INFO") or "/"

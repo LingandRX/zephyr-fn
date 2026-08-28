@@ -108,10 +108,7 @@ def _register_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(ValueError)
     def handle_value_error(exc: ValueError) -> Response:
-        msg = str(exc)
-        if "已存在" in msg or "已达上限" in msg:
-            return error_response(msg, 409)
-        return error_response(msg, 400)
+        return error_response(str(exc), 400)
 
     @app.errorhandler(404)
     def handle_not_found(exc) -> Response:

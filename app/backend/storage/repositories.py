@@ -134,19 +134,17 @@ def update_subscription_fields(
     sub_id: str, user_id: str, updates: Mapping[str, Any]
 ) -> dict | None:
     """按字段白名单更新订阅；返回更新后的行，不存在返回 None。"""
+    row = db.session.get(Subscription, sub_id)
+    if row is None or row.user_id != user_id:
+        return None
     allowed = {k: v for k, v in updates.items() if k in SUBSCRIPTION_FIELDS}
     if not allowed:
-        return get_subscription_by_id(sub_id, user_id)
-    allowed["updated_at"] = now_utc()
-    result = db.session.execute(
-        update(Subscription)
-        .where(Subscription.id == sub_id, Subscription.user_id == user_id)
-        .values(**allowed)
-    )
+        return row.to_dict()
+    for k, v in allowed.items():
+        setattr(row, k, v)
+    row.updated_at = now_utc()
     db.session.commit()
-    if result.rowcount == 0:
-        return None
-    return get_subscription_by_id(sub_id, user_id)
+    return row.to_dict()
 
 
 def delete_subscription(sub_id: str, user_id: str) -> bool:
@@ -163,16 +161,15 @@ def delete_subscription(sub_id: str, user_id: str) -> bool:
 
 def renew_subscription(sub_id: str, user_id: str, next_due: str) -> dict | None:
     """推进续费：置 next_due_date 并复位生命周期/账单状态。"""
-    result = db.session.execute(
-        update(Subscription)
-        .where(Subscription.id == sub_id, Subscription.user_id == user_id)
-        .values(next_due_date=next_due, lifecycle="active",
-                billing_status="normal", updated_at=now_utc())
-    )
-    db.session.commit()
-    if result.rowcount == 0:
+    row = db.session.get(Subscription, sub_id)
+    if row is None or row.user_id != user_id:
         return None
-    return get_subscription_by_id(sub_id, user_id)
+    row.next_due_date = next_due
+    row.lifecycle = "active"
+    row.billing_status = "normal"
+    row.updated_at = now_utc()
+    db.session.commit()
+    return row.to_dict()
 
 
 def get_all_subscriptions_raw(user_id: str | None = None) -> list[dict]:
@@ -285,7 +282,8 @@ def insert_category(user_id: str, name: str, icon: str | None,
     except IntegrityError as exc:
         db.session.rollback()
         if "idx_cat_user_name" in str(exc) or "UNIQUE" in str(exc):
-            raise ValueError("分类已存在") from exc
+            from ..core.exceptions import ConflictError
+            raise ConflictError("分类已存在") from exc
         raise
     return row.to_dict()
 
@@ -303,7 +301,8 @@ def update_category(cat_id: str, user_id: str, updates: Mapping[str, Any]) -> di
     except IntegrityError as exc:
         db.session.rollback()
         if "idx_cat_user_name" in str(exc) or "UNIQUE" in str(exc):
-            raise ValueError("分类已存在") from exc
+            from ..core.exceptions import ConflictError
+            raise ConflictError("分类已存在") from exc
         raise
     return row.to_dict()
 
