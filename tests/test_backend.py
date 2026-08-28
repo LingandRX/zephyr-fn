@@ -295,38 +295,54 @@ class ServicesTests(unittest.TestCase):
 
 
 class StaticServeTests(unittest.TestCase):
-    """静态文件 MIME 映射（对齐 fnOS 官方 index.cgi 示例：css/js 带 charset）。"""
+    """静态文件 MIME 映射（Flask 版本使用 werkzeug 内置 MIME 检测）。"""
 
-    def test_mime_map_css_js_html(self):
-        import server
-        m = server.Handler._STATIC_MIME
-        self.assertEqual(m[".css"], "text/css; charset=utf-8")
-        self.assertEqual(m[".js"], "application/javascript; charset=utf-8")
-        self.assertEqual(m[".html"], "text/html; charset=utf-8")
-        self.assertEqual(m[".png"], "image/png")
-        self.assertEqual(m[".svg"], "image/svg+xml")
-
-    def test_serve_static_mime_uses_map(self):
+    def test_flask_static_mime_detection(self):
+        """Flask/werkzeug 正确检测常见静态文件 MIME 类型。"""
         import mimetypes
-        import server
-        from pathlib import Path
+        # werkzeug 使用 mimetypes 模块，验证常见类型
+        self.assertEqual(mimetypes.guess_type("style.css")[0], "text/css")
+        # Python 3.11+ 返回 text/javascript，旧版返回 application/javascript
+        js_mime = mimetypes.guess_type("app.js")[0]
+        self.assertIn(js_mime, ["application/javascript", "text/javascript"])
+        self.assertEqual(mimetypes.guess_type("index.html")[0], "text/html")
+        self.assertEqual(mimetypes.guess_type("image.png")[0], "image/png")
+        self.assertEqual(mimetypes.guess_type("icon.svg")[0], "image/svg+xml")
+
+    def test_flask_static_file_serving(self):
+        """Flask 正确提供静态文件。"""
         import tempfile
+        import server
 
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            # 模拟浏览器请求的静态文件
-            for name, expect in [("style.css", "text/css; charset=utf-8"),
-                                 ("app.js", "application/javascript; charset=utf-8")]:
-                f = root / name
-                f.write_text("x", encoding="utf-8")
-                # 复刻 _serve_static 的 MIME 解析逻辑
-                suffix = "." + f.name.rsplit(".", 1)[-1]
-                ctype = server.Handler._STATIC_MIME.get(suffix) \
-                    or mimetypes.guess_type(str(f))[0] \
-                    or "application/octet-stream"
-                # 显式映射优先，且不同于无 charset 的 guess_type 结果
-                self.assertEqual(ctype, expect)
-                self.assertNotEqual(ctype, mimetypes.guess_type(str(f))[0])
+            www = Path(tmp) / "www"
+            www.mkdir()
+            (www / "index.html").write_text("<h1>Hello</h1>", encoding="utf-8")
+            (www / "style.css").write_text("body { color: red; }", encoding="utf-8")
+            (www / "app.js").write_text("console.log('test')", encoding="utf-8")
+
+            config.override("WWW_DIR", str(www))
+            try:
+                app = server.create_app(allow_headerless_local_identity=True)
+                app.config["TESTING"] = True
+                client = app.test_client()
+
+                # 测试 HTML 文件
+                response = client.get("/index.html")
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("text/html", response.content_type)
+
+                # 测试 CSS 文件
+                response = client.get("/style.css")
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("text/css", response.content_type)
+
+                # 测试 JS 文件
+                response = client.get("/app.js")
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("javascript", response.content_type)
+            finally:
+                config.override("WWW_DIR", None)
 
 
 class LogTailTests(unittest.TestCase):

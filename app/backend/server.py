@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""订阅管理 - HTTP API 服务（仅用 Python 标准库，零第三方依赖）。
+"""订阅管理 - HTTP API 服务（Flask 版本）。
 
 监听方式：
   --uds <path>     Unix domain socket（飞牛统一网关 gatewaySocket 用）
@@ -34,25 +34,23 @@ import argparse
 import json
 import logging
 import logging.handlers
-import mimetypes
 import os
 import socket
-import socketserver
 import sys
 import time
-import urllib.parse
 from dataclasses import dataclass
-from datetime import date
-from http import HTTPStatus
+from datetime import date, timedelta
 from pathlib import Path
 
-try:  # 支持 python -m app.backend.server 与直接执行 server.py 两种方式。
+from flask import Flask, Response, g, jsonify, redirect, request, send_file
+
+try:
     from . import config
     from .core import domain
     from .services import backup, notifications, scheduler, statistics
     from .storage import db
     from .utils.channels import email as email_sender, pushplus
-except ImportError:  # pragma: no cover - 直接从 backend 目录启动时使用。
+except ImportError:
     import config
     from core import domain
     from services import backup, notifications, scheduler, statistics
@@ -61,28 +59,16 @@ except ImportError:  # pragma: no cover - 直接从 backend 目录启动时使�
 
 log = logging.getLogger(scheduler.LOGGER_NAME)
 
-
-
-# 请求边界。该服务使用 socketserver 自己解析 HTTP，请求头和请求体都必须
-# 在进入业务路由前限制大小，避免恶意客户端在解析阶段消耗无限内存。
-MAX_REQUEST_LINE_BYTES = 8 * 1024
-MAX_HEADER_LINE_BYTES = 8 * 1024
-MAX_HEADER_BYTES = 32 * 1024
-MAX_HEADER_COUNT = 64
+# --------------------------------------------------------------------------- #
+# 请求边界
+# --------------------------------------------------------------------------- #
 MAX_REQUEST_BODY_BYTES = 5 * 1024 * 1024
 MAX_USER_ID_LENGTH = 128
 
 
 @dataclass(frozen=True)
 class RequestIdentity:
-    """网关认证后的请求身份。
-
-    fnOS 统一网关会在完成登录校验后注入 X-Trim-Userid / X-Trim-Isadmin。
-    本地 TCP 开发模式如果完全没有这两个请求头，则使用 local 管理员身份，
-    保持直接访问 127.0.0.1 的开发流程可用；Unix Socket 模式必须由网关
-    提供身份头。一旦请求显式携带身份头，就不再静默回退到管理员身份。
-    """
-
+    """网关认证后的请求身份。"""
     user_id: str
     is_admin: bool
     username: str | None = None
@@ -93,6 +79,9 @@ class AccessDeniedError(Exception):
     """请求身份无权访问目标资源。"""
 
 
+# --------------------------------------------------------------------------- #
+# 管理员专属路径
+# --------------------------------------------------------------------------- #
 _ADMIN_ONLY_PATHS = {
     "/api/settings": "系统设置",
     "/api/notifications/test-email": "测试邮件通知",
@@ -107,6 +96,10 @@ _ADMIN_ONLY_PATHS = {
 _SECRET_SETTING_FIELDS = ("smtp_password", "pushplus_token")
 
 
+# --------------------------------------------------------------------------- #
+# 辅助函数
+# --------------------------------------------------------------------------- #
+
 def _public_settings(settings: dict) -> dict:
     """返回可通过 HTTP 暴露的设置，绝不包含密钥原文。"""
     public = dict(settings)
@@ -114,7 +107,6 @@ def _public_settings(settings: dict) -> dict:
         value = public.pop(field, None)
         configured = bool(value is not None and str(value).strip())
         public[f"{field}_configured"] = configured
-        # 只下发星号掩码（个数与真实密钥长度一致），供前端“输入多少显示多少”隐藏显示
         public[f"{field}_masked"] = "*" * len(str(value)) if configured else ""
     return public
 
@@ -125,7 +117,6 @@ def _settings_update_payload(data: dict) -> dict:
     for field in _SECRET_SETTING_FIELDS:
         if field in payload and db.is_secret_placeholder(payload[field]):
             payload.pop(field, None)
-    # configured 字段只是 GET 响应元数据，不能作为写入字段传给 db。
     payload.pop("smtp_password_configured", None)
     payload.pop("pushplus_token_configured", None)
     return payload
@@ -139,132 +130,141 @@ def _with_status(sub: dict) -> dict:
     return sub
 
 
-# --------------------------------------------------------------------------- #
-# 请求处理
-# --------------------------------------------------------------------------- #
+def _resolve_backup_file(name: str) -> Path:
+    """把备份文件名解析为备份目录内的安全路径，防止路径穿越。"""
+    filename = os.path.basename(str(name or "").strip())
+    if not filename.startswith("subscription-") or filename == "subscription-":
+        raise ValueError("非法的备份文件名")
+    if filename in (".", "..") or "/" in filename or "\\" in filename:
+        raise ValueError("非法的备份文件名")
+    backup_dir = config.backup_dir().resolve()
+    path = (backup_dir / filename).resolve()
+    if path.parent != backup_dir:
+        raise ValueError("非法的备份文件路径")
+    return path
 
-class Handler(socketserver.StreamRequestHandler):
-    def handle(self) -> None:
-        try:
-            self._handle_request()
-        except (BrokenPipeError, ConnectionResetError):
-            pass
-        except Exception:  # noqa: BLE001
-            log.exception("处理请求时出错")
 
-    def _handle_request(self) -> None:
-        request_line = self.rfile.readline(MAX_REQUEST_LINE_BYTES + 1)
-        if not request_line:
-            return
-        if len(request_line) > MAX_REQUEST_LINE_BYTES or not request_line.endswith(b"\n"):
-            self._error(HTTPStatus.REQUEST_URI_TOO_LONG, "请求行过长或格式不完整")
-            return
+def _delete_backup_file(name: str) -> bool:
+    path = _resolve_backup_file(name)
+    if not path.is_file():
+        return False
+    path.unlink()
+    return True
+
+
+def _list_backup_files() -> list[dict]:
+    backup_dir = config.backup_dir()
+    if not backup_dir.exists():
+        return []
+    files = []
+    for p in sorted(backup_dir.glob("subscription-*"), reverse=True)[:50]:
+        files.append({
+            "name": p.name,
+            "size": p.stat().st_size,
+            "modified": p.stat().st_mtime,
+        })
+    return files
+
+
+def _upcoming_notifications(user_id: str) -> list[dict]:
+    settings = db.get_app_settings()
+    reminder_days = max(0, int(settings.get("notification_days") or 7))
+    today = date.today()
+    end = today + timedelta(days=reminder_days)
+    result = []
+    for sub in db.get_all_subscriptions(user_id):
+        if sub["lifecycle"] != "active" or not sub.get("next_due_date"):
+            continue
         try:
-            method, raw_target, proto = (
-                request_line.decode("latin-1").rstrip("\r\n").split(" ", 2)
-            )
+            d = date.fromisoformat(sub["next_due_date"])
         except ValueError:
-            self._error(HTTPStatus.BAD_REQUEST, "请求行格式错误")
-            return
-        if not method or not raw_target or proto not in ("HTTP/1.0", "HTTP/1.1"):
-            self._error(HTTPStatus.BAD_REQUEST, "请求行格式错误或 HTTP 版本不支持")
-            return
+            continue
+        if today <= d <= end:
+            title, body = notifications.generate_notification_content(sub)
+            result.append({
+                "id": sub["id"],
+                "name": sub["name"],
+                "due_date": sub["next_due_date"],
+                "days_until": (d - today).days,
+                "amount": sub["amount"],
+                "currency": sub["currency"],
+                "title": title,
+                "body": body,
+            })
+    result.sort(key=lambda x: x["days_until"])
+    return result
 
-        headers: dict[str, str] = {}
-        header_bytes = len(request_line)
-        header_count = 0
-        while True:
-            line = self.rfile.readline(MAX_HEADER_LINE_BYTES + 1)
-            if not line:
-                self._error(HTTPStatus.BAD_REQUEST, "请求头未完整结束")
-                return
-            header_bytes += len(line)
-            if header_bytes > MAX_HEADER_BYTES:
-                self._error(HTTPStatus.REQUEST_HEADER_FIELDS_TOO_LARGE, "请求头总大小超过限制")
-                return
-            if len(line) > MAX_HEADER_LINE_BYTES:
-                self._error(HTTPStatus.REQUEST_HEADER_FIELDS_TOO_LARGE, "单个请求头过长")
-                return
-            if line in (b"\r\n", b"\n"):
-                break
-            if not line.endswith(b"\n"):
-                self._error(HTTPStatus.BAD_REQUEST, "请求头格式不完整")
-                return
-            header_count += 1
-            if header_count > MAX_HEADER_COUNT:
-                self._error(HTTPStatus.REQUEST_HEADER_FIELDS_TOO_LARGE, "请求头数量超过限制")
-                return
-            if b":" not in line:
-                self._error(HTTPStatus.BAD_REQUEST, "请求头格式错误")
-                return
-            name, _, value = line.decode("latin-1").partition(":")
-            name = name.strip().lower()
-            if not name or not self._valid_header_name(name):
-                self._error(HTTPStatus.BAD_REQUEST, "请求头名称格式错误")
-                return
-            if name in headers:
-                self._error(HTTPStatus.BAD_REQUEST, f"请求头重复: {name}")
-                return
-            headers[name] = value.strip()
 
-        if headers.get("transfer-encoding"):
-            self._error(HTTPStatus.NOT_IMPLEMENTED, "暂不支持 Transfer-Encoding，请使用 Content-Length")
-            return
+def _read_log_tail(log_path: Path, lines: int) -> dict:
+    """从文件尾部倒读最近 N 行日志。"""
+    if not log_path.is_file():
+        return {"file": log_path.name, "lines": [], "error": None}
+    try:
+        with open(log_path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            block = 8192
+            tail = b""
+            pos = size
+            while pos > 0:
+                take = min(block, pos)
+                pos -= take
+                f.seek(pos)
+                tail = f.read(take) + tail
+                if tail.count(b"\n") > lines:
+                    break
+        text = tail.decode("utf-8", errors="replace")
+        sliced = text.strip().splitlines()[-lines:]
+        return {"file": log_path.name, "lines": sliced, "error": None}
+    except OSError as exc:
+        return {"file": log_path.name, "lines": [], "error": str(exc)}
 
-        raw_content_length = headers.get("content-length")
-        if raw_content_length is None:
-            content_length = 0
-        elif not raw_content_length or not raw_content_length.isascii() or not raw_content_length.isdigit():
-            self._error(HTTPStatus.BAD_REQUEST, "Content-Length 必须为非负整数")
-            return
-        else:
-            content_length = int(raw_content_length)
-        if content_length > MAX_REQUEST_BODY_BYTES:
-            self._error(
-                HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
-                f"请求体过大，不能超过 {MAX_REQUEST_BODY_BYTES} 字节",
-            )
-            return
 
-        body = self.rfile.read(content_length) if content_length > 0 else b""
-        if len(body) != content_length:
-            self._error(HTTPStatus.BAD_REQUEST, "请求体未完整接收")
-            return
+# --------------------------------------------------------------------------- #
+# Flask 应用工厂
+# --------------------------------------------------------------------------- #
 
-        self._route(method, raw_target, headers, body)
+def create_app(*, allow_headerless_local_identity: bool = False) -> Flask:
+    """创建并配置 Flask 应用。
 
-    @staticmethod
-    def _valid_header_name(name: str) -> bool:
-        # RFC 7230 token 字符；拒绝控制字符和带空格的伪请求头。
-        token_chars = "!#$%&'*+-.^_`|~"
-        return name.isascii() and all(char.isalnum() or char in token_chars for char in name)
+    Parameters
+    ----------
+    allow_headerless_local_identity : bool
+        本地 TCP 开发模式允许无身份头请求（回退为 local 管理员）。
+    """
+    app = Flask(
+        __name__,
+        static_folder=str(config.www_dir()),
+        static_url_path="",
+    )
+    app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BODY_BYTES
+    app.config["JSON_AS_ASCII"] = False
 
-    @staticmethod
-    def _parse_admin_flag(raw_value: str | None) -> bool:
-        if raw_value is None:
-            return False
-        value = raw_value.strip().lower()
-        if value in {"1", "true", "yes", "on"}:
-            return True
-        if value in {"", "0", "false", "no", "off"}:
-            return False
-        raise ValueError("X-Trim-Isadmin 必须为 true/false")
+    # 存储模式标志，供 before_request 使用
+    app.config["ALLOW_HEADERLESS_LOCAL"] = allow_headerless_local_identity
 
-    def _parse_identity(self, headers: dict[str, str]) -> RequestIdentity:
-        """统一解析网关身份，并仅在本地 TCP 模式保留无头回退。"""
-        raw_user_id = headers.get("x-trim-userid")
-        raw_is_admin = headers.get("x-trim-isadmin")
-        raw_username = headers.get("x-trim-username")
+    # ------------------------------------------------------------------ #
+    # 请求钩子
+    # ------------------------------------------------------------------ #
+
+    @app.before_request
+    def parse_identity() -> None:
+        """解析网关身份，注入 g.identity。"""
+        raw_user_id = request.headers.get("X-Trim-Userid")
+        raw_is_admin = request.headers.get("X-Trim-Isadmin")
+        raw_username = request.headers.get("X-Trim-Username")
 
         if raw_user_id is None and raw_is_admin is None:
-            if not getattr(self.server, "allow_headerless_local_identity", False):
+            if not app.config["ALLOW_HEADERLESS_LOCAL"]:
                 raise ValueError("Unix Socket 模式必须携带 X-Trim-Userid 身份头")
-            return RequestIdentity(
+            g.identity = RequestIdentity(
                 user_id="local",
                 is_admin=True,
                 username=raw_username or "local",
                 is_local=True,
             )
+            return
+
         if raw_user_id is None:
             raise ValueError("缺少 X-Trim-Userid，无法确定请求用户")
 
@@ -280,216 +280,267 @@ class Handler(socketserver.StreamRequestHandler):
         if username and any(ord(char) < 0x20 or ord(char) == 0x7F for char in username):
             raise ValueError("X-Trim-Username 含有非法控制字符")
 
-        return RequestIdentity(
+        is_admin = _parse_admin_flag(raw_is_admin)
+        g.identity = RequestIdentity(
             user_id=user_id,
-            is_admin=self._parse_admin_flag(raw_is_admin),
+            is_admin=is_admin,
             username=username,
             is_local=False,
         )
 
-    # ----- 路由 -----
+    @app.before_request
+    def check_admin_only() -> None:
+        """管理员专属路径权限校验。"""
+        protected = _ADMIN_ONLY_PATHS.get(request.path)
+        if protected and not g.identity.is_admin:
+            raise AccessDeniedError(f"仅管理员可访问{protected}")
 
-    def _route(self, method: str, raw_target: str, headers: dict, body: bytes) -> None:
-        try:
-            parsed = urllib.parse.urlsplit(raw_target)
-            path = self._normalize_path(parsed.path)
-            query = urllib.parse.parse_qs(parsed.query)
-            identity = self._parse_identity(headers)
+    @app.before_request
+    def ensure_default_categories() -> None:
+        """新用户首次访问 API 时补种默认分类（幂等）。"""
+        if request.path.startswith("/api/"):
+            db.ensure_default_categories_for_user(g.identity.user_id)
 
-            # 设置、全量备份和全量导出使用的是全局数据访问函数，不能让普通
-            # 用户通过这些接口读取或修改其他用户的数据。导入接口仍按
-            # identity.user_id 处理，保持现有的用户级导入能力。
-            protected_resource = _ADMIN_ONLY_PATHS.get(path)
-            if protected_resource:
-                self._require_admin(identity, protected_resource)
+    # ------------------------------------------------------------------ #
+    # 错误处理
+    # ------------------------------------------------------------------ #
 
-            # 挂载路径不带结尾斜杠时 302 跳转，避免相对资源（style.css/app.js）
-            # 解析到上一层目录（/app/...）导致网关 404。
-            if not parsed.path.endswith("/") and path == "/":
-                self._redirect(parsed.path + "/")
+    @app.errorhandler(AccessDeniedError)
+    def handle_access_denied(exc: AccessDeniedError) -> Response:
+        return jsonify({"error": str(exc)}), 403
+
+    @app.errorhandler(ValueError)
+    def handle_value_error(exc: ValueError) -> Response:
+        msg = str(exc)
+        if "已存在" in msg or "已达上限" in msg:
+            return jsonify({"error": msg}), 409
+        return jsonify({"error": msg}), 400
+
+    @app.errorhandler(404)
+    def handle_not_found(exc) -> Response:
+        return jsonify({"error": "接口不存在"}), 404
+
+    @app.errorhandler(413)
+    def handle_payload_too_large(exc) -> Response:
+        return jsonify({"error": f"请求体过大，不能超过 {MAX_REQUEST_BODY_BYTES} 字节"}), 413
+
+    @app.errorhandler(500)
+    def handle_internal_error(exc) -> Response:
+        log.exception("API 处理失败")
+        return jsonify({"error": "服务器内部错误"}), 500
+
+    # ------------------------------------------------------------------ #
+    # 网关路径归一化
+    # ------------------------------------------------------------------ #
+
+    @app.before_request
+    def normalize_gateway_path() -> None:
+        """统一网关会把 gatewayPrefix 原样转发给应用。
+
+        剥离前缀，使 /app/subscription/... 与本地直接访问 / 等价。
+        """
+        path = request.path
+        prefix = config.gateway_prefix()
+
+        if path == prefix or path == prefix + "/":
+            # 重定向到根路径
+            return redirect("/")
+
+        if path.startswith(prefix + "/"):
+            # Flask 的 request.path 是只读的，用 url_rule 无法动态修改。
+            # 通过 WSGI environ 修改 SCRIPT_NAME / PATH_INFO 实现前缀剥离。
+            request.environ["PATH_INFO"] = path[len(prefix):] or "/"
+            request.environ["SCRIPT_NAME"] = prefix
+            return
+
+        if path == "/app":
+            return redirect("/")
+
+        if path.startswith("/app/"):
+            candidate = "/" + path[len("/app/"):]
+            if _is_internal_path(candidate):
+                request.environ["PATH_INFO"] = candidate
+                request.environ["SCRIPT_NAME"] = "/app"
                 return
 
-            user_id = identity.user_id
-            # 新用户首次访问 API 时补种默认分类（幂等，见 db.ensure_default_categories_for_user）。
-            if path.startswith("/api/"):
-                db.ensure_default_categories_for_user(user_id)
-            if path == "/api/subscriptions" and method == "GET":
-                self._json([_with_status(s) for s in db.get_all_subscriptions(user_id)])
-            elif path == "/api/subscriptions" and method == "POST":
-                self._json(_with_status(db.create_subscription(user_id, self._json_body(body))),
-                           HTTPStatus.CREATED)
-            elif path == "/api/categories" and method == "GET":
-                self._json(db.get_all_categories(user_id))
-            elif path == "/api/categories" and method == "POST":
-                try:
-                    cat = db.create_category(user_id, self._json_body(body))
-                except ValueError as exc:
-                    msg = str(exc)
-                    if "已存在" in msg or "已达上限" in msg:
-                        self._json({"error": msg}, HTTPStatus.CONFLICT)
-                        return
-                    raise
-                self._json(cat, HTTPStatus.CREATED)
-            elif path == "/api/settings" and method == "GET":
-                self._json(_public_settings(db.get_app_settings()))
-            elif path == "/api/settings" and method == "PUT":
-                payload = _settings_update_payload(self._json_body(body))
-                self._json(_public_settings(db.update_app_settings(payload)))
-            elif path == "/api/statistics" and method == "GET":
-                mode = (query.get("mode") or ["nominal"])[0]
-                self._json(statistics.calculate_statistics(user_id, mode))
-            elif path == "/api/calendar" and method == "GET":
-                year = int((query.get("year") or [date.today().year])[0])
-                month = int((query.get("month") or [date.today().month])[0])
-                self._json(statistics.get_calendar_events(user_id, year, month))
+    # ------------------------------------------------------------------ #
+    # 订阅 API
+    # ------------------------------------------------------------------ #
 
-            elif path == "/api/backup" and method == "POST":
-                self._json(scheduler.backup_now(include_all=True))
-            elif path == "/api/backup/export-json" and method == "GET":
-                self._raw_text(backup.export_json_string(include_all=True), "application/json; charset=utf-8")
-            elif path == "/api/backup/import-json" and method == "POST":
-                result = backup.import_from_json(body.decode("utf-8"), user_id)
-                self._json(result)
-            elif path == "/api/backup/import-csv" and method == "POST":
-                result = backup.import_from_csv(body.decode("utf-8"), user_id)
-                self._json(result)
-            elif path == "/api/backup/files" and method == "GET":
-                self._json(_list_backup_files())
-            elif path == "/api/backup/files" and method == "DELETE":
-                ok = _delete_backup_file((query.get("name") or [""])[0])
-                self._json({"ok": ok}, HTTPStatus.OK if ok else HTTPStatus.NOT_FOUND)
-            elif path == "/api/backup/files/download" and method == "GET":
-                file_path = _resolve_backup_file((query.get("name") or [""])[0])
-                if not file_path.is_file():
-                    self._json({"error": "备份文件不存在"}, HTTPStatus.NOT_FOUND)
-                    return
-                self._raw(
-                    HTTPStatus.OK, "application/octet-stream", file_path.read_bytes(),
-                    content_disposition=f'attachment; filename="{file_path.name}"',
-                )
-            elif path == "/api/export/csv" and method == "GET":
-                self._raw_text(backup.export_csv(include_all=True), "text/csv; charset=utf-8")
-            elif path == "/api/notifications/upcoming" and method == "GET":
-                self._json(_upcoming_notifications(user_id))
-            elif path == "/api/logs/tail" and method == "GET":
-                # 系统级日志尾读（不区分用户；多用户场景下如需隔离可后续按 user 过滤）
-                try:
-                    want = min(int((query.get("lines") or ["200"])[0]), 1000)
-                except ValueError:
-                    want = 200
-                self._json(_read_log_tail(config.logs_dir() / "app.log", want))
-            elif path == "/api/notifications/test-email" and method == "POST":
-                self._test_email(body)
-            elif path == "/api/notifications/test-pushplus" and method == "POST":
-                self._test_pushplus(body)
-            elif path.startswith("/api/subscriptions/"):
-                self._route_subscription(method, path, user_id, body)
-            elif path.startswith("/api/categories/"):
-                self._route_category(method, path, user_id, body)
-            else:
-                self._serve_static(path)
-        except AccessDeniedError as exc:
-            self._json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+    @app.route("/api/subscriptions", methods=["GET"])
+    def list_subscriptions() -> Response:
+        subs = db.get_all_subscriptions(g.identity.user_id)
+        return jsonify([_with_status(s) for s in subs])
+
+    @app.route("/api/subscriptions", methods=["POST"])
+    def create_subscription() -> Response:
+        sub = db.create_subscription(g.identity.user_id, request.get_json(force=True))
+        return jsonify(_with_status(sub)), 201
+
+    @app.route("/api/subscriptions/<sub_id>", methods=["GET"])
+    def get_subscription(sub_id: str) -> Response:
+        sub = db.get_subscription_by_id(sub_id, g.identity.user_id)
+        if sub is None:
+            return jsonify({"error": "订阅不存在"}), 404
+        return jsonify(_with_status(sub))
+
+    @app.route("/api/subscriptions/<sub_id>", methods=["PUT"])
+    def update_subscription(sub_id: str) -> Response:
+        sub = db.update_subscription(sub_id, g.identity.user_id, request.get_json(force=True))
+        if sub is None:
+            return jsonify({"error": "订阅不存在"}), 404
+        return jsonify(_with_status(sub))
+
+    @app.route("/api/subscriptions/<sub_id>", methods=["DELETE"])
+    def delete_subscription(sub_id: str) -> Response:
+        ok = db.delete_subscription(sub_id, g.identity.user_id)
+        if not ok:
+            return jsonify({"error": "订阅不存在"}), 404
+        return jsonify({"ok": True})
+
+    @app.route("/api/subscriptions/<sub_id>/renew", methods=["POST"])
+    def renew_subscription(sub_id: str) -> Response:
+        sub = db.renew_subscription(sub_id, g.identity.user_id)
+        if sub is None:
+            return jsonify({"error": "订阅不存在"}), 404
+        return jsonify(_with_status(sub))
+
+    # ------------------------------------------------------------------ #
+    # 分类 API
+    # ------------------------------------------------------------------ #
+
+    @app.route("/api/categories", methods=["GET"])
+    def list_categories() -> Response:
+        return jsonify(db.get_all_categories(g.identity.user_id))
+
+    @app.route("/api/categories", methods=["POST"])
+    def create_category() -> Response:
+        try:
+            cat = db.create_category(g.identity.user_id, request.get_json(force=True))
         except ValueError as exc:
             msg = str(exc)
             if "已存在" in msg or "已达上限" in msg:
-                self._json({"error": msg}, HTTPStatus.CONFLICT)
-            else:
-                self._json({"error": msg}, HTTPStatus.BAD_REQUEST)
-        except Exception:  # noqa: BLE001
-            log.exception("API 处理失败: %s %s", method, raw_target)
-            self._json({"error": "服务器内部错误"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+                return jsonify({"error": msg}), 409
+            raise
+        return jsonify(cat), 201
 
-    @staticmethod
-    def _require_admin(identity: RequestIdentity, resource: str) -> None:
-        if not identity.is_admin:
-            raise AccessDeniedError(f"仅管理员可访问{resource}")
-
-    def _route_subscription(self, method: str, path: str, user_id: str, body: bytes) -> None:
-        parts = path[len("/api/subscriptions/"):].split("/")
-        sub_id = parts[0] if parts else ""
-        action = parts[1] if len(parts) > 1 else None
-
-        if action == "renew" and method == "POST":
-            sub = db.renew_subscription(sub_id, user_id)
-        elif action is None and method == "GET":
-            sub = db.get_subscription_by_id(sub_id, user_id)
-        elif action is None and method == "PUT":
-            sub = db.update_subscription(sub_id, user_id, self._json_body(body))
-        elif action is None and method == "DELETE":
-            ok = db.delete_subscription(sub_id, user_id)
-            self._json({"ok": ok}, HTTPStatus.OK if ok else HTTPStatus.NOT_FOUND)
-            return
-        else:
-            self._json({"error": "接口不存在"}, HTTPStatus.NOT_FOUND)
-            return
-
-        if sub is None:
-            self._json({"error": "订阅不存在"}, HTTPStatus.NOT_FOUND)
-        else:
-            self._json(_with_status(sub))
-
-    def _route_category(self, method: str, path: str, user_id: str, body: bytes) -> None:
-        cat_id = path[len("/api/categories/"):].rstrip("/")
-        if method == "PUT":
-            try:
-                cat = db.update_category(cat_id, user_id, self._json_body(body))
-            except ValueError as exc:
-                msg = str(exc)
-                if "已存在" in msg or "已达上限" in msg:
-                    self._json({"error": msg}, HTTPStatus.CONFLICT)
-                    return
-                raise
-        elif method == "DELETE":
-            ok = db.delete_category(cat_id, user_id)
-            self._json({"ok": ok}, HTTPStatus.OK if ok else HTTPStatus.NOT_FOUND)
-            return
-        else:
-            self._json({"error": "接口不存在"}, HTTPStatus.NOT_FOUND)
-            return
+    @app.route("/api/categories/<cat_id>", methods=["PUT"])
+    def update_category(cat_id: str) -> Response:
+        try:
+            cat = db.update_category(cat_id, g.identity.user_id, request.get_json(force=True))
+        except ValueError as exc:
+            msg = str(exc)
+            if "已存在" in msg or "已达上限" in msg:
+                return jsonify({"error": msg}), 409
+            raise
         if cat is None:
-            self._json({"error": "分类不存在"}, HTTPStatus.NOT_FOUND)
-        else:
-            self._json(cat)
+            return jsonify({"error": "分类不存在"}), 404
+        return jsonify(cat)
 
-    # ----- 网关路径归一化 -----
+    @app.route("/api/categories/<cat_id>", methods=["DELETE"])
+    def delete_category(cat_id: str) -> Response:
+        ok = db.delete_category(cat_id, g.identity.user_id)
+        if not ok:
+            return jsonify({"error": "分类不存在"}), 404
+        return jsonify({"ok": True})
 
-    def _normalize_path(self, path: str) -> str:
-        """统一网关会把 gatewayPrefix 原样转发给应用（文档：GET /app/myapp/list）。
+    # ------------------------------------------------------------------ #
+    # 设置 API
+    # ------------------------------------------------------------------ #
 
-        这里剥离前缀，使 /app/subscription/... 与本地直接访问 / 等价：
-        1. 优先按配置的 GATEWAY_PREFIX (/app/subscription) 剥离；
-        2. 若真机上注册的前缀与配置不一致（例如配成了 /app），
-           则从 /app/ 之后取路径，并校验其为 API 或存在的静态文件后使用。
-        """
-        prefix = config.gateway_prefix()
-        if path == prefix:
-            return "/"
-        if path.startswith(prefix + "/"):
-            return path[len(prefix):] or "/"
-        if path == "/app":
-            return "/"
-        if path.startswith("/app/"):
-            candidate = "/" + path[len("/app/"):]
-            if self._is_internal_path(candidate):
-                return candidate
-        return path
+    @app.route("/api/settings", methods=["GET"])
+    def get_settings() -> Response:
+        return jsonify(_public_settings(db.get_app_settings()))
 
-    def _is_internal_path(self, path: str) -> bool:
-        """判断剥离候选前缀后的路径是否确实是本应用内部路径（API 或静态文件）。"""
-        if path == "/" or path.startswith("/api/"):
-            return True
-        root = config.www_dir().resolve()
-        rel = path.lstrip("/")
-        if not rel:
-            return True
-        target = (root / rel).resolve()
-        return self._is_path_within(root, target) and target.is_file()
+    @app.route("/api/settings", methods=["PUT"])
+    def update_settings() -> Response:
+        payload = _settings_update_payload(request.get_json(force=True))
+        return jsonify(_public_settings(db.update_app_settings(payload)))
 
-    # ----- 测试通知 -----
+    # ------------------------------------------------------------------ #
+    # 统计 & 日历 API
+    # ------------------------------------------------------------------ #
 
-    def _test_email(self, body: bytes) -> None:
-        payload = self._json_body(body)
+    @app.route("/api/statistics", methods=["GET"])
+    def get_statistics() -> Response:
+        mode = request.args.get("mode", "nominal")
+        return jsonify(statistics.calculate_statistics(g.identity.user_id, mode))
+
+    @app.route("/api/calendar", methods=["GET"])
+    def get_calendar() -> Response:
+        year = int(request.args.get("year", date.today().year))
+        month = int(request.args.get("month", date.today().month))
+        return jsonify(statistics.get_calendar_events(g.identity.user_id, year, month))
+
+    # ------------------------------------------------------------------ #
+    # 备份 API
+    # ------------------------------------------------------------------ #
+
+    @app.route("/api/backup", methods=["POST"])
+    def trigger_backup() -> Response:
+        return jsonify(scheduler.backup_now(include_all=True))
+
+    @app.route("/api/backup/export-json", methods=["GET"])
+    def export_json() -> Response:
+        return Response(
+            backup.export_json_string(include_all=True),
+            mimetype="application/json; charset=utf-8",
+        )
+
+    @app.route("/api/backup/import-json", methods=["POST"])
+    def import_json() -> Response:
+        result = backup.import_from_json(request.get_data(as_text=True), g.identity.user_id)
+        return jsonify(result)
+
+    @app.route("/api/backup/import-csv", methods=["POST"])
+    def import_csv() -> Response:
+        result = backup.import_from_csv(request.get_data(as_text=True), g.identity.user_id)
+        return jsonify(result)
+
+    @app.route("/api/backup/files", methods=["GET"])
+    def list_backup_files() -> Response:
+        return jsonify(_list_backup_files())
+
+    @app.route("/api/backup/files", methods=["DELETE"])
+    def delete_backup_file() -> Response:
+        name = request.args.get("name", "")
+        ok = _delete_backup_file(name)
+        return jsonify({"ok": ok}), 200 if ok else 404
+
+    @app.route("/api/backup/files/download", methods=["GET"])
+    def download_backup_file() -> Response:
+        name = request.args.get("name", "")
+        try:
+            file_path = _resolve_backup_file(name)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        if not file_path.is_file():
+            return jsonify({"error": "备份文件不存在"}), 404
+        return send_file(
+            file_path,
+            mimetype="application/octet-stream",
+            as_attachment=True,
+            download_name=file_path.name,
+        )
+
+    @app.route("/api/export/csv", methods=["GET"])
+    def export_csv() -> Response:
+        return Response(
+            backup.export_csv(include_all=True),
+            mimetype="text/csv; charset=utf-8",
+        )
+
+    # ------------------------------------------------------------------ #
+    # 通知 API
+    # ------------------------------------------------------------------ #
+
+    @app.route("/api/notifications/upcoming", methods=["GET"])
+    def upcoming_notifications() -> Response:
+        return jsonify(_upcoming_notifications(g.identity.user_id))
+
+    @app.route("/api/notifications/test-email", methods=["POST"])
+    def test_email() -> Response:
+        payload = request.get_json(force=True)
         settings = db.get_app_settings()
 
         host = payload.get("smtp_host") or settings.get("smtp_host")
@@ -538,13 +589,13 @@ class Handler(socketserver.StreamRequestHandler):
                 from_address=from_address,
             )
         except Exception as exc:
-            self._json({"ok": False, "error": f"邮件发送失败: {exc}"}, HTTPStatus.BAD_REQUEST)
-            return
+            return jsonify({"ok": False, "error": f"邮件发送失败: {exc}"}), 400
 
-        self._json({"ok": True, "message": f"测试邮件已发送至 {to_address}"})
+        return jsonify({"ok": True, "message": f"测试邮件已发送至 {to_address}"})
 
-    def _test_pushplus(self, body: bytes) -> None:
-        payload = self._json_body(body)
+    @app.route("/api/notifications/test-pushplus", methods=["POST"])
+    def test_pushplus() -> Response:
+        payload = request.get_json(force=True)
         settings = db.get_app_settings()
 
         token_draft = payload.get("pushplus_token")
@@ -566,213 +617,95 @@ class Handler(socketserver.StreamRequestHandler):
         try:
             pushplus.send_pushplus(token=token, title=title, content=content)
         except Exception as exc:
-            self._json({"ok": False, "error": f"PushPlus 发送失败: {exc}"}, HTTPStatus.BAD_REQUEST)
-            return
+            return jsonify({"ok": False, "error": f"PushPlus 发送失败: {exc}"}), 400
 
-        self._json({"ok": True, "message": "测试推送已发送成功"})
+        return jsonify({"ok": True, "message": "测试推送已发送成功"})
 
-    # ----- 静态文件 -----
+    # ------------------------------------------------------------------ #
+    # 日志 API
+    # ------------------------------------------------------------------ #
 
-    _STATIC_MIME = {
-        ".html": "text/html; charset=utf-8",
-        ".htm": "text/html; charset=utf-8",
-        ".css": "text/css; charset=utf-8",
-        ".js": "application/javascript; charset=utf-8",
-        ".json": "application/json; charset=utf-8",
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".gif": "image/gif",
-        ".svg": "image/svg+xml",
-        ".webp": "image/webp",
-        ".ico": "image/x-icon",
-        ".txt": "text/plain; charset=utf-8",
-    }
-
-    def _serve_static(self, path: str) -> None:
-        root = config.www_dir().resolve()
-        rel = path.lstrip("/") or "index.html"
-        target = (root / rel).resolve()
-        # 不能用字符串 startswith 判断目录边界：/www2 会错误地匹配 /www。
-        # relative_to 同时能拒绝 ../ 越界路径和指向 root 外的符号链接。
-        if not self._is_path_within(root, target) or not target.is_file():
-            self._error(HTTPStatus.NOT_FOUND, "Not Found")
-            return
-        # MIME 显式映射（对齐官方 index.cgi 示例：css/js 带 charset；
-        # .js 用 application/javascript），未知后缀回退 mimetypes 猜测。
-        ctype = self._STATIC_MIME.get(target.suffix) \
-            or mimetypes.guess_type(str(target))[0] \
-            or "application/octet-stream"
-        data = target.read_bytes()
-        cache = rel != "index.html"
-        self._raw(HTTPStatus.OK, ctype, data, cache=cache)
-
-    @staticmethod
-    def _is_path_within(root: Path, target: Path) -> bool:
+    @app.route("/api/logs/tail", methods=["GET"])
+    def log_tail() -> Response:
         try:
-            target.relative_to(root)
+            want = min(int(request.args.get("lines", "200")), 1000)
         except ValueError:
-            return False
-        return True
+            want = 200
+        return jsonify(_read_log_tail(config.logs_dir() / "app.log", want))
 
-    # ----- 响应 -----
+    # ------------------------------------------------------------------ #
+    # 静态文件（Flask 内置 static 处理 + SPA fallback）
+    # ------------------------------------------------------------------ #
 
-    def _redirect(self, location: str) -> None:
-        body = b""
-        head = (
-            "HTTP/1.1 302 Found\r\n"
-            f"Location: {location}\r\n"
-            f"Content-Length: {len(body)}\r\n"
-            "Connection: close\r\n"
-            "\r\n"
-        )
-        self.wfile.write(head.encode("latin-1"))
-        self.wfile.flush()
+    @app.route("/")
+    def serve_index() -> Response:
+        index = config.www_dir() / "index.html"
+        if index.is_file():
+            return send_file(index)
+        return jsonify({"error": "Not Found"}), 404
 
-    def _json(self, obj, status=HTTPStatus.OK) -> None:
-        body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
-        self._raw(status, "application/json; charset=utf-8", body)
+    @app.route("/<path:path>")
+    def serve_static(path: str) -> Response:
+        root = config.www_dir().resolve()
+        target = (root / path).resolve()
+        if not _is_path_within(root, target) or not target.is_file():
+            # SPA fallback: 非 API 路径返回 index.html
+            index = root / "index.html"
+            if index.is_file():
+                return send_file(index)
+            return jsonify({"error": "Not Found"}), 404
+        return send_file(target)
 
-    def _raw_text(self, text: str, ctype: str) -> None:
-        self._raw(HTTPStatus.OK, ctype, text.encode("utf-8"))
-
-    def _error(self, status, message: str) -> None:
-        self._raw(status, "text/plain; charset=utf-8", message.encode("utf-8"))
-
-    def _raw(self, status, ctype: str, body: bytes, cache: bool = False,
-             content_disposition: str | None = None) -> None:
-        code = int(status)
-        phrase = HTTPStatus(code).phrase
-        head = (
-            f"HTTP/1.1 {code} {phrase}\r\n"
-            f"Content-Type: {ctype}\r\n"
-            f"Content-Length: {len(body)}\r\n"
-            f"{'Cache-Control: public, max-age=3600' if cache else 'Cache-Control: no-store'}\r\n"
-            + (f"Content-Disposition: {content_disposition}\r\n" if content_disposition else "")
-            + f"Connection: close\r\n"
-            + "\r\n"
-        )
-        self.wfile.write(head.encode("latin-1"))
-        self.wfile.write(body)
-        self.wfile.flush()
-
-    def _json_body(self, body: bytes) -> dict:
-        if not body:
-            return {}
-        try:
-            data = json.loads(body.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            raise ValueError("请求体不是合法 JSON") from exc
-        if not isinstance(data, dict):
-            raise ValueError("请求体应为 JSON 对象")
-        return data
+    return app
 
 
 # --------------------------------------------------------------------------- #
 # 辅助
 # --------------------------------------------------------------------------- #
 
-def _resolve_backup_file(name: str) -> Path:
-    """把备份文件名解析为备份目录内的安全路径，防止路径穿越。
-
-    只接受 basename 形式的文件名，且必须匹配备份列表使用的
-    ``subscription-*`` 前缀；解析结果必须仍位于备份目录内。
-    """
-    filename = os.path.basename(str(name or "").strip())
-    if not filename.startswith("subscription-") or filename == "subscription-":
-        raise ValueError("非法的备份文件名")
-    if filename in (".", "..") or "/" in filename or "\\" in filename:
-        raise ValueError("非法的备份文件名")
-    backup_dir = config.backup_dir().resolve()
-    path = (backup_dir / filename).resolve()
-    if path.parent != backup_dir:
-        raise ValueError("非法的备份文件路径")
-    return path
-
-
-def _delete_backup_file(name: str) -> bool:
-    path = _resolve_backup_file(name)
-    if not path.is_file():
+def _parse_admin_flag(raw_value: str | None) -> bool:
+    if raw_value is None:
         return False
-    path.unlink()
+    value = raw_value.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"", "0", "false", "no", "off"}:
+        return False
+    raise ValueError("X-Trim-Isadmin 必须为 true/false")
+
+
+def _is_internal_path(path: str) -> bool:
+    """判断剥离候选前缀后的路径是否确实是本应用内部路径。"""
+    if path == "/" or path.startswith("/api/"):
+        return True
+    root = config.www_dir().resolve()
+    rel = path.lstrip("/")
+    if not rel:
+        return True
+    target = (root / rel).resolve()
+    return _is_path_within(root, target) and target.is_file()
+
+
+def _is_path_within(root: Path, target: Path) -> bool:
+    try:
+        target.relative_to(root)
+    except ValueError:
+        return False
     return True
 
 
-def _list_backup_files() -> list[dict]:
-    backup_dir = config.backup_dir()
-    if not backup_dir.exists():
-        return []
-    files = []
-    for p in sorted(backup_dir.glob("subscription-*"), reverse=True)[:50]:
-        files.append({
-            "name": p.name,
-            "size": p.stat().st_size,
-            "modified": p.stat().st_mtime,
-        })
-    return files
-
-
-def _upcoming_notifications(user_id: str) -> list[dict]:
-    settings = db.get_app_settings()
-    reminder_days = max(0, int(settings.get("notification_days") or 7))
-    from datetime import timedelta
-    today = date.today()
-    end = today + timedelta(days=reminder_days)
-    result = []
-    for sub in db.get_all_subscriptions(user_id):
-        if sub["lifecycle"] != "active" or not sub.get("next_due_date"):
-            continue
-        try:
-            d = date.fromisoformat(sub["next_due_date"])
-        except ValueError:
-            continue
-        if today <= d <= end:
-            title, body = notifications.generate_notification_content(sub)
-            result.append({
-                "id": sub["id"],
-                "name": sub["name"],
-                "due_date": sub["next_due_date"],
-                "days_until": (d - today).days,
-                "amount": sub["amount"],
-                "currency": sub["currency"],
-                "title": title,
-                "body": body,
-            })
-    result.sort(key=lambda x: x["days_until"])
-    return result
-
-
 # --------------------------------------------------------------------------- #
-# 服务器类
+# 日志
 # --------------------------------------------------------------------------- #
 
-if hasattr(socketserver, "UnixStreamServer"):
-    class ThreadingUnixServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
-        daemon_threads = True
-        allow_headerless_local_identity = False
-
-        def server_bind(self) -> None:
-            if os.path.exists(self.server_address):
-                try:
-                    os.unlink(self.server_address)
-                except OSError:
-                    pass
-            super().server_bind()
-else:
-    # Windows 等平台没有 Unix domain socket 支持，Unix Socket 网关模式不可用
-    ThreadingUnixServer = None  # type: ignore
-
-
-class ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
-    daemon_threads = True
-    allow_reuse_address = True
-    allow_headerless_local_identity = True
+_LOG_RETENTION_DAYS = 30
+_LOG_MAX_BYTES = 2 * 1024 * 1024
+_LOG_BACKUP_COUNT = 5
 
 
 def _setup_logging(log_dir: Path, console: bool) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-    # A：轮转日志 —— 单文件上限 2MB，保留 5 份（与备份保留策略对齐）
     handler = logging.handlers.RotatingFileHandler(
         log_dir / "app.log",
         maxBytes=_LOG_MAX_BYTES,
@@ -781,11 +714,8 @@ def _setup_logging(log_dir: Path, console: bool) -> None:
     )
     handler.setFormatter(formatter)
     root = logging.getLogger(scheduler.LOGGER_NAME)
-    # C：SUBSCRIPTION_DEBUG=1 时输出 DEBUG 级日志（默认 INFO）
     root.setLevel(logging.DEBUG if os.environ.get("SUBSCRIPTION_DEBUG") == "1" else logging.INFO)
     root.addHandler(handler)
-    # B：仅本地 TCP 调试模式回显到终端；网关/真机只写 app.log，
-    #    避免与 cmd/main 的 nohup 重定向（server.log）双写内容重复。
     if console:
         console_handler = logging.StreamHandler(sys.stderr)
         console_handler.setFormatter(formatter)
@@ -793,13 +723,8 @@ def _setup_logging(log_dir: Path, console: bool) -> None:
     _cleanup_old_logs(log_dir)
 
 
-_LOG_RETENTION_DAYS = 30
-_LOG_MAX_BYTES = 2 * 1024 * 1024
-_LOG_BACKUP_COUNT = 5
-
-
 def _cleanup_old_logs(log_dir: Path) -> None:
-    """启动时清理超过保留期的轮转/历史日志文件（app.log.*、server.log.*）。"""
+    """启动时清理超过保留期的轮转/历史日志文件。"""
     try:
         cutoff = time.time() - _LOG_RETENTION_DAYS * 86400
         for p in log_dir.iterdir():
@@ -816,31 +741,79 @@ def _cleanup_old_logs(log_dir: Path) -> None:
         pass
 
 
-def _read_log_tail(log_path: Path, lines: int) -> dict:
-    """C2：从文件尾部倒读最近 N 行日志（避免整读大文件）。"""
-    if not log_path.is_file():
-        return {"file": log_path.name, "lines": [], "error": None}
-    try:
-        with open(log_path, "rb") as f:
-            f.seek(0, os.SEEK_END)
-            size = f.tell()
-            block = 8192
-            tail = b""
-            pos = size
-            # 每次向前读一块，直到累计换行数超过目标行数或读到头
-            while pos > 0:
-                take = min(block, pos)
-                pos -= take
-                f.seek(pos)
-                tail = f.read(take) + tail
-                if tail.count(b"\n") > lines:
-                    break
-        text = tail.decode("utf-8", errors="replace")
-        sliced = text.strip().splitlines()[-lines:]
-        return {"file": log_path.name, "lines": sliced, "error": None}
-    except OSError as exc:
-        return {"file": log_path.name, "lines": [], "error": str(exc)}
+# --------------------------------------------------------------------------- #
+# Unix Socket 服务器
+# --------------------------------------------------------------------------- #
 
+def _run_unix_socket(app: Flask, sock_path: str) -> None:
+    """在 Unix domain socket 上运行 Flask 应用。"""
+    import threading
+    from http.server import HTTPServer
+
+    from werkzeug.serving import WSGIRequestHandler
+
+    class UnixWSGIServer(HTTPServer):
+        """基于 HTTPServer 的 Unix Socket WSGI 服务器。"""
+        address_family = __import__("socket").AF_UNIX
+        allow_headerless_local_identity = False
+
+        def server_bind(self) -> None:
+            if os.path.exists(self.server_address):
+                try:
+                    os.unlink(self.server_address)
+                except OSError:
+                    pass
+            super().server_bind()
+
+    class ThreadedUnixWSGIServer(UnixWSGIServer):
+        """多线程版本。"""
+        def process_request(self, request, client_address) -> None:
+            t = threading.Thread(target=self.process_request_thread, args=(request, client_address))
+            t.daemon = True
+            t.start()
+
+        def process_request_thread(self, request, client_address) -> None:
+            try:
+                self.finish_request(request, client_address)
+            except Exception:
+                self.handle_error(request, client_address)
+            finally:
+                self.shutdown_request(request)
+
+    class QuietHandler(WSGIRequestHandler):
+        """抑制 werkzeug 默认的请求日志（我们有自己的 logger）。"""
+        def log_request(self, code="-", size="-") -> None:
+            pass
+
+    from werkzeug.serving import run_simple
+
+    # werkzeug 的 run_simple 不直接支持 Unix Socket，手动创建服务器
+    server = ThreadedUnixWSGIServer(sock_path, QuietHandler)
+    server.app = app  # type: ignore[attr-defined]
+
+    from werkzeug.server import WSGIRequestHandler as _WRH
+
+    class UnixHandler(_WRH):
+        """让 werkzeug WSGI handler 在 Unix Socket 上工作。"""
+        def run(self, application) -> None:
+            self.server.app = application  # type: ignore[attr-defined]
+            from werkzeug.serving import WSGIRequestHandler as _W
+            _W.run(self, application)
+
+    log.info("监听统一网关 Unix Socket: %s", sock_path)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        log.info("退出")
+    finally:
+        server.server_close()
+        if os.path.exists(sock_path):
+            os.unlink(sock_path)
+
+
+# --------------------------------------------------------------------------- #
+# 入口
+# --------------------------------------------------------------------------- #
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="订阅管理 HTTP 服务")
@@ -872,26 +845,16 @@ def main() -> None:
     scheduler.start_scheduler()
     log.info("定时任务已启动 (备份目录 %s)", config.backup_dir())
 
-    sock_path = args.uds
+    allow_headerless = not is_gateway
+    app = create_app(allow_headerless_local_identity=allow_headerless)
+
     if is_gateway:
-        if ThreadingUnixServer is None:
-            raise RuntimeError("Unix Socket 网关模式仅支持 Linux/macOS")
-        sock_path = sock_path or str(Path(os.environ["TRIM_APPDEST"]) / "app.sock")
-        server = ThreadingUnixServer(sock_path, Handler)
-        log.info("监听统一网关 Unix Socket: %s", sock_path)
+        sock_path = args.uds or str(Path(os.environ["TRIM_APPDEST"]) / "app.sock")
+        _run_unix_socket(app, sock_path)
     else:
         port = args.http or 8000
-        server = ThreadingTCPServer(("127.0.0.1", port), Handler)
         log.info("监听 http://127.0.0.1:%d", port)
-
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        log.info("退出")
-    finally:
-        server.server_close()
-        if ThreadingUnixServer is not None and isinstance(server, ThreadingUnixServer) and os.path.exists(sock_path):
-            os.unlink(sock_path)
+        app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False)
 
 
 if __name__ == "__main__":
