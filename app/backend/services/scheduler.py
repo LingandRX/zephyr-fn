@@ -62,13 +62,7 @@ def _atomic_copy_database(temp_path: Path, target_path: Path) -> None:
 
 def _backup_names(stamp: str, backup_dir: Path) -> tuple[Path, Path]:
     """生成不会因同秒并发而冲突的 JSON/DB 文件名。"""
-    for _ in range(8):
-        suffix = uuid.uuid4().hex[:8]
-        json_file = backup_dir / f"subscription-backup-{stamp}-{suffix}.json"
-        db_file = backup_dir / f"subscription-{stamp}-{suffix}.db"
-        if not json_file.exists() and not db_file.exists():
-            return json_file, db_file
-    suffix = uuid.uuid4().hex
+    suffix = uuid.uuid4().hex[:8]
     return (
         backup_dir / f"subscription-backup-{stamp}-{suffix}.json",
         backup_dir / f"subscription-{stamp}-{suffix}.db",
