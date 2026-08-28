@@ -15,12 +15,8 @@ import math
 from datetime import date, timedelta
 from typing import Any
 
-try:
-    from ..core import domain
-    from ..storage import db
-except (ImportError, ValueError):
-    from core import domain  # type: ignore[no-redef]
-    from storage import db  # type: ignore[no-redef]
+from ..core import domain
+from ..storage import repositories
 
 
 
@@ -198,9 +194,9 @@ def _count_cycles_in_range(sub: dict, range_start: date, range_end: date) -> int
 def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
     if mode not in ("nominal", "actual"):
         raise ValueError("统计模式必须是 nominal 或 actual")
-    subs = db.get_all_subscriptions(user_id)
-    cats = {c["id"]: c for c in db.get_all_categories(user_id)}
-    settings = db.get_app_settings()
+    subs = repositories.get_all_subscriptions(user_id)
+    cats = {c["id"]: c for c in repositories.get_all_categories(user_id)}
+    settings = repositories.get_app_settings()
     default_currency = settings.get("default_currency") or "CNY"
 
     now = date.today()
@@ -326,7 +322,7 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
 
 def get_calendar_events(user_id: str, year: int, month: int) -> list[dict]:
     """按月生成日历事件。"""
-    subs = db.get_all_subscriptions(user_id)
+    subs = repositories.get_all_subscriptions(user_id)
     events: list[dict] = []
     for sub in subs:
         if not domain.is_calendar_trackable(sub["lifecycle"]):

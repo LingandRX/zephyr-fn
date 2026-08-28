@@ -10,18 +10,15 @@ import json
 import os
 import re
 import sqlite3
-from contextlib import contextmanager
 from datetime import date
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
-try:
-    from ..core import domain
-    from ..storage import db
-except (ImportError, ValueError):
-    from core import domain  # type: ignore[no-redef]
-    from storage import db  # type: ignore[no-redef]
+from ..core import domain
+from ..extensions import db
+from ..models import Category, Subscription
+from ..storage import repositories
 
 
 MAX_IMPORT_ROWS = 10_000
@@ -112,8 +109,8 @@ def _resolve_export_scope(user_id: str | None, include_all: bool) -> str | None:
 def _scoped_records(user_id: str | None, include_all: bool) -> tuple[list[dict], list[dict]]:
     scope = _resolve_export_scope(user_id, include_all)
     if scope is None:
-        return db.get_all_subscriptions_raw(), db.get_all_categories_raw()
-    return db.get_all_subscriptions(scope), db.get_all_categories(scope)
+        return repositories.get_all_subscriptions_raw(), repositories.get_all_categories_raw()
+    return repositories.get_all_subscriptions(scope), repositories.get_all_categories(scope)
 
 
 def export_json(user_id: str | None = None, *, include_all: bool = False) -> dict:
@@ -122,7 +119,7 @@ def export_json(user_id: str | None = None, *, include_all: bool = False) -> dic
     return {
         "app": "subscription-manager",
         "version": "0.1.0",
-        "exported_at": db.now_utc(),
+        "exported_at": repositories.now_utc(),
         "scope": {"user_id": scope, "all_users": scope is None},
         "categories": categories,
         "subscriptions": subscriptions,
@@ -340,8 +337,8 @@ def _normalize_imported_sub(raw: dict, user_id: str,
         if derived is not None:
             next_due_date = derived.isoformat()
 
-    external_id = _clean_external_id(raw.get("id")) or db.new_id()
-    now = db.now_utc()
+    external_id = _clean_external_id(raw.get("id")) or repositories.new_id()
+    now = repositories.now_utc()
     return {
         "id": external_id,
         "user_id": target_user,
@@ -376,73 +373,29 @@ def _normalize_imported_sub(raw: dict, user_id: str,
 # 事务与冲突规划
 # --------------------------------------------------------------------------- #
 
-def _connection_and_lock() -> tuple[Any, Any] | tuple[None, None]:
-    conn = getattr(db, "_conn", None)
-    lock = getattr(db, "_lock", None)
-    if conn is None or lock is None:
-        return None, None
-    return conn, lock
+def _insert_category_conn(session: Any, category: dict) -> None:
+    session.add(Category(
+        id=category["id"], user_id=category["user_id"], name=category["name"],
+        icon=category.get("icon"), sort_order=category.get("sort_order", 0),
+    ))
 
 
-@contextmanager
-def _transaction() -> Iterator[Any]:
-    conn, lock = _connection_and_lock()
-    if conn is None or lock is None:
-        yield None
-        return
-    with lock:
-        started = False
-        try:
-            conn.execute("BEGIN IMMEDIATE")
-            started = True
-            yield conn
-            conn.commit()
-        except Exception:
-            if started:
-                conn.rollback()
-            raise
+def _insert_subscription_conn(session: Any, sub: dict) -> None:
+    session.add(Subscription(**{column: sub.get(column) for column in _SUBSCRIPTION_COLUMNS}))
 
 
-def _insert_category_conn(conn: Any, category: dict) -> None:
-    conn.execute(
-        "INSERT INTO categories (id, user_id, name, icon, sort_order) VALUES (?,?,?,?,?)",
-        (
-            category["id"], category["user_id"], category["name"],
-            category.get("icon"), category.get("sort_order", 0),
-        ),
-    )
-
-
-def _insert_subscription_conn(conn: Any, sub: dict) -> None:
-    columns = ",".join(_SUBSCRIPTION_COLUMNS)
-    placeholders = ",".join("?" for _ in _SUBSCRIPTION_COLUMNS)
-    conn.execute(
-        f"INSERT INTO subscriptions ({columns}) VALUES ({placeholders})",
-        [sub.get(column) for column in _SUBSCRIPTION_COLUMNS],
-    )
-
-
-def _update_subscription_conn(conn: Any, sub: dict, sub_id: str, user_id: str) -> None:
-    columns = [column for column in _SUBSCRIPTION_COLUMNS if column not in ("id", "user_id")]
-    sets = ",".join(f"{column}=?" for column in columns)
-    params = [sub.get(column) for column in columns] + [sub_id, user_id]
-    cursor = conn.execute(
-        f"UPDATE subscriptions SET {sets} WHERE id=? AND user_id=?", params
-    )
-    if cursor.rowcount != 1:
+def _update_subscription_conn(session: Any, sub: dict, sub_id: str, user_id: str) -> None:
+    existing = session.get(Subscription, sub_id)
+    if existing is None or existing.user_id != user_id:
         raise ValueError("合并时目标订阅不存在或用户不匹配")
-
-
-def _insert_fallback(categories: list[dict], subscriptions: list[dict]) -> None:
-    for category in categories:
-        db.insert_category_raw(category)
-    for sub in subscriptions:
-        db.insert_subscription_raw(sub)
+    for column in _SUBSCRIPTION_COLUMNS:
+        if column not in ("id", "user_id"):
+            setattr(existing, column, sub.get(column))
 
 
 def _load_existing_subscriptions(user_id: str) -> tuple[dict[str, dict], set[str]]:
     target_user = _require_user_id(user_id)
-    rows = db.get_all_subscriptions_raw()
+    rows = repositories.get_all_subscriptions_raw()
     by_id = {str(row["id"]): row for row in rows if row.get("id")}
     keys = {
         _subscription_key(str(row.get("name") or ""), int(row.get("amount") or 0),
@@ -450,7 +403,7 @@ def _load_existing_subscriptions(user_id: str) -> tuple[dict[str, dict], set[str
         for row in rows if row.get("user_id") == target_user
     }
     try:
-        keys.update(str(key).lower() for key in db.get_subscription_dedup_keys(target_user))
+        keys.update(str(key).lower() for key in repositories.get_subscription_dedup_keys(target_user))
     except Exception:  # noqa: BLE001
         pass
     return by_id, keys
@@ -458,7 +411,7 @@ def _load_existing_subscriptions(user_id: str) -> tuple[dict[str, dict], set[str
 
 def _load_category_state(user_id: str) -> tuple[dict[str, dict], dict[str, dict], dict[str, dict]]:
     target_user = _require_user_id(user_id)
-    all_categories = db.get_all_categories_raw()
+    all_categories = repositories.get_all_categories_raw()
     target_categories = [c for c in all_categories if c.get("user_id")]
     global_by_id = {str(c["id"]): c for c in all_categories if c.get("id")}
     target_by_id = {str(c["id"]): c for c in target_categories if c.get("id")}
@@ -508,7 +461,7 @@ def _plan_categories(user_id: str, categories_in: list[Any],
                 conflicts += 1
                 target_id = None
         if not target_id:
-            target_id = db.new_id()
+            target_id = repositories.new_id()
         if target_id in pending_names.values():
             if source_id:
                 source_to_target[source_id] = target_id
@@ -565,7 +518,7 @@ def _resolve_category_id(source_id: Any, source_to_target: dict[str, str],
     if target:
         return target
     try:
-        for category in db.get_all_categories(target_user):
+        for category in repositories.get_all_categories(target_user):
             if str(category.get("id")) == source:
                 return source
     except Exception:  # noqa: BLE001
@@ -610,9 +563,9 @@ def _prepare_subscription_items(raw_items: list[Any], user_id: str,
                 continue
 
             if source_id is None:
-                sub["id"] = db.new_id()
+                sub["id"] = repositories.new_id()
             elif source_id in used_ids:
-                sub["id"] = db.new_id()
+                sub["id"] = repositories.new_id()
                 id_conflicts += 1
             else:
                 sub["id"] = source_id
@@ -627,25 +580,19 @@ def _prepare_subscription_items(raw_items: list[Any], user_id: str,
 
 
 def _commit_import(categories: list[dict], subscriptions: list[dict]) -> tuple[bool, str | None, bool]:
+    """在单个事务中写入导入数据；失败整体回滚。"""
     if not categories and not subscriptions:
         return True, None, True
-    conn, _lock = _connection_and_lock()
-    if conn is not None:
-        try:
-            with _transaction() as transaction:
-                for category in categories:
-                    _insert_category_conn(transaction, category)
-                for sub in subscriptions:
-                    _insert_subscription_conn(transaction, sub)
-            return True, None, True
-        except Exception as exc:  # noqa: BLE001
-            return False, str(exc), True
-
     try:
-        _insert_fallback(categories, subscriptions)
+        for category in categories:
+            _insert_category_conn(db.session, category)
+        for sub in subscriptions:
+            _insert_subscription_conn(db.session, sub)
+        db.session.commit()
+        return True, None, True
     except Exception as exc:  # noqa: BLE001
-        return False, str(exc), False
-    return True, None, False
+        db.session.rollback()
+        return False, str(exc), True
 
 
 def _import_result(success_count: int = 0, skipped_duplicates: int = 0,
@@ -664,6 +611,48 @@ def _import_result(success_count: int = 0, skipped_duplicates: int = 0,
     if error:
         result["error"] = error
     return result
+
+
+# --------------------------------------------------------------------------- #
+# 备份文件管理
+# --------------------------------------------------------------------------- #
+
+def resolve_backup_file(name: str) -> Path:
+    """把备份文件名解析为备份目录内的安全路径，防止路径穿越。"""
+    from .. import config as app_config
+    filename = os.path.basename(str(name or "").strip())
+    if not filename.startswith("subscription-") or filename == "subscription-":
+        raise ValueError("非法的备份文件名")
+    if filename in (".", "..") or "/" in filename or "\\" in filename:
+        raise ValueError("非法的备份文件名")
+    backup_dir = app_config.backup_dir().resolve()
+    path = (backup_dir / filename).resolve()
+    if path.parent != backup_dir:
+        raise ValueError("非法的备份文件路径")
+    return path
+
+
+def delete_backup_file(name: str) -> bool:
+    path = resolve_backup_file(name)
+    if not path.is_file():
+        return False
+    path.unlink()
+    return True
+
+
+def list_backup_files() -> list[dict]:
+    from .. import config as app_config
+    backup_dir = app_config.backup_dir()
+    if not backup_dir.exists():
+        return []
+    files = []
+    for p in sorted(backup_dir.glob("subscription-*"), reverse=True)[:50]:
+        files.append({
+            "name": p.name,
+            "size": p.stat().st_size,
+            "modified": p.stat().st_mtime,
+        })
+    return files
 
 
 # --------------------------------------------------------------------------- #
@@ -929,35 +918,26 @@ def merge_from_database(source_path: str, user_id: str) -> str:
                 else:
                     skipped += 1
                 continue
-            sub["id"] = db.new_id()
+            sub["id"] = repositories.new_id()
             while sub["id"] in used_ids:
-                sub["id"] = db.new_id()
+                sub["id"] = repositories.new_id()
             used_ids.add(sub["id"])
             to_insert.append(sub)
             id_conflicts += 1
             added += 1
 
-        conn, _lock = _connection_and_lock()
-        atomic = conn is not None
-        if conn is not None:
-            try:
-                with _transaction() as transaction:
-                    for category in pending_categories:
-                        _insert_category_conn(transaction, category)
-                    for sub in to_insert:
-                        _insert_subscription_conn(transaction, sub)
-                    for sub, sub_id in to_update:
-                        _update_subscription_conn(transaction, sub, sub_id, target_user)
-            except Exception as exc:  # noqa: BLE001
-                return f"合并失败：事务回滚: {exc}"
-        else:
-            try:
-                _insert_fallback(pending_categories, to_insert)
-                for sub, _sub_id in to_update:
-                    db.replace_subscription_raw(sub)
-                atomic = False
-            except Exception as exc:  # noqa: BLE001
-                return f"合并失败：写入失败: {exc}"
+        try:
+            for category in pending_categories:
+                _insert_category_conn(db.session, category)
+            for sub in to_insert:
+                _insert_subscription_conn(db.session, sub)
+            for sub, sub_id in to_update:
+                _update_subscription_conn(db.session, sub, sub_id, target_user)
+            db.session.commit()
+            atomic = True
+        except Exception as exc:  # noqa: BLE001
+            db.session.rollback()
+            return f"合并失败：事务回滚: {exc}"
 
         suffix = f"，跳过无效 {failed} 条" if failed else ""
         non_atomic = "（兼容模式，非原子）" if not atomic else ""

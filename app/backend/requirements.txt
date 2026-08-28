@@ -1,0 +1,9 @@
+# 订阅管理后端运行时依赖（fnOS python312 / 本地开发）
+# 安装: pip install -r requirements.txt
+#
+# 说明: fnOS 设备通过 install_dep_apps=python312 提供 Python 运行时，
+# 包内的 Flask 生态依赖需在打包/安装阶段通过 pip 补齐
+# （见 REFACTORING.md「迁移注意事项」）。
+Flask>=3.0,<4.0
+Flask-SQLAlchemy>=3.1,<4.0
+Flask-Migrate>=4.0,<5.0

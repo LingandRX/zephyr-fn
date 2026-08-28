@@ -1,76 +1,54 @@
-"""HTTP API 安全边界回归测试（Flask 版本）。
+"""HTTP API 安全边界回归测试。
 
-测试使用 Flask 测试客户端，为每次测试类创建临时数据库、静态目录和备份目录。
+使用 Flask 测试客户端与统一响应信封 {code, message, data}。
 """
 from __future__ import annotations
 
 import json
-import sys
-import tempfile
 import unittest
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app" / "backend"))
+from helpers import AppTestCase
+from backend import config
+from backend.extensions import db
+from backend.services import subscriptions as sub_service
+from backend.storage import repositories
 
-import config
-import server
-from storage import db
 
-
-class FlaskApiSecurityTests(unittest.TestCase):
+class FlaskApiSecurityTests(AppTestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tmp = tempfile.TemporaryDirectory()
-        cls.root = Path(cls.tmp.name)
+        super().setUpClass()
+        # 静态目录：index.html + 越界目录（路径穿越测试用）
         cls.www = cls.root / "www"
         cls.www.mkdir()
         (cls.www / "index.html").write_text("ok", encoding="utf-8")
         outside = cls.root / "www2"
         outside.mkdir()
         (outside / "secret.txt").write_text("not for serving", encoding="utf-8")
-
-        cls._old_overrides = dict(getattr(config, "_OVERRIDES", {}))
-        config.override("DB_PATH", str(cls.root / "api-test.db"))
         config.override("WWW_DIR", str(cls.www))
-        config.override("SHARE_DIR", str(cls.root / "backups"))
-        db.connect(cls.root / "api-test.db")
 
-        db.create_subscription(
-            "alice",
-            {
-                "name": "Alice Service",
-                "amount": 100,
-                "period_type": "month",
-                "start_date": "2026-01-01",
-            },
-        )
-        db.create_subscription(
-            "bob",
-            {
-                "name": "Bob Service",
-                "amount": 200,
-                "period_type": "month",
-                "start_date": "2026-01-01",
-            },
-        )
-
-        # 创建 Flask 应用（本地开发模式，允许无身份头）
-        cls.app = server.create_app(allow_headerless_local_identity=True)
-        cls.app.config["TESTING"] = True
-
-    @classmethod
-    def tearDownClass(cls):
-        close = getattr(db, "close", None)
-        if close is not None:
-            close()
-
-        current_keys = set(getattr(config, "_OVERRIDES", {}))
-        old_keys = set(cls._old_overrides)
-        for key in current_keys | old_keys:
-            config.override(key, cls._old_overrides.get(key))
-        cls.tmp.cleanup()
+        with cls.ctx():
+            sub_service.create_subscription(
+                "alice",
+                {
+                    "name": "Alice Service",
+                    "amount": 100,
+                    "period_type": "month",
+                    "start_date": "2026-01-01",
+                },
+            )
+            sub_service.create_subscription(
+                "bob",
+                {
+                    "name": "Bob Service",
+                    "amount": 200,
+                    "period_type": "month",
+                    "start_date": "2026-01-01",
+                },
+            )
 
     def setUp(self):
+        super().setUp()
         self.client = self.app.test_client()
 
     @staticmethod
@@ -80,11 +58,17 @@ class FlaskApiSecurityTests(unittest.TestCase):
             "X-Trim-Isadmin": "true" if is_admin else "false",
         }
 
+    @staticmethod
+    def _unwrap(payload: dict) -> dict:
+        """解包统一信封：校验 code == 0 并返回 data。"""
+        assert payload["code"] == 0, payload
+        return payload["data"]
+
     def test_tcp_without_identity_headers_keeps_local_development_access(self):
         """本地开发模式允许无身份头访问。"""
         response = self.client.get("/api/settings")
         self.assertEqual(response.status_code, 200)
-        data = response.get_json()
+        data = self._unwrap(response.get_json())
         self.assertEqual(data["default_currency"], "CNY")
 
     def test_regular_user_cannot_read_or_update_system_settings(self):
@@ -92,6 +76,7 @@ class FlaskApiSecurityTests(unittest.TestCase):
         headers = self._identity_headers("alice")
         response = self.client.get("/api/settings", headers=headers)
         self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["code"], 403)
 
         response = self.client.put(
             "/api/settings",
@@ -100,19 +85,20 @@ class FlaskApiSecurityTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 403)
         data = response.get_json()
-        self.assertIn("管理员", data["error"])
+        self.assertIn("管理员", data["message"])
 
     def test_admin_settings_redact_secrets_and_preserve_masked_updates(self):
         """管理员设置接口：密钥脱敏、掩码更新保持原密钥。"""
         headers = self._identity_headers("admin", is_admin=True)
-        db.update_app_settings({
-            "smtp_password": "smtp-initial-secret",
-            "pushplus_token": "push-initial-token",
-        })
+        with self.ctx():
+            repositories.update_app_settings({
+                "smtp_password": "smtp-initial-secret",
+                "pushplus_token": "push-initial-token",
+            })
 
         response = self.client.get("/api/settings", headers=headers)
         self.assertEqual(response.status_code, 200)
-        public = response.get_json()
+        public = self._unwrap(response.get_json())
         self.assertNotIn("smtp_password", public)
         self.assertNotIn("pushplus_token", public)
         self.assertTrue(public["smtp_password_configured"])
@@ -131,7 +117,7 @@ class FlaskApiSecurityTests(unittest.TestCase):
             },
         )
         self.assertEqual(response.status_code, 200)
-        raw = db.get_app_settings()
+        raw = repositories.get_app_settings()
         self.assertEqual(raw["smtp_password"], "smtp-initial-secret")
         self.assertEqual(raw["pushplus_token"], "push-initial-token")
         self.assertEqual(raw["notification_days"], 5)
@@ -146,7 +132,7 @@ class FlaskApiSecurityTests(unittest.TestCase):
             },
         )
         self.assertEqual(response.status_code, 200)
-        raw = db.get_app_settings()
+        raw = repositories.get_app_settings()
         self.assertEqual(raw["smtp_password"], "smtp-new-secret")
         self.assertEqual(raw["pushplus_token"], "push-new-token")
 
@@ -157,13 +143,13 @@ class FlaskApiSecurityTests(unittest.TestCase):
             json={"pushplus_token_clear": True},
         )
         self.assertEqual(response.status_code, 200)
-        raw = db.get_app_settings()
+        raw = repositories.get_app_settings()
         self.assertIsNone(raw["pushplus_token"])
         self.assertEqual(raw["smtp_password"], "smtp-new-secret")
 
         response = self.client.get("/api/settings", headers=headers)
         self.assertEqual(response.status_code, 200)
-        public = response.get_json()
+        public = self._unwrap(response.get_json())
         self.assertNotIn("pushplus_token", public)
         self.assertFalse(public["pushplus_token_configured"])
         self.assertEqual(public["pushplus_token_masked"], "")
@@ -173,7 +159,10 @@ class FlaskApiSecurityTests(unittest.TestCase):
         user_headers = self._identity_headers("alice")
         response = self.client.get("/api/subscriptions", headers=user_headers)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual([item["name"] for item in response.get_json()], ["Alice Service"])
+        self.assertEqual(
+            [item["name"] for item in self._unwrap(response.get_json())],
+            ["Alice Service"],
+        )
 
         response = self.client.get("/api/backup/export-json", headers=user_headers)
         self.assertEqual(response.status_code, 403)
@@ -201,40 +190,77 @@ class FlaskApiSecurityTests(unittest.TestCase):
     def test_oversized_request_body_is_rejected(self):
         """超大请求体被拒绝。"""
         headers = self._identity_headers("admin", is_admin=True)
-        # Flask 的 MAX_CONTENT_LENGTH 会在请求处理时检查
-        self.app.config["MAX_CONTENT_LENGTH"] = server.MAX_REQUEST_BODY_BYTES
         response = self.client.post(
             "/api/subscriptions",
             headers=headers,
-            data="x" * (server.MAX_REQUEST_BODY_BYTES + 1),
+            data="x" * (config.MAX_REQUEST_BODY_BYTES + 1),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 413)
+        self.assertEqual(response.get_json()["code"], 413)
 
     def test_unix_socket_without_identity_headers_is_rejected(self):
         """Unix Socket 模式必须携带身份头。"""
-        app = server.create_app(allow_headerless_local_identity=False)
+        app = create_app_production_like()
         app.config["TESTING"] = True
+
+        def _cleanup():
+            with app.app_context():
+                db.session.remove()
+                db.engine.dispose()
+
+        self.addCleanup(_cleanup)
         client = app.test_client()
         response = client.get("/api/settings")
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 401)
 
-    def test_duplicate_identity_header_is_rejected(self):
-        """重复的身份头被拒绝（Flask 自动处理多个同名头）。"""
-        # Flask 的 request.headers 会合并多个同名头，我们需要测试这个行为
-        headers = self._identity_headers("alice")
-        # Flask 不会自动拒绝重复头，但我们可以测试业务逻辑
-        response = self.client.get("/api/subscriptions", headers=headers)
-        self.assertEqual(response.status_code, 200)
-
-    def test_invalid_header_name_is_rejected(self):
-        """无效的请求头名称被拒绝（Flask 会自动处理）。"""
-        # Flask 的底层 werkzeug 会处理无效头
-        response = self.client.get(
+    def test_subscription_crud_returns_unified_envelope(self):
+        """订阅 CRUD 返回统一信封 {code, message, data}。"""
+        # 使用独立用户，避免污染其他测试的 alice/bob 数据
+        headers = self._identity_headers("crud-user")
+        # 创建
+        response = self.client.post(
             "/api/subscriptions",
-            headers={"X-Trim-Userid": "alice"},
+            headers=headers,
+            json={"name": "Spotify", "amount": 1500, "period_type": "month",
+                  "start_date": "2026-01-01"},
         )
+        self.assertEqual(response.status_code, 201)
+        body = response.get_json()
+        self.assertEqual(body["code"], 0)
+        self.assertEqual(body["message"], "ok")
+        self.assertEqual(body["data"]["name"], "Spotify")
+        sub_id = body["data"]["id"]
+
+        # 查询单个
+        response = self.client.get(f"/api/subscriptions/{sub_id}", headers=headers)
+        self.assertEqual(response.get_json()["data"]["name"], "Spotify")
+
+        # 更新
+        response = self.client.put(
+            f"/api/subscriptions/{sub_id}", headers=headers,
+            json={"amount": 1800},
+        )
+        self.assertEqual(response.get_json()["data"]["amount"], 1800)
+
+        # 续费
+        response = self.client.post(f"/api/subscriptions/{sub_id}/renew", headers=headers)
         self.assertEqual(response.status_code, 200)
+
+        # 删除
+        response = self.client.delete(f"/api/subscriptions/{sub_id}", headers=headers)
+        self.assertEqual(response.get_json()["data"]["ok"], True)
+
+        # 不存在 -> 404 信封
+        response = self.client.get(f"/api/subscriptions/{sub_id}", headers=headers)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.get_json()["code"], 404)
+
+
+def create_app_production_like():
+    """创建不允许无身份头访问的应用（模拟 Unix Socket 网关模式）。"""
+    from backend.app import create_app as _factory
+    return _factory(allow_headerless_local_identity=False)
 
 
 if __name__ == "__main__":
