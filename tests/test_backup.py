@@ -1,30 +1,16 @@
 """备份导出/导入的范围和 CSV 往返回归测试。"""
 from __future__ import annotations
 
-import sys
-import tempfile
 import unittest
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app" / "backend"))
-
-from services import backup
-from storage import db
+from helpers import AppTestCase
+from backend.services import backup
+from backend.services import subscriptions as sub_service
 
 
-
-class BackupRoundTripTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.path = Path(self.tmp.name) / "backup.db"
-        db.connect(self.path)
-
-    def tearDown(self):
-        db.close()
-        self.tmp.cleanup()
-
+class BackupRoundTripTests(AppTestCase):
     def test_csv_round_trip_preserves_start_date_and_custom_period(self):
-        original = db.create_subscription(
+        original = sub_service.create_subscription(
             "alice",
             {
                 "name": "Custom service",
@@ -43,7 +29,7 @@ class BackupRoundTripTests(unittest.TestCase):
 
         result = backup.import_from_csv(exported, "bob")
         self.assertEqual(result["success_count"], 1)
-        imported = db.get_all_subscriptions("bob")
+        imported = sub_service.list_subscriptions("bob")
         self.assertEqual(len(imported), 1)
         self.assertNotEqual(imported[0]["id"], original["id"])
         self.assertEqual(imported[0]["start_date"], "2026-01-31")

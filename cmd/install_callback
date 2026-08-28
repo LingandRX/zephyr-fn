@@ -4,6 +4,13 @@ set -e
 PYTHON_BIN="/var/apps/python312/target/bin/python3"
 mkdir -p "${TRIM_PKGVAR}/logs" "${TRIM_PKGVAR}/backups"
 cd "${TRIM_APPDEST}/backend"
+
+# 补齐后端运行时依赖（flask 已随 python312 提供；flask-sqlalchemy / flask-migrate
+# 为规范化重构新增）。幂等：已安装且满足版本约束时 pip 不重复下载。
+# 安装失败时 set -e 会使安装流程报错退出，避免装上无法启动的应用。
+"$PYTHON_BIN" -m pip install --no-warn-script-location --disable-pip-version-check \
+  "Flask-SQLAlchemy>=3.1,<4.0" "Flask-Migrate>=4.0,<5.0"
+
 # 显式把安装向导值传给 --init-db，不依赖环境变量继承
 EXTRA_ARGS=()
 if [ -n "${wizard_reminder_days:-}" ]; then

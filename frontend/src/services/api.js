@@ -4,6 +4,8 @@
  * - dev：页面在根路径，API 走 /api（Vite proxy → 127.0.0.1:5001）
  * - prod：页面在 /app/subscription/，API 走 /app/subscription/api（网关转发，后端剥离前缀）
  * - 绝不携带用户身份：身份由网关注入 X-Trim-* Header，后端统一取用
+ * - 统一响应信封 {code, message, data}：code === 0 视为成功，本层自动解包出 data；
+ *   非 0 或 HTTP 错误统一抛 Error(message)
  */
 
 export const API_BASE = import.meta.env.DEV ? "/api" : "/app/subscription/api";
@@ -20,18 +22,28 @@ export async function api(path, options = {}) {
     opts.body = options.text;
   }
   const res = await fetch(API_BASE + path, opts);
-  if (!res.ok) {
-    let msg = `请求失败 (${res.status})`;
-    try {
-      const d = await res.json();
-      if (d.error) msg = d.error;
-    } catch (_) {
-      /* 非 JSON 错误体 */
-    }
-    throw new Error(msg);
-  }
   const ct = res.headers.get("content-type") || "";
-  return ct.includes("json") ? res.json() : res.text();
+  if (ct.includes("json")) {
+    let d;
+    try {
+      d = await res.json();
+    } catch (_) {
+      throw new Error(`请求失败 (${res.status})`);
+    }
+    // 信封协议：code === 0 成功；否则把 message 作为异常抛出
+    if (d && typeof d === "object" && "code" in d) {
+      if (d.code === 0) return d.data;
+      throw new Error(d.message || `请求失败 (${res.status})`);
+    }
+    if (!res.ok) {
+      throw new Error(d.error || `请求失败 (${res.status})`);
+    }
+    return d;
+  }
+  if (!res.ok) {
+    throw new Error(`请求失败 (${res.status})`);
+  }
+  return res.text();
 }
 
 /** 直接下载端点（导出 JSON/CSV）：与页面同源，浏览器导航即可触发下载 */

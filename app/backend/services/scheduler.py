@@ -1,4 +1,9 @@
-"""后台定时任务调度服务：到期提醒和定期备份。"""
+"""后台定时任务调度服务：到期提醒和定期备份。
+
+调度器运行在独立守护线程中，不持有请求上下文；每次循环迭代显式
+``with app.app_context()`` 获取数据库会话（Flask-SQLAlchemy 会话按
+上下文隔离，线程间互不串扰）。
+"""
 from __future__ import annotations
 
 import json
@@ -11,24 +16,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-try:
-    from .. import config
-    from ..services import backup as backup_service
-    from ..services import notifications
-    from ..storage import db
-    from ..utils import channels
-    from ..utils.file_utils import atomic_write_json, fsync_directory
-    send_email = channels.send_email
-    send_pushplus = channels.send_pushplus
-except (ImportError, ValueError):
-    import config  # type: ignore[no-redef]
-    from services import backup as backup_service  # type: ignore[no-redef]
-    from services import notifications  # type: ignore[no-redef]
-    from storage import db  # type: ignore[no-redef]
-    from utils import channels  # type: ignore[no-redef]
-    from utils.file_utils import atomic_write_json, fsync_directory  # type: ignore[no-redef]
-    send_email = channels.send_email
-    send_pushplus = channels.send_pushplus
+from flask import Flask
+
+from .. import config
+from ..services import backup as backup_service
+from ..services import notifications
+from ..storage import repositories
+from ..utils import channels
+from ..utils.file_utils import atomic_write_json, fsync_directory
+
+send_email = channels.send_email
+send_pushplus = channels.send_pushplus
 
 
 CHECK_INTERVAL = 3600          # 通知检查间隔 1 小时
@@ -52,8 +50,9 @@ def _atomic_write_json(path: Path, data: dict) -> None:
 def _atomic_copy_database(temp_path: Path, target_path: Path) -> None:
     temp_path.unlink(missing_ok=True)
     try:
-        db.export_db_copy(temp_path)
-        with temp_path.open("rb") as handle:
+        repositories.export_db_copy(temp_path)
+        # r+b：Windows 上只读句柄不允许 fsync（Linux 允许），必须可写打开
+        with temp_path.open("r+b") as handle:
             os.fsync(handle.fileno())
         os.replace(temp_path, target_path)
         fsync_directory(target_path.parent)
@@ -211,7 +210,7 @@ def backup_now(user_id: str | None = None, *, include_all: bool = False) -> dict
 # --------------------------------------------------------------------------- #
 
 def _check_reminders(reminder_days: int | None = None) -> None:
-    settings = db.get_app_settings()
+    settings = repositories.get_app_settings()
     if not settings.get("notification_enabled"):
         return
     if notifications.is_do_not_disturb(settings):
@@ -238,7 +237,7 @@ def _check_reminders(reminder_days: int | None = None) -> None:
 
 def _legacy_claim(subscription_id: str, channel: str) -> str | None:
     try:
-        if db.has_channel_notified_today(subscription_id, channel):
+        if notifications.has_channel_notified_today(subscription_id, channel):
             return None
     except Exception:  # noqa: BLE001
         pass
@@ -253,7 +252,7 @@ def _complete_claim(claim_id: str | None, subscription_id: str, channel: str,
         return
     if claim_id and claim_id.startswith("legacy:"):
         try:
-            db.log_notification(subscription_id, channel, status, error_message)
+            notifications.log_notification(subscription_id, channel, status, error_message)
         except Exception:  # noqa: BLE001
             _logger().exception("写入通知日志失败: %s/%s", subscription_id, channel)
 
@@ -291,7 +290,14 @@ def _send_channels(settings: dict, sub: dict, title: str, body: str) -> None:
             _run_channel(
                 sub_id,
                 "email",
-                lambda: send_email(to_address, title, body),
+                lambda: send_email(
+                    to_address, title, body,
+                    host=settings.get("smtp_host"),
+                    port=settings.get("smtp_port"),
+                    username=settings.get("smtp_username"),
+                    password=settings.get("smtp_password"),
+                    from_address=settings.get("smtp_from_address"),
+                ),
                 f"已发送: {title}",
             )
 
@@ -308,25 +314,27 @@ def _send_channels(settings: dict, sub: dict, title: str, body: str) -> None:
 # 主循环
 # --------------------------------------------------------------------------- #
 
-def _loop(reminder_days: int | None) -> None:
+def _loop(app: Flask, reminder_days: int | None) -> None:
     next_backup = 0.0
     while True:
         try:
-            now = time.time()
-            _check_reminders(reminder_days)
-            if now >= next_backup:
-                result = backup_now(include_all=True)
-                if not result.get("ok"):
-                    _logger().error("定时备份未完整完成: %s", result.get("error"))
-                next_backup = now + BACKUP_INTERVAL
+            with app.app_context():
+                now = time.time()
+                _check_reminders(reminder_days)
+                if now >= next_backup:
+                    result = backup_now(include_all=True)
+                    if not result.get("ok"):
+                        _logger().error("定时备份未完整完成: %s", result.get("error"))
+                    next_backup = now + BACKUP_INTERVAL
         except Exception:  # noqa: BLE001
             _logger().exception("定时任务执行出错")
         time.sleep(CHECK_INTERVAL)
 
 
-def start_scheduler(reminder_days: int | None = None) -> threading.Thread:
+def start_scheduler(app: Flask, reminder_days: int | None = None) -> threading.Thread:
+    """启动后台调度线程；调用方需传入应用实例（工厂产物）。"""
     thread = threading.Thread(
-        target=_loop, args=(reminder_days,), name="scheduler", daemon=True
+        target=_loop, args=(app, reminder_days), name="scheduler", daemon=True
     )
     thread.start()
     return thread

@@ -1,25 +1,25 @@
-"""通知服务：免打扰判断、到期筛选、文案以及通知幂等领取。"""
+"""通知服务：免打扰判断、到期筛选、文案以及通知幂等领取。
+
+幂等领取（claim_notification / complete_notification）委托给
+storage/repositories 的原子 UPSERT 实现；本模块保留业务算法与兼容入口。
+"""
 from __future__ import annotations
 
 import logging
-import threading
-import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Any
 
-try:
-    from ..core import domain
-    from ..storage import db
-except (ImportError, ValueError):
-    from core import domain  # type: ignore[no-redef]
-    from storage import db  # type: ignore[no-redef]
+from ..core import domain
+from ..storage import repositories
 
+# 兼容入口：调度器与外部调用方继续使用这些名字
+claim_notification = repositories.claim_notification
+complete_notification = repositories.complete_notification
+has_channel_notified_today = repositories.has_channel_notified_today
+log_notification = repositories.log_notification
 
 LOGGER_NAME = "subscription"
 NOTIFICATION_CLAIM_TTL_SECONDS = 6 * 60 * 60
-_VALID_NOTIFICATION_STATUSES = {"pending", "sent", "failed"}
-_claim_lock = threading.RLock()
-_memory_claims: set[tuple[str, str, str]] = set()
 
 
 def _logger() -> logging.Logger:
@@ -46,7 +46,7 @@ def _parse_clock(value: Any) -> int | None:
 def is_do_not_disturb(settings: dict | None = None,
                       now: datetime | None = None) -> bool:
     """判断当前时间是否处于免打扰区间，精确到分钟并支持跨午夜。"""
-    settings = settings if settings is not None else db.get_app_settings()
+    settings = settings if settings is not None else repositories.get_app_settings()
     start = _parse_clock(settings.get("do_not_disturb_start"))
     end = _parse_clock(settings.get("do_not_disturb_end"))
     if start is None or end is None or start == end:
@@ -76,18 +76,18 @@ def get_subscriptions_needing_notification(
     user_id: str | None = None, reminder_days: int | None = None
 ) -> list[dict]:
     """返回提醒窗口内的订阅。"""
-    settings = db.get_app_settings()
+    settings = repositories.get_app_settings()
     days = _reminder_days(settings, reminder_days)
     today = date.today()
     end_date = today + timedelta(days=days)
 
     if user_id is None:
-        subs = db.get_all_subscriptions_raw()
+        subs = repositories.get_all_subscriptions_raw()
     else:
         user = str(user_id).strip()
         if not user:
             return []
-        subs = db.get_all_subscriptions(user)
+        subs = repositories.get_all_subscriptions(user)
 
     result = []
     for sub in subs:
@@ -136,141 +136,35 @@ def generate_notification_content(sub: dict) -> tuple[str, str]:
     return title, body
 
 
-# --------------------------------------------------------------------------- #
-# 通知幂等：优先使用 SQLite 事务领取，兼容旧 db API 时降级为进程锁
-# --------------------------------------------------------------------------- #
-
-def _conn_and_lock() -> tuple[Any, Any] | tuple[None, None]:
-    conn = getattr(db, "_conn", None)
-    lock = getattr(db, "_lock", None)
-    if conn is None or lock is None:
-        return None, None
-    return conn, lock
-
-
-def _parse_created_at(value: Any) -> float | None:
-    if not value:
-        return None
-    text = str(value).strip()
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed.timestamp()
-    except (TypeError, ValueError, OverflowError):
-        return None
-
-
-def claim_notification(subscription_id: str, channel: str) -> str | None:
-    """原子领取某订阅/渠道/当天的发送名额。"""
-    sub_id = str(subscription_id or "").strip()
-    channel_name = str(channel or "").strip()
-    if not sub_id or not channel_name:
-        return None
-    today = date.today().isoformat()
-    key = (sub_id, channel_name, today)
-    now = time.time()
-
-    conn, lock = _conn_and_lock()
-    if conn is not None:
-        with _claim_lock, lock:
-            started = False
-            try:
-                conn.execute("BEGIN IMMEDIATE")
-                started = True
-                row = conn.execute(
-                    "SELECT id, status, created_at FROM notification_logs "
-                    "WHERE subscription_id=? AND notification_date=? AND channel=? "
-                    "ORDER BY created_at DESC LIMIT 1",
-                    (sub_id, today, channel_name),
-                ).fetchone()
-                if row:
-                    status = str(row[1] or "")
-                    if status == "sent":
-                        conn.rollback()
-                        return None
-                    if status == "pending":
-                        created = _parse_created_at(row[2])
-                        if created is None or now - created < NOTIFICATION_CLAIM_TTL_SECONDS:
-                            conn.rollback()
-                            return None
-                        conn.execute(
-                            "UPDATE notification_logs SET status='failed', "
-                            "error_message=? WHERE id=?",
-                            ("notification claim expired", row[0]),
-                        )
-                claim_id = db.new_id()
-                cursor = conn.execute(
-                    "INSERT INTO notification_logs "
-                    "(id, subscription_id, notification_date, channel, status, "
-                    "error_message, created_at) VALUES (?,?,?,?,?,?,?) "
-                    "ON CONFLICT(subscription_id, notification_date, channel) DO UPDATE SET "
-                    "id=excluded.id, status='pending', error_message=NULL, "
-                    "created_at=excluded.created_at "
-                    "WHERE notification_logs.status <> 'sent'",
-                    (claim_id, sub_id, today, channel_name, "pending", None, db.now_utc()),
-                )
-                if cursor.rowcount == 0:
-                    conn.rollback()
-                    return None
-                conn.commit()
-                return claim_id
-            except Exception:  # noqa: BLE001
-                if started:
-                    try:
-                        conn.rollback()
-                    except Exception:  # noqa: BLE001
-                        pass
-
-    with _claim_lock:
-        if key in _memory_claims:
-            return None
+def get_upcoming_notifications(user_id: str) -> list[dict]:
+    """返回用户提醒窗口内的到期通知列表（含文案），按剩余天数升序。"""
+    settings = repositories.get_app_settings()
+    reminder_days = max(0, int(settings.get("notification_days") or 7))
+    today = date.today()
+    end = today + timedelta(days=reminder_days)
+    result = []
+    for sub in repositories.get_all_subscriptions(user_id):
+        if sub["lifecycle"] != "active" or not sub.get("next_due_date"):
+            continue
         try:
-            if db.has_channel_notified_today(sub_id, channel_name):
-                return None
-        except Exception:  # noqa: BLE001
-            pass
-        _memory_claims.add(key)
-        return f"memory:{sub_id}:{channel_name}:{today}"
+            due = date.fromisoformat(sub["next_due_date"])
+        except ValueError:
+            continue
+        if today <= due <= end:
+            title, body = generate_notification_content(sub)
+            result.append({
+                "id": sub["id"],
+                "name": sub["name"],
+                "due_date": sub["next_due_date"],
+                "days_until": (due - today).days,
+                "amount": sub["amount"],
+                "currency": sub["currency"],
+                "title": title,
+                "body": body,
+            })
+    result.sort(key=lambda item: item["days_until"])
+    return result
 
 
-def complete_notification(claim_id: str | None, subscription_id: str, channel: str,
-                          status: str, error_message: str | None = None) -> None:
-    """完成/失败一个 claim；兼容旧 db API。"""
-    if status not in _VALID_NOTIFICATION_STATUSES or status == "pending":
-        status = "failed"
-    sub_id = str(subscription_id or "").strip()
-    channel_name = str(channel or "").strip()
-    claim = str(claim_id or "")
-    today = date.today().isoformat()
-
-    if claim.startswith("memory:"):
-        with _claim_lock:
-            _memory_claims.discard((sub_id, channel_name, today))
-        try:
-            db.log_notification(sub_id, channel_name, status, error_message)
-        except Exception:  # noqa: BLE001
-            _logger().exception("写入通知日志失败: %s/%s", sub_id, channel_name)
-        return
-
-    conn, lock = _conn_and_lock()
-    if conn is not None and claim:
-        try:
-            with _claim_lock, lock:
-                cursor = conn.execute(
-                    "UPDATE notification_logs SET status=?, error_message=? WHERE id=?",
-                    (status, error_message, claim),
-                )
-                conn.commit()
-                if cursor.rowcount:
-                    return
-        except Exception:  # noqa: BLE001
-            _logger().exception("更新通知 claim 失败: %s", claim)
-
-    try:
-        db.log_notification(sub_id, channel_name, status, error_message)
-    except Exception:  # noqa: BLE001
-        _logger().exception("写入通知日志失败: %s/%s", sub_id, channel_name)
-
-
+# 兼容别名
 finish_notification = complete_notification

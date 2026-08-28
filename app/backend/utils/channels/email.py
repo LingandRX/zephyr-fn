@@ -1,15 +1,13 @@
-"""邮件通知工具（Python 标准库 smtplib）。"""
+"""邮件通知工具（Python 标准库 smtplib）。
+
+纯基础设施：SMTP 参数一律由调用方传入（scheduler / 测试通知接口
+从设置服务读取后传入），本模块不依赖任何存储层，保持分层纯净。
+"""
 from __future__ import annotations
 
 import smtplib
 from email.header import Header
 from email.mime.text import MIMEText
-
-try:
-    from ...storage import db
-except (ImportError, ValueError):
-    from storage import db  # type: ignore[no-redef]
-
 
 
 def send_email(
@@ -23,24 +21,19 @@ def send_email(
     password: str | None = None,
     from_address: str | None = None,
 ) -> None:
-    """通过 SMTP 发送单封文本邮件。"""
-    settings = db.get_app_settings() if (
-        host is None or port is None or username is None or password is None or from_address is None
-    ) else {}
-
-    smtp_host = host if host is not None else settings.get("smtp_host")
+    """通过 SMTP 发送单封文本邮件（host 必填）。"""
+    smtp_host = host
     if not smtp_host:
         raise RuntimeError("未配置 SMTP 服务器")
 
-    raw_port = port if port is not None else settings.get("smtp_port")
     try:
-        smtp_port = int(raw_port or 465)
+        smtp_port = int(port or 465)
     except (ValueError, TypeError):
         smtp_port = 465
 
-    smtp_user = username if username is not None else settings.get("smtp_username")
-    smtp_pass = password if password is not None else settings.get("smtp_password")
-    smtp_from = from_address if from_address is not None else (settings.get("smtp_from_address") or smtp_user)
+    smtp_user = username
+    smtp_pass = password
+    smtp_from = from_address or smtp_user
 
     msg = MIMEText(body, "plain", "utf-8")
     msg["Subject"] = Header(subject, "utf-8")

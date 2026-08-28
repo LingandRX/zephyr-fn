@@ -4,9 +4,9 @@ import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app" / "backend"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
-from services import statistics as services
+from backend.services import statistics as services
 
 
 
