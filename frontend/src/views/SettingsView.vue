@@ -4,8 +4,7 @@
 import { ref, reactive, computed, watch, nextTick, onMounted } from "vue";
 import {
   getSettings, saveSettings, getCategories, createCategory, deleteCategory,
-  backupNow, getBackupFiles, importJson, importCsv, download,
-  deleteBackupFile, downloadBackupFile,
+  importCsv, download,
   testEmailNotification, testPushPlusNotification,
   getLogTail,
 } from "../services/api.js";
@@ -45,7 +44,6 @@ const loaded = ref(false);
 const saving = ref(false);
 const saveStatusText = ref("");
 const cats = ref([]);
-const backupFiles = ref([]);
 
 const testingEmail = ref(false);
 const testingPushplus = ref(false);
@@ -156,7 +154,7 @@ function isSecretUpdate(value) {
 
 async function loadAll() {
   try {
-    const [s, c, files] = await Promise.all([getSettings(), getCategories(), getBackupFiles()]);
+    const [s, c] = await Promise.all([getSettings(), getCategories()]);
     Object.assign(form, {
       default_currency: s.default_currency || "CNY",
       exchange_rate_usd: s.exchange_rate_usd ?? 7.2,
@@ -186,7 +184,6 @@ async function loadAll() {
     });
     savedForm = snapshotForm();
     cats.value = c;
-    backupFiles.value = files;
     await nextTick();
     loaded.value = true;
   } catch (err) {
@@ -445,57 +442,11 @@ async function removeCategory(id, name) {
 }
 
 // ---------- 备份 ----------
-async function doBackupNow() {
-  try {
-    const r = await backupNow();
-    toast(`备份完成：${r.file} (${r.count} 条)`);
-    backupFiles.value = await getBackupFiles();
-  } catch (err) {
-    toast(err.message, "err");
-  }
-}
 
-function doExportJson() { download("/backup/export-json", "subscriptions.json"); }
 function doExportCsv() { download("/export/csv", "subscriptions.csv"); }
 
-const delBackupOpen = ref(false);
-const delBackupTarget = ref("");
-const delBackupBusy = ref(false);
-
-function doDownloadBackup(name) {
-  try {
-    downloadBackupFile(name);
-    toast("已开始下载");
-  } catch (err) {
-    toast(err.message, "err");
-  }
-}
-
-function doDeleteBackup(name) {
-  delBackupTarget.value = name;
-  delBackupBusy.value = false;
-  delBackupOpen.value = true;
-}
-
-function closeDeleteBackup() {
-  if (delBackupBusy.value) return;
-  delBackupOpen.value = false;
-}
-
-async function confirmDeleteBackup() {
-  const name = delBackupTarget.value;
-  if (!name || delBackupBusy.value) return;
-  delBackupBusy.value = true;
-  try {
-    await deleteBackupFile(name);
-    toast("备份已删除");
-    delBackupOpen.value = false;
-    backupFiles.value = await getBackupFiles();
-  } catch (err) {
-    toast(err.message, "err");
-  } finally {
-    delBackupBusy.value = false;
-  }
+function doDownloadTemplate() {
+  download("/backup/import-template", "import_template.csv");
 }
 
 async function onImportFile(kind, event) {
@@ -503,7 +454,7 @@ async function onImportFile(kind, event) {
   if (!file) return;
   try {
     const text = await file.text();
-    const r = kind === "json" ? await importJson(text) : await importCsv(text);
+    const r = await importCsv(text);
     const failed = (r.failed_rows || []).length;
     toast(
       `导入完成：新增 ${r.success_count}，跳过重复 ${r.skipped_duplicates}` +
@@ -768,40 +719,17 @@ onMounted(loadAll);
     <!-- 子页面 4：数据与备份 -->
     <div v-show="activeTab === 'backup'" class="settings-section">
       <div class="card">
-        <h3>备份与数据管理</h3>
+        <h3>数据与备份</h3>
         <p class="muted">
-          数据保存在本机 SQLite。每日自动导出 JSON + 数据库副本到共享目录
-          <code>subscription/backups</code>，最多保留最近 5 份（超过自动删除）。
+          数据保存在本机 SQLite，支持 CSV 导入导出。先「下载导入模板」，
+          按模板内的填写说明填好数据后「导入 CSV」。
         </p>
         <div class="backup-actions">
-          <button class="btn btn-primary" @click="doBackupNow">立即备份</button>
-          <button class="btn" @click="doExportJson">导出 JSON</button>
+          <button class="btn" @click="doDownloadTemplate">下载导入模板</button>
           <button class="btn" @click="doExportCsv">导出 CSV</button>
-          <label class="btn file-btn">导入 JSON
-            <input type="file" accept=".json" hidden @change="onImportFile('json', $event)" />
-          </label>
           <label class="btn file-btn">导入 CSV
             <input type="file" accept=".csv" hidden @change="onImportFile('csv', $event)" />
           </label>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>备份历史</h3>
-        <div class="table-scroll">
-          <table class="table backup-table">
-            <thead><tr><th>备份文件</th><th>大小</th><th>操作</th></tr></thead>
-            <tbody>
-              <tr v-for="f in backupFiles" :key="f.name">
-                <td>{{ f.name }}</td><td>{{ (f.size / 1024).toFixed(1) }} KB</td>
-                <td class="row-actions">
-                  <button class="btn btn-sm" :title="`下载 ${f.name}`" @click="doDownloadBackup(f.name)">下载</button>
-                  <button class="btn btn-sm btn-danger" :title="`删除 ${f.name}`" @click="doDeleteBackup(f.name)">删除</button>
-                </td>
-              </tr>
-              <tr v-if="!backupFiles.length"><td colspan="3" class="muted">暂无备份</td></tr>
-            </tbody>
-          </table>
         </div>
       </div>
     </div>
@@ -823,29 +751,6 @@ onMounted(loadAll);
         <div v-else-if="logError" class="empty">加载失败：{{ logError }}</div>
         <div v-else-if="logLoading" class="empty">加载中…</div>
         <div v-else class="empty">暂无日志</div>
-      </div>
-    </div>
-
-    <!-- 删除备份确认弹窗 -->
-    <div v-if="delBackupOpen" class="modal" @click.self="closeDeleteBackup">
-      <div class="modal-card modal-confirm">
-        <div class="modal-head">
-          <h2>删除备份</h2>
-          <button class="modal-close" :disabled="delBackupBusy" @click="closeDeleteBackup"><svg width="16" height="16" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M556.8 512L832 236.8c12.8-12.8 12.8-32 0-44.8-12.8-12.8-32-12.8-44.8 0L512 467.2l-275.2-277.333333c-12.8-12.8-32-12.8-44.8 0-12.8 12.8-12.8 32 0 44.8l275.2 277.333333-277.333333 275.2c-12.8 12.8-12.8 32 0 44.8 6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333L512 556.8 787.2 832c6.4 6.4 14.933333 8.533333 23.466667 8.533333s17.066667-2.133333 23.466666-8.533333c12.8-12.8 12.8-32 0-44.8L556.8 512z"/></svg></button>
-        </div>
-        <div class="modal-scroll">
-        <div class="confirm-body">
-          <p class="confirm-text">
-            确认删除备份文件「<strong>{{ delBackupTarget }}</strong>」？此操作不可恢复。
-          </p>
-        </div>
-        </div>
-        <div class="modal-foot">
-          <button type="button" class="btn" :disabled="delBackupBusy" @click="closeDeleteBackup">取消</button>
-          <button type="button" class="btn btn-danger" :disabled="delBackupBusy" @click="confirmDeleteBackup">
-            {{ delBackupBusy ? "删除中…" : "确认删除" }}
-          </button>
-        </div>
       </div>
     </div>
   </div>
@@ -1075,14 +980,6 @@ onMounted(loadAll);
 .file-btn {
   display: inline-block;
   position: relative;
-}
-.backup-table {
-  min-width: 420px;
-}
-.backup-table .row-actions {
-  display: flex;
-  gap: var(--space-1);
-  white-space: nowrap;
 }
 .btn.btn-sm {
   padding: 4px 10px;

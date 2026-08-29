@@ -46,7 +46,7 @@ export async function api(path, options = {}) {
   return res.text();
 }
 
-/** 直接下载端点（导出 JSON/CSV）：与页面同源，浏览器导航即可触发下载 */
+/** 直接下载端点（导出 CSV）：与页面同源，浏览器导航即可触发下载 */
 export function exportUrl(path) {
   return API_BASE + path;
 }
@@ -93,21 +93,7 @@ export const testPushPlusNotification = (body) =>
 // ---------- 日志 ----------
 export const getLogTail = (lines = 200) => api(`/logs/tail?lines=${lines}`);
 
-// ---------- 备份 / 导入导出 ----------
-export const backupNow = () => api("/backup", { method: "POST" });
-export const getBackupFiles = () => api("/backup/files");
-export const deleteBackupFile = (name) =>
-  api(`/backup/files?name=${encodeURIComponent(name)}`, { method: "DELETE" });
-/** 下载备份文件：浏览器导航触发下载 */
-export function downloadBackupFile(name) {
-  download(`/backup/files/download?name=${encodeURIComponent(name)}`, name);
-}
-export const importJson = (text) =>
-  api("/backup/import-json", {
-    method: "POST",
-    text,
-    headers: { "Content-Type": "application/json" },
-  });
+// ---------- 导入导出 ----------
 export const importCsv = (text) =>
   api("/backup/import-csv", {
     method: "POST",

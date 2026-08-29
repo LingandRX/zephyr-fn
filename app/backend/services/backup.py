@@ -1,18 +1,15 @@
-"""备份与导入导出服务。
+"""CSV 导入导出服务。
 
-本模块负责备份文件以及订阅/分类数据的序列化、反序列化与合并。
+负责订阅/分类数据的序列化（导出）与反序列化（导入），
+以 CSV 为交换格式。
 """
 from __future__ import annotations
 
 import csv
 import io
-import json
-import os
 import re
-import sqlite3
 from datetime import date
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from pathlib import Path
 from typing import Any
 
 from ..core import domain
@@ -113,25 +110,6 @@ def _scoped_records(user_id: str | None, include_all: bool) -> tuple[list[dict],
     return repositories.get_all_subscriptions(scope), repositories.get_all_categories(scope)
 
 
-def export_json(user_id: str | None = None, *, include_all: bool = False) -> dict:
-    scope = _resolve_export_scope(user_id, include_all)
-    subscriptions, categories = _scoped_records(scope, include_all)
-    return {
-        "app": "subscription-manager",
-        "version": "0.1.0",
-        "exported_at": repositories.now_utc(),
-        "scope": {"user_id": scope, "all_users": scope is None},
-        "categories": categories,
-        "subscriptions": subscriptions,
-    }
-
-
-def export_json_string(user_id: str | None = None, *, include_all: bool = False) -> str:
-    return json.dumps(
-        export_json(user_id, include_all=include_all), ensure_ascii=False, indent=2
-    )
-
-
 def export_csv(user_id: str | None = None, *, include_all: bool = False) -> str:
     subscriptions, categories = _scoped_records(user_id, include_all)
     cats = {c["id"]: c["name"] for c in categories}
@@ -160,6 +138,51 @@ def export_csv(user_id: str | None = None, *, include_all: bool = False) -> str:
             sub.get("custom_period_value") or "",
             sub.get("custom_period_unit") or "",
         ])
+    return "\ufeff" + buf.getvalue()
+
+
+# --------------------------------------------------------------------------- #
+# 导入模板
+# --------------------------------------------------------------------------- #
+
+def csv_template() -> str:
+    """生成 CSV 导入模板（含表头、示例行与右侧填写说明）。"""
+    instructions = (
+        "填写说明（导入时本列会被忽略，可整列删除）\n"
+        "① 必填列：名称、金额\n"
+        "② 货币：CNY / USD / HKD（默认 CNY)\n"
+        "③ 周期类型：月付 / 季付 / 年付 / 一次性 / 自定义（默认月付）\n"
+        "④ 生命周期：活跃 / 待支付 / 宽限期 / 已取消 / 已结束 / 已过期（默认活跃）\n"
+        "⑤ 续费策略：自动续费 / 手动续费 / 到期停止（默认自动续费）\n"
+        "⑥ 账单状态：正常 / 已支付 / 逾期（默认正常）\n"
+        "⑦ 日期列（首次付款日/下次到期日/开始日期）：格式 YYYY-MM-DD，可留空\n"
+        "⑧ 自定义周期：仅当 周期类型=自定义 时填 自定义周期值 + 自定义周期单位"
+        "（单位：day/week/month/year）\n"
+        "⑨ 分类、备注、ID 可选；分类留空归入未分类；ID 留空自动生成。\n"
+        "用法：删除示例行，写入你的数据，另存为 .csv 后点「导入 CSV」。"
+    )
+    buf = io.StringIO(newline="")
+    writer = csv.writer(buf)
+    writer.writerow([
+        "名称", "金额", "货币", "周期类型", "首次付款日", "下次到期日",
+        "生命周期", "续费策略", "账单状态", "分类", "备注", "ID",
+        "开始日期", "自定义周期值", "自定义周期单位", "填写说明",
+    ])
+    writer.writerow([
+        "影音会员", "19.00", "CNY", "月付", "2026-01-15", "2026-02-15",
+        "活跃", "自动续费", "正常", "影音", "家庭共享", "",
+        "2026-01-15", "", "", "",
+    ])
+    writer.writerow([
+        "云端存储", "99.00", "CNY", "年付", "2026-03-01", "2027-03-01",
+        "活跃", "自动续费", "正常", "工具", "", "",
+        "2026-03-01", "", "", "",
+    ])
+    writer.writerow([
+        "临时服务", "5.00", "USD", "自定义", "2026-05-01", "2026-06-01",
+        "活跃", "到期停止", "已支付", "其他", "", "",
+        "2026-05-01", "1", "month", instructions,
+    ])
     return "\ufeff" + buf.getvalue()
 
 
@@ -384,15 +407,6 @@ def _insert_subscription_conn(session: Any, sub: dict) -> None:
     session.add(Subscription(**{column: sub.get(column) for column in _SUBSCRIPTION_COLUMNS}))
 
 
-def _update_subscription_conn(session: Any, sub: dict, sub_id: str, user_id: str) -> None:
-    existing = session.get(Subscription, sub_id)
-    if existing is None or existing.user_id != user_id:
-        raise ValueError("合并时目标订阅不存在或用户不匹配")
-    for column in _SUBSCRIPTION_COLUMNS:
-        if column not in ("id", "user_id"):
-            setattr(existing, column, sub.get(column))
-
-
 def _load_existing_subscriptions(user_id: str) -> tuple[dict[str, dict], set[str]]:
     target_user = _require_user_id(user_id)
     rows = repositories.get_all_subscriptions_raw()
@@ -614,103 +628,6 @@ def _import_result(success_count: int = 0, skipped_duplicates: int = 0,
 
 
 # --------------------------------------------------------------------------- #
-# 备份文件管理
-# --------------------------------------------------------------------------- #
-
-def resolve_backup_file(name: str) -> Path:
-    """把备份文件名解析为备份目录内的安全路径，防止路径穿越。"""
-    from .. import config as app_config
-    filename = os.path.basename(str(name or "").strip())
-    if not filename.startswith("subscription-") or filename == "subscription-":
-        raise ValueError("非法的备份文件名")
-    if filename in (".", "..") or "/" in filename or "\\" in filename:
-        raise ValueError("非法的备份文件名")
-    backup_dir = app_config.backup_dir().resolve()
-    path = (backup_dir / filename).resolve()
-    if path.parent != backup_dir:
-        raise ValueError("非法的备份文件路径")
-    return path
-
-
-def delete_backup_file(name: str) -> bool:
-    path = resolve_backup_file(name)
-    if not path.is_file():
-        return False
-    path.unlink()
-    return True
-
-
-def list_backup_files() -> list[dict]:
-    from .. import config as app_config
-    backup_dir = app_config.backup_dir()
-    if not backup_dir.exists():
-        return []
-    files = []
-    for p in sorted(backup_dir.glob("subscription-*"), reverse=True)[:50]:
-        files.append({
-            "name": p.name,
-            "size": p.stat().st_size,
-            "modified": p.stat().st_mtime,
-        })
-    return files
-
-
-# --------------------------------------------------------------------------- #
-# JSON 导入
-# --------------------------------------------------------------------------- #
-
-def import_from_json(json_data: str, user_id: str) -> dict:
-    try:
-        target_user = _require_user_id(user_id)
-    except ValueError as exc:
-        return _import_result(error=str(exc))
-
-    try:
-        payload = json.loads(json_data)
-    except (TypeError, json.JSONDecodeError) as exc:
-        return _import_result(error=f"JSON 解析失败: {exc}")
-
-    if isinstance(payload, dict):
-        subs_in = payload.get("subscriptions", [])
-        cats_in = payload.get("categories", [])
-    elif isinstance(payload, list):
-        subs_in = payload
-        cats_in = []
-    else:
-        return _import_result(error="JSON 根节点必须是对象或订阅数组")
-
-    if not isinstance(subs_in, list) or not isinstance(cats_in, list):
-        return _import_result(error="subscriptions/categories 必须是数组")
-    if len(subs_in) > MAX_IMPORT_ROWS or len(cats_in) > MAX_IMPORT_ROWS:
-        return _import_result(error=f"导入记录不能超过 {MAX_IMPORT_ROWS} 条")
-
-    try:
-        existing_by_id, existing_keys = _load_existing_subscriptions(target_user)
-        source_to_target, category_name_map, pending_categories, category_conflicts = (
-            _plan_categories(target_user, cats_in, set())
-        )
-        planned, failed, skipped, id_conflicts = _prepare_subscription_items(
-            subs_in, target_user, existing_by_id, existing_keys, "json",
-            source_to_target, category_name_map,
-        )
-        ok, error, atomic = _commit_import(pending_categories, planned)
-        if not ok:
-            return _import_result(
-                skipped_duplicates=skipped, failed_rows=failed,
-                id_conflicts=id_conflicts, category_conflicts=category_conflicts,
-                error=f"导入事务失败: {error}", atomic=atomic,
-            )
-        return _import_result(
-            success_count=len(planned), skipped_duplicates=skipped,
-            added_categories=len(pending_categories), failed_rows=failed,
-            id_conflicts=id_conflicts, category_conflicts=category_conflicts,
-            atomic=atomic,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return _import_result(error=f"导入失败: {exc}")
-
-
-# --------------------------------------------------------------------------- #
 # CSV 导入
 # --------------------------------------------------------------------------- #
 
@@ -840,111 +757,3 @@ def import_from_csv(csv_data: str, user_id: str) -> dict:
         return _import_result(
             skipped_duplicates=0, failed_rows=failed, error=f"导入失败: {exc}", atomic=False
         )
-
-
-# --------------------------------------------------------------------------- #
-# 从 .db 备份文件合并
-# --------------------------------------------------------------------------- #
-
-def _is_newer(source: dict, current: dict) -> bool:
-    return str(source.get("updated_at") or "") > str(current.get("updated_at") or "")
-
-
-def merge_from_database(source_path: str, user_id: str) -> str:
-    """按 ``id/updated_at`` 合并 SQLite 备份。"""
-    try:
-        target_user = _require_user_id(user_id)
-    except ValueError as exc:
-        return f"合并失败：{exc}"
-
-    path = Path(source_path)
-    if not path.is_file():
-        return f"合并失败：备份文件不存在: {path}"
-
-    src: sqlite3.Connection | None = None
-    try:
-        src = sqlite3.connect(str(path))
-        src.row_factory = sqlite3.Row
-        tables = {
-            row[0] for row in src.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-        }
-        if "subscriptions" not in tables or "categories" not in tables:
-            return "合并失败：备份数据库缺少必要表"
-        backup_subs = [dict(row) for row in src.execute("SELECT * FROM subscriptions").fetchall()]
-        backup_cats = [dict(row) for row in src.execute("SELECT * FROM categories").fetchall()]
-    except (OSError, sqlite3.Error) as exc:
-        return f"合并失败：无法读取备份数据库: {exc}"
-    finally:
-        if src is not None:
-            src.close()
-
-    if len(backup_subs) > MAX_IMPORT_ROWS or len(backup_cats) > MAX_IMPORT_ROWS:
-        return f"合并失败：备份记录不能超过 {MAX_IMPORT_ROWS} 条"
-
-    try:
-        existing_by_id, _existing_keys = _load_existing_subscriptions(target_user)
-        source_to_target, _category_name_map, pending_categories, category_conflicts = (
-            _plan_categories(target_user, backup_cats, set())
-        )
-        normalized: list[dict] = []
-        failed = 0
-        for raw in backup_subs:
-            try:
-                category_id = _resolve_category_id(
-                    raw.get("category_id"), source_to_target, target_user
-                )
-                normalized.append(_normalize_imported_sub(raw, target_user, category_id))
-            except (TypeError, ValueError, KeyError):
-                failed += 1
-
-        added = updated = skipped = id_conflicts = 0
-        to_insert: list[dict] = []
-        to_update: list[tuple[dict, str]] = []
-        used_ids = set(existing_by_id)
-        for sub in normalized:
-            source_id = str(sub["id"])
-            current = existing_by_id.get(source_id)
-            if current is None and source_id not in used_ids:
-                to_insert.append(sub)
-                used_ids.add(source_id)
-                added += 1
-                continue
-            if current is not None and current.get("user_id") == target_user:
-                if _is_newer(sub, current):
-                    to_update.append((sub, source_id))
-                    updated += 1
-                else:
-                    skipped += 1
-                continue
-            sub["id"] = repositories.new_id()
-            while sub["id"] in used_ids:
-                sub["id"] = repositories.new_id()
-            used_ids.add(sub["id"])
-            to_insert.append(sub)
-            id_conflicts += 1
-            added += 1
-
-        try:
-            for category in pending_categories:
-                _insert_category_conn(db.session, category)
-            for sub in to_insert:
-                _insert_subscription_conn(db.session, sub)
-            for sub, sub_id in to_update:
-                _update_subscription_conn(db.session, sub, sub_id, target_user)
-            db.session.commit()
-            atomic = True
-        except Exception as exc:  # noqa: BLE001
-            db.session.rollback()
-            return f"合并失败：事务回滚: {exc}"
-
-        suffix = f"，跳过无效 {failed} 条" if failed else ""
-        non_atomic = "（兼容模式，非原子）" if not atomic else ""
-        return (
-            f"合并完成{non_atomic}：订阅添加 {added} 条、更新 {updated} 条、"
-            f"跳过 {skipped} 条；类别添加 {len(pending_categories)} 个、"
-            f"分类 ID 冲突 {category_conflicts} 个、订阅 ID 冲突 {id_conflicts} 个{suffix}"
-        )
-    except Exception as exc:  # noqa: BLE001
-        return f"合并失败：{exc}"

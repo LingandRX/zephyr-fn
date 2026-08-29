@@ -37,7 +37,7 @@ frontend/
     │   ├── SubscriptionsView.vue   # 订阅列表：统计卡/筛选/表格/增删改续费（含弹窗）
     │   ├── CalendarView.vue        # 日历：月导航/事件/今日
     │   ├── StatisticsView.vue      # 统计：大盘/趋势柱状图/分类表
-    │   └── SettingsView.vue        # 设置：常规/通知渠道/分类/备份导入导出（自动保存）
+    │   └── SettingsView.vue        # 设置：常规/通知渠道/分类/CSV 导入导出（自动保存）
     ├── api.js              # API 封装（统一前缀，不携带用户身份）
     ├── ui.js               # 轻量全局状态（视图/侧边栏/toast/跨组件事件）
     ├── format.js           # 金额/周期/日期格式化
@@ -58,7 +58,7 @@ frontend/
 
 ```bash
 # 1. 先启动 Python 后端（TCP 模式，端口 5001 与 vite proxy 对齐）
-python3 app/backend/server.py --http 5001 --db ./data/subscription.db --www app/www --share ./data/backups
+python3 app/backend/server.py --http 5001 --db ./data/subscription.db --www app/www
 
 # 2. 安装依赖并启动 Vite dev server
 cd frontend

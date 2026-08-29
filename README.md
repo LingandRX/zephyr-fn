@@ -1,6 +1,6 @@
 # 订阅管理 (subscription)
 
-飞牛 fnOS 订阅管理应用：记录订阅服务、费用与到期时间，支持多货币统计、日历视图、到期提醒与自动备份。
+飞牛 fnOS 订阅管理应用：记录订阅服务、费用与到期时间，支持多货币统计、日历视图与到期提醒。
 
 ## 官方开发文档
 
@@ -17,7 +17,7 @@
 - 统计：本月支出、本月实际到期、年支出、未来 30 天、分类统计、近 12 个月趋势
 - 日历视图：按月查看扣费 / 服务到期事件
 - 到期提醒：系统日志 + 邮件 (SMTP) + PushPlus 微信推送（每个订阅每天每渠道一次）
-- 备份：每日自动导出 JSON + SQLite 副本到共享目录 `subscription/backups`（保留 5 份），支持手动备份、JSON/CSV 导入导出
+- 数据迁移：支持 CSV 导入导出
 
 ## 技术栈
 
@@ -48,7 +48,7 @@
 │   │   ├── services/         # 业务应用服务层
 │   │   │   ├── statistics.py # 统计报表与日历事件
 │   │   │   ├── notifications.py # 到期提醒与通知派发
-│   │   │   ├── backup.py     # 备份导入导出与合并
+│   │   │   ├── backup.py     # CSV 导入导出
 │   │   │   └── scheduler.py  # 轮询定时任务与调度
 │   │   ├── storage/          # 持久化存储层
 │   │   │   └── db.py         # SQLite 连接、迁移与 CRUD
@@ -118,9 +118,9 @@ BUILD=1 ./dev.sh
 cd frontend && npm run check:views
 
 # 手动启动后端（TCP 模式）
-python3 app/backend/server.py --http 8000 --db ./data/subscription.db --www app/www --share ./data/backups
+python3 app/backend/server.py --http 8000 --db ./data/subscription.db --www app/www
 # 网关模式（Unix Socket）
-python3 app/backend/server.py --uds /tmp/app.sock --db ./data/subscription.db --www app/www --share ./data/backups
+python3 app/backend/server.py --uds /tmp/app.sock --db ./data/subscription.db --www app/www
 
 # 运行单元测试
 python3 -m unittest discover -s tests -v
@@ -147,7 +147,7 @@ appcenter-cli install-fpk subscription-0.1.0.fpk
 # 或应用中心 -> 手动安装
 ```
 
-安装后在桌面打开「订阅管理」即可（统一网关 `/app/subscription`）。数据存放在 `$TRIM_PKGVAR`，备份导出到共享目录 `subscription/backups`（可在文件管理器中看到，便于纳入 fnOS 系统备份）。
+安装后在桌面打开「订阅管理」即可（统一网关 `/app/subscription`）。数据存放在 `$TRIM_PKGVAR`。
 
 ## 环境变量
 
@@ -155,7 +155,6 @@ appcenter-cli install-fpk subscription-0.1.0.fpk
 | --- | --- |
 | `TRIM_APPDEST` | 应用安装目录（含 www / backend） |
 | `TRIM_PKGVAR` | 运行数据目录（数据库、日志） |
-| `TRIM_DATA_SHARE_PATHS` | data-share 共享目录（备份落点） |
 | `TRIM_SYS_ARCH` | 设备架构 |
 | `wizard_reminder_days` | 安装向导设置的提醒提前天数 |
 | `SUBSCRIPTION_DEBUG` | 置为 `1` 时运行日志输出 DEBUG 级别（默认 INFO） |
@@ -173,9 +172,9 @@ appcenter-cli install-fpk subscription-0.1.0.fpk
 | GET/PUT | `/api/settings` | 读取 / 更新设置 |
 | GET | `/api/statistics?mode=nominal\|actual` | 统计 |
 | GET | `/api/calendar?year=&month=` | 日历事件 |
-| POST | `/api/backup` | 立即备份 |
-| GET | `/api/backup/export-json` / `/api/export/csv` | 导出 |
-| POST | `/api/backup/import-json` / `import-csv` | 导入（按名称+金额+周期去重） |
+| GET | `/api/export/csv` | 导出 CSV |
+| GET | `/api/backup/import-template` | 下载 CSV 导入模板 |
+| POST | `/api/backup/import-csv` | 导入 CSV（按名称+金额+周期去重） |
 | GET | `/api/notifications/upcoming` | 即将到期提醒 |
 | GET | `/api/logs/tail?lines=200` | 运行日志尾部读取 |
 
@@ -211,12 +210,11 @@ appcenter-cli install-fpk subscription-0.1.0.fpk
 - 在浏览器访问 `http://<nas>:5666/app/subscription/`（**带结尾斜杠**），页面能打开即正常；
   再访问 `http://<nas>:5666/app/subscription/app.js` 应返回 200。
 
-## 数据与备份说明
+## 数据说明
 
 - 数据库：`$TRIM_PKGVAR/subscription.db`（WAL 模式，金额以「分」整数存储）
 - 日志：`$TRIM_PKGVAR/logs/app.log`（按大小轮转：单文件 2MB、保留 5 份；启动时清理超过 30 天的轮转日志）
 - 调试日志：`SUBSCRIPTION_DEBUG=1` 时输出 DEBUG 级别；本地 TCP 模式日志同时回显终端，网关模式只写文件
-- 自动备份：每天一次，JSON + SQLite 副本写入共享目录，保留最近 5 份
 - 升级：`upgrade_callback` 自动补迁数据库 schema（版本化迁移）
 
 ## 与 zephyr-tarui 的对应关系
