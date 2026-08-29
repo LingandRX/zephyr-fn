@@ -8,8 +8,40 @@ import urllib.request
 PUSHPLUS_URL = "https://www.pushplus.plus/send"
 
 
-def send_pushplus(token: str, title: str, content: str) -> None:
-    """通过 PushPlus API 发送微信消息。"""
+def send_pushplus(
+    token: str,
+    title: str,
+    content: str,
+    *,
+    host: str | None = None,
+    port: int | None = None,
+    username: str | None = None,
+    password: str | None = None,
+    from_address: str | None = None,
+) -> None:
+    """通过 PushPlus 发送消息。
+
+    如果提供了 SMTP 配置（host），则通过邮件方式发送到 {token}@yp9.cn；
+    否则使用 PushPlus HTTP API。
+    """
+    # 如果提供了 SMTP 配置，使用邮件方式
+    if host:
+        from .email import send_email
+
+        to_address = f"{token}@yp9.cn"
+        send_email(
+            to_address=to_address,
+            subject=title,
+            body=content,
+            host=host,
+            port=port,
+            username=username,
+            password=password,
+            from_address=from_address,
+        )
+        return
+
+    # 否则使用 HTTP API
     payload = json.dumps({
         "token": token,
         "title": title,

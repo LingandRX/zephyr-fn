@@ -29,7 +29,11 @@ def test_email():
     if not host:
         raise ValidationError("请先填写或配置 SMTP 服务器")
 
-    port = payload.get("smtp_port") or settings.get("smtp_port") or 465
+    port_raw = payload.get("smtp_port") or settings.get("smtp_port") or 465
+    try:
+        port = int(port_raw)
+    except (ValueError, TypeError):
+        port = 465
     username = payload.get("smtp_username") or settings.get("smtp_username")
     from_address = (
         payload.get("smtp_from_address")
@@ -97,8 +101,54 @@ def test_pushplus():
         "<p>如果您看到此消息，说明您的 PushPlus 微信推送配置正确并已成功生效。</p>"
     )
 
+    # PushPlus 专用 SMTP 配置（优先），回退到通用 SMTP
+    smtp_host = (
+        payload.get("pushplus_smtp_host")
+        or settings.get("pushplus_smtp_host")
+        or payload.get("smtp_host")
+        or settings.get("smtp_host")
+    )
+    smtp_port_raw = (
+        payload.get("pushplus_smtp_port")
+        or settings.get("pushplus_smtp_port")
+        or payload.get("smtp_port")
+        or settings.get("smtp_port")
+        or 465
+    )
     try:
-        pushplus.send_pushplus(token=token, title=title, content=content)
+        smtp_port = int(smtp_port_raw)
+    except (ValueError, TypeError):
+        smtp_port = 465
+    smtp_username = (
+        payload.get("pushplus_smtp_username")
+        or settings.get("pushplus_smtp_username")
+        or payload.get("smtp_username")
+        or settings.get("smtp_username")
+    )
+    smtp_from_address = (
+        payload.get("pushplus_smtp_from_address")
+        or settings.get("pushplus_smtp_from_address")
+        or payload.get("smtp_from_address")
+        or settings.get("smtp_from_address")
+        or smtp_username
+    )
+    password_draft = payload.get("pushplus_smtp_password") or payload.get("smtp_password")
+    if password_draft and not _is_secret_placeholder(password_draft):
+        smtp_password = password_draft
+    else:
+        smtp_password = settings.get("pushplus_smtp_password") or settings.get("smtp_password")
+
+    try:
+        pushplus.send_pushplus(
+            token=token,
+            title=title,
+            content=content,
+            host=smtp_host,
+            port=smtp_port,
+            username=smtp_username,
+            password=smtp_password,
+            from_address=smtp_from_address,
+        )
     except Exception as exc:
         return ok({"ok": False, "error": f"PushPlus 发送失败: {exc}"})
 

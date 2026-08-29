@@ -24,7 +24,7 @@ from .repositories import new_id, now_utc
 
 logger = logging.getLogger("subscription.db")
 
-CURRENT_LEGACY_DB_VERSION = 11
+CURRENT_LEGACY_DB_VERSION = 12
 
 # app_settings 的字段定义集中维护，迁移与 SETTINGS_FIELDS 共用这份清单，
 # 避免新增设置字段后忘记补 schema。
@@ -48,6 +48,11 @@ _SETTINGS_COLUMN_DEFINITIONS = {
     "notification_enabled": "INTEGER NOT NULL DEFAULT 1",
     "pushplus_enabled": "INTEGER NOT NULL DEFAULT 0",
     "pushplus_token": "TEXT",
+    "pushplus_smtp_host": "TEXT",
+    "pushplus_smtp_port": "INTEGER",
+    "pushplus_smtp_username": "TEXT",
+    "pushplus_smtp_password": "TEXT",
+    "pushplus_smtp_from_address": "TEXT",
     "last_check_date": "TEXT",
     "last_rate_update": "TEXT",
 }
@@ -146,6 +151,14 @@ SELECT user_id, strftime('%Y-%m-%dT%H:%M:%SZ', 'now') FROM (
     SELECT DISTINCT user_id FROM categories
 )
 WHERE user_id IS NOT NULL AND user_id <> '';
+"""),
+    # v12：PushPlus 专用 SMTP 配置字段，与邮件通知 SMTP 分离。
+    (12, """
+ALTER TABLE app_settings ADD COLUMN pushplus_smtp_host TEXT;
+ALTER TABLE app_settings ADD COLUMN pushplus_smtp_port INTEGER;
+ALTER TABLE app_settings ADD COLUMN pushplus_smtp_username TEXT;
+ALTER TABLE app_settings ADD COLUMN pushplus_smtp_password TEXT;
+ALTER TABLE app_settings ADD COLUMN pushplus_smtp_from_address TEXT;
 """),
 ]
 

@@ -56,10 +56,14 @@ SETTINGS_FIELDS = (
     "auto_start", "tray_mode", "email_enabled", "smtp_host", "smtp_port",
     "smtp_username", "smtp_password", "smtp_from_address", "email_template",
     "notification_enabled", "pushplus_enabled", "pushplus_token",
+    "pushplus_smtp_host", "pushplus_smtp_port", "pushplus_smtp_username",
+    "pushplus_smtp_password", "pushplus_smtp_from_address",
     "last_check_date", "last_rate_update",
 )
 
-_SECRET_SETTING_FIELDS = frozenset({"smtp_password", "pushplus_token"})
+_SECRET_SETTING_FIELDS = frozenset({
+    "smtp_password", "pushplus_token", "pushplus_smtp_password",
+})
 _SECRET_MASK_EXACT = frozenset({
     "***", "******", "********", "**********", "************",
     "••••", "••••••", "••••••••", "[redacted]", "[已配置]",

@@ -95,6 +95,13 @@ const form = reactive({
   pushplus_enabled: false,
   pushplus_token: "",
   pushplus_token_configured: false,
+  // PushPlus 专用 SMTP 配置
+  pushplus_smtp_host: "",
+  pushplus_smtp_port: "",
+  pushplus_smtp_username: "",
+  pushplus_smtp_password: "",
+  pushplus_smtp_password_configured: false,
+  pushplus_smtp_from_address: "",
 });
 
 const newCat = reactive({ name: "" });
@@ -169,6 +176,13 @@ async function loadAll() {
       pushplus_enabled: !!s.pushplus_enabled,
       pushplus_token: s.pushplus_token_configured ? (s.pushplus_token_masked || "***") : "",
       pushplus_token_configured: !!s.pushplus_token_configured,
+      // PushPlus 专用 SMTP 配置
+      pushplus_smtp_host: s.pushplus_smtp_host || "",
+      pushplus_smtp_port: s.pushplus_smtp_port || "",
+      pushplus_smtp_username: s.pushplus_smtp_username || "",
+      pushplus_smtp_password: "",
+      pushplus_smtp_password_configured: !!s.pushplus_smtp_password_configured,
+      pushplus_smtp_from_address: s.pushplus_smtp_from_address || "",
     });
     savedForm = snapshotForm();
     cats.value = c;
@@ -198,6 +212,9 @@ const SCOPE_FIELDS = {
   ],
   pushplus: [
     "pushplus_enabled", "pushplus_token", "pushplus_token_configured",
+    "pushplus_smtp_host", "pushplus_smtp_port", "pushplus_smtp_username",
+    "pushplus_smtp_password", "pushplus_smtp_password_configured",
+    "pushplus_smtp_from_address",
   ],
 };
 const saveScopes = ref(new Set());
@@ -232,6 +249,7 @@ watch(
       try {
         const smtpSecretDraft = isSecretUpdate(form.smtp_password);
         const pushplusDraft = isSecretUpdate(form.pushplus_token);
+        const pushplusSmtpSecretDraft = isSecretUpdate(form.pushplus_smtp_password);
         // 输入框被清空且此前已配置 → 显式移除已保存的 Token 并保存
         const pushplusCleared =
           !pushplusDraft &&
@@ -249,15 +267,23 @@ watch(
           smtp_host: form.smtp_host || null,
           smtp_username: form.smtp_username || null,
           smtp_from_address: form.smtp_from_address || null,
+          // PushPlus SMTP 配置
+          pushplus_smtp_host: form.pushplus_smtp_host || null,
+          pushplus_smtp_port: form.pushplus_smtp_port ? parseInt(form.pushplus_smtp_port, 10) : null,
+          pushplus_smtp_username: form.pushplus_smtp_username || null,
+          pushplus_smtp_from_address: form.pushplus_smtp_from_address || null,
         };
         // 密钥输入框为空或包含掩码时不发送字段，后端会保留现有密钥；
         // 显式清空时发送 *_clear 标记，让后端移除已保存的密钥。
         delete payload.smtp_password;
         delete payload.pushplus_token;
+        delete payload.pushplus_smtp_password;
         delete payload.smtp_password_configured;
         delete payload.pushplus_token_configured;
+        delete payload.pushplus_smtp_password_configured;
         if (smtpSecretDraft) payload.smtp_password = form.smtp_password;
         if (pushplusDraft) payload.pushplus_token = form.pushplus_token;
+        if (pushplusSmtpSecretDraft) payload.pushplus_smtp_password = form.pushplus_smtp_password;
         if (pushplusCleared) payload.pushplus_token_clear = true;
 
         await saveSettings(payload);
@@ -274,6 +300,10 @@ watch(
         } else if (pushplusCleared) {
           form.pushplus_token = "";
           form.pushplus_token_configured = false;
+        }
+        if (pushplusSmtpSecretDraft) {
+          form.pushplus_smtp_password = "";
+          form.pushplus_smtp_password_configured = true;
         }
         // 与回写后的表单状态对齐，避免回写再次触发保存
         savedForm = snapshotForm();
@@ -347,9 +377,25 @@ async function testPushPlus() {
   if (testingPushplus.value) return;
   testingPushplus.value = true;
   try {
-    const payload = {};
+    const payload = {
+      // PushPlus 专用 SMTP 配置（优先）
+      pushplus_smtp_host: form.pushplus_smtp_host || undefined,
+      pushplus_smtp_port: form.pushplus_smtp_port ? parseInt(form.pushplus_smtp_port, 10) : undefined,
+      pushplus_smtp_username: form.pushplus_smtp_username || undefined,
+      pushplus_smtp_from_address: form.pushplus_smtp_from_address || undefined,
+      // 通用 SMTP 配置（回退）
+      smtp_host: form.smtp_host || undefined,
+      smtp_port: form.smtp_port ? parseInt(form.smtp_port, 10) : undefined,
+      smtp_username: form.smtp_username || undefined,
+      smtp_from_address: form.smtp_from_address || undefined,
+    };
     if (isSecretUpdate(form.pushplus_token)) {
       payload.pushplus_token = form.pushplus_token;
+    }
+    if (isSecretUpdate(form.pushplus_smtp_password)) {
+      payload.pushplus_smtp_password = form.pushplus_smtp_password;
+    } else if (isSecretUpdate(form.smtp_password)) {
+      payload.smtp_password = form.smtp_password;
     }
     const res = await testPushPlusNotification(payload);
     toast(res.message || "测试推送发送成功");
@@ -632,6 +678,41 @@ onMounted(loadAll);
                   :placeholder="form.pushplus_token_configured ? '已配置 Token（星号数量与 Token 长度一致）' : '填写从 pushplus.plus 获取的一对一或群组 Token'"
                 />
               </label>
+              <details class="smtp-details">
+                <summary>邮件推送配置（可选，用于通过邮件发送到 PushPlus）</summary>
+                <div class="fields-group smtp-fields">
+                  <div class="muted sub-hint">如需通过邮件方式发送到 PushPlus，请填写以下配置。留空则使用 HTTP API 方式。</div>
+                  <div class="form-row">
+                    <label class="field flex-2">
+                      <span>SMTP 服务器</span>
+                      <input v-model="form.pushplus_smtp_host" placeholder="留空则使用通用 SMTP 配置" />
+                    </label>
+                    <label class="field flex-1">
+                      <span>SMTP 端口</span>
+                      <input v-model="form.pushplus_smtp_port" placeholder="465" />
+                    </label>
+                  </div>
+                  <div class="form-row">
+                    <label class="field">
+                      <span>用户名</span>
+                      <input v-model="form.pushplus_smtp_username" />
+                    </label>
+                    <label class="field">
+                      <span>密码 / 授权码</span>
+                      <input
+                        v-model="form.pushplus_smtp_password"
+                        type="password"
+                        autocomplete="new-password"
+                        :placeholder="form.pushplus_smtp_password_configured ? '已配置，留空保持原密码' : '输入 SMTP 密码 / 授权码'"
+                      />
+                    </label>
+                  </div>
+                  <label class="field">
+                    <span>发件人地址</span>
+                    <input v-model="form.pushplus_smtp_from_address" placeholder="user@example.com" />
+                  </label>
+                </div>
+              </details>
               <div class="test-row single-action">
                 <button
                   type="button"
@@ -1061,6 +1142,35 @@ onMounted(loadAll);
   white-space: pre-wrap;
   word-break: break-all;
   scrollbar-width: thin;
+}
+
+/* PushPlus SMTP 配置折叠区域 */
+.smtp-details {
+  margin-top: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.smtp-details summary {
+  padding: var(--space-2) var(--space-3);
+  background: var(--card-2);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  user-select: none;
+}
+.smtp-details summary:hover {
+  color: var(--text);
+}
+.smtp-details[open] summary {
+  border-bottom: 1px solid var(--border);
+}
+.smtp-fields {
+  padding: var(--space-3);
+  background: var(--card);
+}
+.smtp-fields .sub-hint {
+  margin-bottom: var(--space-2);
 }
 
 </style>

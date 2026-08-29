@@ -99,7 +99,7 @@ def create_app(
 
 def _register_error_handlers(app: Flask) -> None:
     @app.errorhandler(exceptions.ApiError)
-    def handle_api_error(exc: exceptions.ApiError) -> Response:
+    def handle_api_error(exc: exceptions.ApiError) -> tuple[Response, int | None]:
         return jsonify({
             "code": exc.code,
             "message": exc.message,

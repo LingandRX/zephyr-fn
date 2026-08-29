@@ -281,13 +281,19 @@ def _send_channels(settings: dict, sub: dict, title: str, body: str) -> None:
     if settings.get("email_enabled") and settings.get("smtp_host"):
         to_address = settings.get("smtp_username") or settings.get("smtp_from_address")
         if to_address:
+            # 确保 port 为整数
+            port_raw = settings.get("smtp_port")
+            try:
+                port = int(port_raw) if port_raw is not None else 465
+            except (ValueError, TypeError):
+                port = 465
             _run_channel(
                 sub_id,
                 "email",
                 lambda: send_email(
                     to_address, title, body,
                     host=settings.get("smtp_host"),
-                    port=settings.get("smtp_port"),
+                    port=port,
                     username=settings.get("smtp_username"),
                     password=settings.get("smtp_password"),
                     from_address=settings.get("smtp_from_address"),
@@ -296,10 +302,28 @@ def _send_channels(settings: dict, sub: dict, title: str, body: str) -> None:
             )
 
     if settings.get("pushplus_enabled") and settings.get("pushplus_token"):
+        # PushPlus 专用 SMTP 配置（优先），回退到通用 SMTP
+        pp_smtp_host = settings.get("pushplus_smtp_host") or settings.get("smtp_host")
+        pp_port_raw = settings.get("pushplus_smtp_port") or settings.get("smtp_port")
+        try:
+            pp_port = int(pp_port_raw) if pp_port_raw is not None else 465
+        except (ValueError, TypeError):
+            pp_port = 465
+        pp_username = settings.get("pushplus_smtp_username") or settings.get("smtp_username")
+        pp_password = settings.get("pushplus_smtp_password") or settings.get("smtp_password")
+        pp_from_address = settings.get("pushplus_smtp_from_address") or settings.get("smtp_from_address")
+
         _run_channel(
             sub_id,
             "pushplus",
-            lambda: send_pushplus(settings["pushplus_token"], title, body),
+            lambda: send_pushplus(
+                settings["pushplus_token"], title, body,
+                host=pp_smtp_host,
+                port=pp_port,
+                username=pp_username,
+                password=pp_password,
+                from_address=pp_from_address,
+            ),
             f"已发送: {title}",
         )
 
