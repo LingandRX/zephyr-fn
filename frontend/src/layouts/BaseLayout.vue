@@ -305,7 +305,25 @@ onMounted(loadNotice);
   </section>
 
   <!-- Toast -->
-  <div v-if="toastState.visible" class="toast" :class="toastState.type">{{ toastState.msg }}</div>
+  <div v-if="toastState.items.length" class="toast-stack" aria-live="polite" aria-atomic="false">
+    <div
+      v-for="item in toastState.items"
+      :key="item.id"
+      class="toast"
+      :class="item.type"
+      role="status"
+    >
+      <div class="toast-icon" aria-hidden="true">
+        <svg v-if="item.type === 'ok'" viewBox="0 0 24 24" fill="none">
+          <path d="M5 12.5l4.2 4.2L19 2.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <svg v-else viewBox="0 0 24 24" fill="none">
+          <path d="M12 8v5M12 16h.01M10.3 3.2l-7.2 14.4A1.8 1.8 0 0 0 4.7 20h14.6a1.8 1.8 0 0 0 1.6-2.4L13.7 3.2a1.8 1.8 0 0 0-3.4 0z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </div>
+      <span>{{ item.msg }}</span>
+    </div>
+  </div>
 </template>
 
 <style scoped>
