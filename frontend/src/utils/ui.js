@@ -67,15 +67,22 @@ export function openNewSub() {
   ui.showAddModal = true;
 }
 
-export const toastState = reactive({ msg: "", type: "ok", visible: false });
+export const toastState = reactive({ items: [] });
 
-let _t = null;
+function removeToast(id) {
+  const index = toastState.items.findIndex((item) => item.id === id);
+  if (index >= 0) {
+    toastState.items.splice(index, 1);
+  }
+}
+
 export function toast(msg, type = "ok") {
-  toastState.msg = msg;
-  toastState.type = type;
-  toastState.visible = true;
-  clearTimeout(_t);
-  _t = setTimeout(() => {
-    toastState.visible = false;
-  }, 2600);
+  const item = {
+    id: Date.now() + Math.random(),
+    msg,
+    type,
+  };
+
+  toastState.items.push(item);
+  setTimeout(() => removeToast(item.id), 2600);
 }
