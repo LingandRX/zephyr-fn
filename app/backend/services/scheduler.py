@@ -16,6 +16,7 @@ from flask import Flask
 from ..services import notifications
 from ..storage import repositories
 from ..utils import channels
+from ..utils.channels.email import EMAIL_PATTERN
 
 send_email = channels.send_email
 send_pushplus = channels.send_pushplus
@@ -89,9 +90,14 @@ def _run_channel(sub_id: str, channel: str, sender: Callable[[], None],
         return
     try:
         sender()
+    except (ValueError, RuntimeError) as exc:
+        # 永久性失败（配置错误）：记录为 abandoned，不再重试
+        _complete_claim(claim_id, sub_id, channel, "abandoned", str(exc))
+        _logger().warning("到期提醒 [%s] 配置错误，已标记为废弃: %s", channel, exc)
     except Exception as exc:  # noqa: BLE001
+        # 暂时性失败（网络/SMTP 错误）：记录为 failed，下次可重试
         _complete_claim(claim_id, sub_id, channel, "failed", str(exc))
-        _logger().warning("到期提醒 [%s] 发送失败: %s", channel, exc)
+        _logger().warning("到期提醒 [%s] 发送失败（将重试）: %s", channel, exc)
     else:
         _complete_claim(claim_id, sub_id, channel, "sent")
         _logger().info("到期提醒 [%s] %s", channel, success_log)
@@ -143,19 +149,40 @@ def _send_channels(settings: dict, sub: dict, title: str, body: str) -> None:
         pp_password = settings.get("pushplus_smtp_password") or settings.get("smtp_password")
         pp_from_address = settings.get("pushplus_smtp_from_address") or settings.get("smtp_from_address")
 
-        _run_channel(
-            sub_id,
-            "pushplus",
-            lambda: send_pushplus(
-                settings["pushplus_token"], title, body,
-                host=pp_smtp_host,
-                port=pp_port,
-                username=pp_username,
-                password=pp_password,
-                from_address=pp_from_address,
-            ),
-            f"已发送: {title}",
-        )
+        # PushPlus SMTP 模式：host 有值时走邮件通道，需预校验发件人地址
+        if pp_smtp_host:
+            pp_sender = pp_from_address or pp_username or ""
+            if not pp_sender or not EMAIL_PATTERN.match(pp_sender):
+                # 配置无效：直接抛 ValueError，由 _run_channel 标记为 abandoned
+                def _raise_pp_config_error() -> None:
+                    raise ValueError(
+                        f"无效的 PushPlus 发件人地址: {pp_sender or '未配置'}"
+                    )
+                _run_channel(sub_id, "pushplus", _raise_pp_config_error, "配置错误")
+            else:
+                _run_channel(
+                    sub_id,
+                    "pushplus",
+                    lambda: send_pushplus(
+                        settings["pushplus_token"], title, body,
+                        host=pp_smtp_host,
+                        port=pp_port,
+                        username=pp_username,
+                        password=pp_password,
+                        from_address=pp_from_address,
+                    ),
+                    f"已发送: {title}",
+                )
+        else:
+            # 无 SMTP host，走 PushPlus HTTP API
+            _run_channel(
+                sub_id,
+                "pushplus",
+                lambda: send_pushplus(
+                    settings["pushplus_token"], title, body,
+                ),
+                f"已发送: {title}",
+            )
 
 
 # --------------------------------------------------------------------------- #
