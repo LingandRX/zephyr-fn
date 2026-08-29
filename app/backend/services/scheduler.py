@@ -30,7 +30,6 @@ send_pushplus = channels.send_pushplus
 
 
 CHECK_INTERVAL = 3600          # 通知检查间隔 1 小时
-BACKUP_INTERVAL = 24 * 3600    # 备份间隔 24 小时
 KEEP_BACKUPS = 5               # 保留最近 5 份 JSON 备份
 LOGGER_NAME = "subscription"
 
@@ -333,17 +332,10 @@ def _send_channels(settings: dict, sub: dict, title: str, body: str) -> None:
 # --------------------------------------------------------------------------- #
 
 def _loop(app: Flask, reminder_days: int | None) -> None:
-    next_backup = 0.0
     while True:
         try:
             with app.app_context():
-                now = time.time()
                 _check_reminders(reminder_days)
-                if now >= next_backup:
-                    result = backup_now(include_all=True)
-                    if not result.get("ok"):
-                        _logger().error("定时备份未完整完成: %s", result.get("error"))
-                    next_backup = now + BACKUP_INTERVAL
         except Exception:  # noqa: BLE001
             _logger().exception("定时任务执行出错")
         time.sleep(CHECK_INTERVAL)

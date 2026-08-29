@@ -63,7 +63,7 @@ def download_backup_file():
     try:
         file_path = backup_service.resolve_backup_file(name)
     except ValueError as exc:
-        raise ValidationError(str(exc)) from exc
+        raise ValidationError(str(exc))
     if not file_path.is_file():
         raise NotFoundError("备份文件不存在")
     return send_file(
