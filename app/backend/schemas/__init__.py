@@ -8,8 +8,6 @@
 """
 from __future__ import annotations
 
-from ..core.exceptions import ValidationError
-
 __all__ = [
     "CategorySchema",
     "SettingsSchema",

@@ -307,8 +307,8 @@ def normalize_renewal_on_create(
     auto = normalize_bool(auto_renew, "自动续费")
     policy = normalize_renewal_policy(explicit_policy, default=None)
     if policy is not None:
-        return (policy == "auto", policy)
-    return (auto, "auto" if auto else "manual")
+        return policy == "auto", policy
+    return auto, "auto" if auto else "manual"
 
 
 def resolve_renewal_on_update(
