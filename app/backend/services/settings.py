@@ -11,7 +11,7 @@ from typing import Any
 from ..schemas.settings import SettingsSchema
 from ..storage import repositories
 
-_SECRET_SETTING_FIELDS = ("smtp_password", "pushplus_token")
+_SECRET_SETTING_FIELDS = ("smtp_password", "pushplus_token", "pushplus_smtp_password")
 
 
 def _mask_secrets(settings: dict) -> dict:

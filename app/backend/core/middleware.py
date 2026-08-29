@@ -38,7 +38,7 @@ _ADMIN_EXACT = frozenset({
     "/api/notifications/test-pushplus",
 })
 
-_SECRET_SETTING_FIELDS = ("smtp_password", "pushplus_token")
+_SECRET_SETTING_FIELDS = ("smtp_password", "pushplus_token", "pushplus_smtp_password")
 
 
 def _parse_admin_flag(raw_value: str | None) -> bool:

@@ -15,8 +15,8 @@ from typing import Any
 from ..core.exceptions import ValidationError
 from ..storage.repositories import SETTINGS_FIELDS, is_secret_placeholder
 
-_SECRET_FIELDS = ("smtp_password", "pushplus_token")
-_INT_FIELDS = ("notification_days", "smtp_port")
+_SECRET_FIELDS = ("smtp_password", "pushplus_token", "pushplus_smtp_password")
+_INT_FIELDS = ("notification_days", "smtp_port", "pushplus_smtp_port")
 _FLOAT_FIELDS = ("exchange_rate_usd", "exchange_rate_hkd")
 _BOOL_FIELDS = ("auto_start", "tray_mode", "email_enabled",
                 "notification_enabled", "pushplus_enabled")
