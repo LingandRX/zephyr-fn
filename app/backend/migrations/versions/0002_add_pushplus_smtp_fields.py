@@ -19,13 +19,29 @@ branch_labels = None
 depends_on = None
 
 
+def _column_exists(table: str, column: str) -> bool:
+    """检查 SQLite 表中是否存在指定列。"""
+    from alembic import context
+    from sqlalchemy import text
+
+    bind = context.get_bind()
+    result = bind.execute(text(f"PRAGMA table_info({table})"))
+    existing = {row[1] for row in result.fetchall()}
+    return column in existing
+
+
 def upgrade() -> None:
-    # 添加 PushPlus 专用的 SMTP 配置字段
-    op.execute("ALTER TABLE app_settings ADD COLUMN pushplus_smtp_host TEXT")
-    op.execute("ALTER TABLE app_settings ADD COLUMN pushplus_smtp_port INTEGER")
-    op.execute("ALTER TABLE app_settings ADD COLUMN pushplus_smtp_username TEXT")
-    op.execute("ALTER TABLE app_settings ADD COLUMN pushplus_smtp_password TEXT")
-    op.execute("ALTER TABLE app_settings ADD COLUMN pushplus_smtp_from_address TEXT")
+    # 添加 PushPlus 专用的 SMTP 配置字段（幂等：跳过已存在的列）
+    columns = [
+        ("pushplus_smtp_host", "TEXT"),
+        ("pushplus_smtp_port", "INTEGER"),
+        ("pushplus_smtp_username", "TEXT"),
+        ("pushplus_smtp_password", "TEXT"),
+        ("pushplus_smtp_from_address", "TEXT"),
+    ]
+    for col, dtype in columns:
+        if not _column_exists("app_settings", col):
+            op.execute(f"ALTER TABLE app_settings ADD COLUMN {col} {dtype}")
 
 
 def downgrade() -> None:

@@ -453,12 +453,12 @@ def claim_notification(subscription_id: str, channel: str) -> str | None:
             "created_at": sqlite_insert(NotificationLog).excluded.created_at,
         },
         # 语义（与旧实现一致）：
-        # - sent           -> 终态，禁止重新领取
-        # - pending 且新鲜 -> 他人在领取中，返回 None
-        # - pending 超时   -> 可重新领取（TTL 截断线）
-        # - failed/其他    -> 可随时重新领取
+        # - sent / abandoned -> 终态，禁止重新领取
+        # - pending 且新鲜   -> 他人在领取中，返回 None
+        # - pending 超时     -> 可重新领取（TTL 截断线）
+        # - failed / 其他    -> 可随时重新领取
         where=(
-            (NotificationLog.status != "sent")
+            ~NotificationLog.status.in_(("sent", "abandoned"))
             & ((NotificationLog.status != "pending")
                | (NotificationLog.created_at < ttl_cutoff))
         ),
@@ -472,8 +472,8 @@ def claim_notification(subscription_id: str, channel: str) -> str | None:
 
 def complete_notification(claim_id: str | None, subscription_id: str, channel: str,
                           status: str, error_message: str | None = None) -> None:
-    """完成/失败一个 claim；claim 不存在时按传入参数回退记录日志。"""
-    valid_statuses = {"pending", "sent", "failed"}
+    """完成/失败/废弃一个 claim；claim 不存在时按传入参数回退记录日志。"""
+    valid_statuses = {"pending", "sent", "failed", "abandoned"}
     if status not in valid_statuses or status == "pending":
         status = "failed"
     sub_id = str(subscription_id or "").strip()
