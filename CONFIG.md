@@ -49,7 +49,6 @@
 | 数据目录 | `TRIM_PKGVAR` | `app/backend/../../data`（即 `zephyr-fn/data`） |
 | 数据库 | `DB_PATH` | `<data_dir>/subscription.db` |
 | 日志 | — | `<data_dir>/logs` |
-| 备份 | `SHARE_DIR` > `TRIM_DATA_SHARE_PATHS` | `<data_dir>/backups` |
 | 网关前缀 | `GATEWAY_PREFIX` | `/app/subscription` |
 
 其他：`TRIM_APPVER`（版本）、`TRIM_SYS_ARCH`（架构）、`wizard_reminder_days`（安装向导提醒天数）。
@@ -64,7 +63,6 @@
 | `--uds PATH` | Unix socket（网关模式，优先级高于 http） |
 | `--db PATH` | 覆盖数据库路径 |
 | `--www DIR` | 前端目录 |
-| `--share DIR` | 备份目录 |
 | `--init-db` | 仅初始化数据库后退出 |
 | `--reminder-days N` | 安装向导提醒天数（配合 `--init-db`） |
 
@@ -102,12 +100,11 @@ API_BASE = import.meta.env.DEV ? "/api" : "/app/subscription/api"
 | `PORT` | `8000` | 生产/静态预览端口 |
 | `BACKEND_PORT` | `8000` | **dev 模式下后端 API 端口**（与 `server.py` 默认一致） |
 | `DB` | `./data/subscription.db` | 数据库 |
-| `SHARE` | `./data/backups` | 备份目录 |
 
 `dev.sh` 实际起两个进程：
 
 ```
-后端: python server.py --http 8000 --db ... --www app/www --share ...
+后端: python server.py --http 8000 --db ... --www app/www
 前端: (cd frontend && BACKEND_PORT=8000 npm run dev)   # Vite on 5173
 ```
 

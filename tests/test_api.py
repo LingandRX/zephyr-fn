@@ -164,23 +164,16 @@ class FlaskApiSecurityTests(AppTestCase):
             ["Alice Service"],
         )
 
-        response = self.client.get("/api/backup/export-json", headers=user_headers)
-        self.assertEqual(response.status_code, 403)
-
         response = self.client.get("/api/export/csv", headers=user_headers)
         self.assertEqual(response.status_code, 403)
 
     def test_admin_can_read_full_export(self):
         """管理员可以导出所有用户数据。"""
         headers = self._identity_headers("admin", is_admin=True)
-        response = self.client.get("/api/backup/export-json", headers=headers)
+        response = self.client.get("/api/export/csv", headers=headers)
         self.assertEqual(response.status_code, 200)
-        payload = response.get_json()
-        self.assertTrue(payload["scope"]["all_users"])
-        self.assertEqual(
-            {item["name"] for item in payload["subscriptions"]},
-            {"Alice Service", "Bob Service"},
-        )
+        self.assertIn("Alice Service", response.get_data(as_text=True))
+        self.assertIn("Bob Service", response.get_data(as_text=True))
 
     def test_static_path_traversal_is_not_served(self):
         """路径穿越攻击被阻止。"""

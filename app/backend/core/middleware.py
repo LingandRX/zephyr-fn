@@ -31,7 +31,7 @@ class RequestIdentity:
 _ADMIN_PREFIXES = (
     "/api/settings",
     "/api/backup",
-    "/api/export/",
+    "/api/export",
 )
 _ADMIN_EXACT = frozenset({
     "/api/notifications/test-email",

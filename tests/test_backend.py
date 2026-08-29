@@ -210,7 +210,6 @@ class ReminderDaysSeedTests(unittest.TestCase):
         cls.root = Path(cls.tmp.name)
         cls._old_overrides = dict(getattr(config, "_OVERRIDES", {}))
         config.override("WWW_DIR", str(cls.root / "www"))
-        config.override("SHARE_DIR", str(cls.root / "backups"))
 
     @classmethod
     def tearDownClass(cls):

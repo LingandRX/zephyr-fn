@@ -17,13 +17,7 @@ API（与 zephyr-tarui 后端功能对齐）：
   设置  GET/PUT       /api/settings
   统计  GET           /api/statistics?mode=nominal|actual
   日历  GET           /api/calendar?year=&month=
-  备份  POST          /api/backup
-        GET           /api/backup/export-json
-        POST          /api/backup/import-json
-        POST          /api/backup/import-csv
-        GET           /api/backup/files
-        DELETE        /api/backup/files?name=
-        GET           /api/backup/files/download?name=
+  备份  POST          /api/backup/import-csv
         GET           /api/export/csv
   通知  GET           /api/notifications/upcoming
   日志  GET           /api/logs/tail?lines=200
@@ -178,7 +172,6 @@ def main() -> None:
     parser.add_argument("--http", type=int, help="TCP 端口（本地调试）")
     parser.add_argument("--db", help="数据库文件路径")
     parser.add_argument("--www", help="前端静态目录")
-    parser.add_argument("--share", help="备份目录")
     parser.add_argument("--init-db", action="store_true", help="仅初始化数据库后退出")
     parser.add_argument("--reminder-days", type=int,
                         help="安装向导提醒提前天数（配合 --init-db 使用）")
@@ -186,7 +179,6 @@ def main() -> None:
 
     config.override("DB_PATH", args.db)
     config.override("WWW_DIR", args.www)
-    config.override("SHARE_DIR", args.share)
     if args.reminder_days is not None:
         config.override("wizard_reminder_days", str(args.reminder_days))
 
@@ -202,7 +194,7 @@ def main() -> None:
     log.info("启动订阅管理 v%s (arch=%s)", config.app_version(), config.sys_arch())
 
     scheduler.start_scheduler(app)
-    log.info("定时任务已启动 (备份目录 %s)", config.backup_dir())
+    log.info("定时任务已启动")
 
     if is_gateway:
         sock_path = args.uds or str(Path(os.environ["TRIM_APPDEST"]) / "app.sock")

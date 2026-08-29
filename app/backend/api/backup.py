@@ -1,39 +1,37 @@
-"""备份 / 导入导出 API（管理员专属，由全局中间件校验）。
+"""CSV 导入导出 API（管理员专属，由全局中间件校验）。
 
-下载类端点（export-json / export-csv / 备份文件下载）保持原始文件响应，
-不走统一 JSON 信封；浏览器以导航方式直接触发下载。
+导出端点（export-csv）保持原始文件响应，不走统一 JSON 信封；
+浏览器以导航方式直接触发下载。
 """
 from __future__ import annotations
 
-from flask import Blueprint, Response, g, request, send_file
+from flask import Blueprint, Response, g, request
 
-from ..core.exceptions import NotFoundError, ValidationError
 from ..core.response import ok
 from ..services import backup as backup_service
-from ..services import scheduler
 
 bp = Blueprint("api_backup", __name__, url_prefix="/api")
 
 
-@bp.route("/backup", methods=["POST"])
-def trigger_backup():
-    return ok(scheduler.backup_now(include_all=True))
+def _csv_response(content: str, filename: str) -> Response:
+    """构造标准 CSV 下载响应。
 
-
-@bp.route("/backup/export-json", methods=["GET"])
-def export_json():
-    return Response(
-        backup_service.export_json_string(include_all=True),
-        mimetype="application/json; charset=utf-8",
+    要点：
+    - mimetype 只传 ``text/csv``，由 Werkzeug 自动补 ``; charset=utf-8``；
+      若在 mimetype 里再写 charset 会得到 ``text/csv; charset=utf-8; charset=utf-8``
+      这种畸形头，部分浏览器（含 Chrome）在识别下载类型时失败，报“无法在网站提取文件”。
+    - ``Content-Disposition`` 同时提供 ASCII filename 与 UTF-8 filename*，保证中文文件名兼容。
+    - 显式设置 ``Content-Length`` 与 ``X-Content-Type-Options: nosniff``，
+      避免网关/代理二次编码后长度不符导致的 ERR_INVALID_RESPONSE。
+    """
+    body = content.encode("utf-8")
+    response = Response(body, mimetype="text/csv")
+    response.headers["Content-Disposition"] = (
+        f"attachment; filename={filename}; filename*=UTF-8''{filename}"
     )
-
-
-@bp.route("/backup/import-json", methods=["POST"])
-def import_json():
-    result = backup_service.import_from_json(
-        request.get_data(as_text=True), g.identity.user_id
-    )
-    return ok(result)
+    response.headers["Content-Length"] = str(len(body))
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @bp.route("/backup/import-csv", methods=["POST"])
@@ -44,39 +42,11 @@ def import_csv():
     return ok(result)
 
 
-@bp.route("/backup/files", methods=["GET"])
-def list_backup_files():
-    return ok(backup_service.list_backup_files())
-
-
-@bp.route("/backup/files", methods=["DELETE"])
-def delete_backup_file():
-    name = request.args.get("name", "")
-    if not backup_service.delete_backup_file(name):
-        raise NotFoundError("备份文件不存在")
-    return ok({"ok": True})
-
-
-@bp.route("/backup/files/download", methods=["GET"])
-def download_backup_file():
-    name = request.args.get("name", "")
-    try:
-        file_path = backup_service.resolve_backup_file(name)
-    except ValueError as exc:
-        raise ValidationError(str(exc))
-    if not file_path.is_file():
-        raise NotFoundError("备份文件不存在")
-    return send_file(
-        file_path,
-        mimetype="application/octet-stream",
-        as_attachment=True,
-        download_name=file_path.name,
-    )
-
-
 @bp.route("/export/csv", methods=["GET"])
 def export_csv():
-    return Response(
-        backup_service.export_csv(include_all=True),
-        mimetype="text/csv; charset=utf-8",
-    )
+    return _csv_response(backup_service.export_csv(include_all=True), "subscriptions.csv")
+
+
+@bp.route("/backup/import-template", methods=["GET"])
+def import_template():
+    return _csv_response(backup_service.csv_template(), "import_template.csv")

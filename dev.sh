@@ -14,7 +14,6 @@ BUILD="${BUILD:-0}"
 PORT="${PORT:-8000}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 DB="${DB:-./data/subscription.db}"
-SHARE="${SHARE:-./data/backups}"
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 if [ -x "$PWD/.venv/bin/python" ]; then
@@ -35,13 +34,13 @@ fi
 # 初始化数据库（幂等，--init-db 已内置建表迁移）
 if [ ! -f "$DB" ]; then
   echo "==> 初始化数据库: $DB"
-  "$PYTHON_BIN" app/backend/server.py --init-db --db "$DB" --share "$SHARE"
+  "$PYTHON_BIN" app/backend/server.py --init-db --db "$DB"
 fi
 
 if [ "$FRONTEND" = "vanilla" ]; then
   echo "==> 启动原生版服务: http://127.0.0.1:${PORT}/app/subscription/"
   echo "    (Ctrl+C 退出)"
-  exec "$PYTHON_BIN" app/backend/server.py --http "$PORT" --db "$DB" --www "app/www" --share "$SHARE"
+  exec "$PYTHON_BIN" app/backend/server.py --http "$PORT" --db "$DB" --www "app/www"
 fi
 
 command -v node >/dev/null || { echo "错误：Vue 版需要 node/npm" >&2; exit 1; }
@@ -56,12 +55,12 @@ if [ "$BUILD" = "1" ] || [ "$FRONTEND" = "build" ]; then
   (cd frontend && npm run build)
   echo "==> 启动生产预览服务: http://127.0.0.1:${PORT}/app/subscription/"
   echo "    (Ctrl+C 退出)"
-  exec "$PYTHON_BIN" app/backend/server.py --http "$PORT" --db "$DB" --www "frontend/dist" --share "$SHARE"
+  exec "$PYTHON_BIN" app/backend/server.py --http "$PORT" --db "$DB" --www "frontend/dist"
 fi
 
 # 默认：Vue 热更新开发模式（Vite dev + 后端 API）
 echo "==> 启动后端 API 服务 (端口 $BACKEND_PORT)..."
-"$PYTHON_BIN" app/backend/server.py --http "$BACKEND_PORT" --db "$DB" --www "app/www" --share "$SHARE" &
+"$PYTHON_BIN" app/backend/server.py --http "$BACKEND_PORT" --db "$DB" --www "app/www" &
 BACKEND_PID=$!
 
 cleanup() {

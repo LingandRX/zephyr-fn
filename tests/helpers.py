@@ -31,7 +31,6 @@ class AppTestCase(unittest.TestCase):
         cls._old_overrides = dict(getattr(config, "_OVERRIDES", {}))
         config.override("DB_PATH", str(cls.root / "test.db"))
         config.override("WWW_DIR", str(cls.root / "www"))
-        config.override("SHARE_DIR", str(cls.root / "backups"))
         cls.app = create_app(allow_headerless_local_identity=True)
         cls.app.config["TESTING"] = True
 

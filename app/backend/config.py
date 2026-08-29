@@ -79,19 +79,6 @@ def logs_dir() -> Path:
     return data_dir() / "logs"
 
 
-def backup_dir() -> Path:
-    """备份目录：优先使用 data-share 共享目录（用户可在文件管理器看到）。"""
-    s = _get("SHARE_DIR")
-    if s:
-        return _abs_path(s)
-    raw = _get("TRIM_DATA_SHARE_PATHS")
-    if raw:
-        first = raw.split(":")[0]
-        if first:
-            return _abs_path(first)
-    return data_dir() / "backups"
-
-
 def reminder_days_override() -> int | None:
     """安装向导显式传入的提醒提前天数（wizard_reminder_days）。
 
