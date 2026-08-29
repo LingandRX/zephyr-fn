@@ -1,5 +1,5 @@
 appname=subscription
-version=0.1.2
+version=0.1.3
 display_name=订阅管理
 desc=记录订阅服务、费用与到期时间
 source=thirdparty
