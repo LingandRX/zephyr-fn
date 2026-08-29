@@ -14,11 +14,13 @@ export default defineConfig(({ command }) => ({
   base: command === "build" ? `${GATEWAY_PREFIX}/` : "/",
   server: {
     port: 5173,
+    // 端口被占时直接报错（而非静默跳到 5174），避免混淆
+    strictPort: true,
     // 仅代理 API 到 Python 后端（TCP 模式后端直接接受 /api/... 路径；
     // 真机则由网关注入前缀后转发，后端 _normalize_path 剥离前缀，两者等效）
     proxy: {
       "/api": {
-        target: `http://127.0.0.1:${process.env.BACKEND_PORT || 5001}`,
+        target: `http://127.0.0.1:${process.env.BACKEND_PORT || 8000}`,
         changeOrigin: true,
       },
     },

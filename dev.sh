@@ -12,7 +12,7 @@ cd "$(dirname "$0")"
 FRONTEND="${FRONTEND:-vue}"
 BUILD="${BUILD:-0}"
 PORT="${PORT:-8000}"
-BACKEND_PORT="${BACKEND_PORT:-5001}"
+BACKEND_PORT="${BACKEND_PORT:-8000}"
 DB="${DB:-./data/subscription.db}"
 SHARE="${SHARE:-./data/backups}"
 
