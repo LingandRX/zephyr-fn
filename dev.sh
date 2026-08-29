@@ -16,18 +16,32 @@ BACKEND_PORT="${BACKEND_PORT:-5001}"
 DB="${DB:-./data/subscription.db}"
 SHARE="${SHARE:-./data/backups}"
 
-command -v python3 >/dev/null || { echo "错误：需要 python3" >&2; exit 1; }
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+if [ -x "$PWD/.venv/bin/python" ]; then
+  PYTHON_BIN="$PWD/.venv/bin/python"
+fi
+
+command -v "$PYTHON_BIN" >/dev/null || { echo "错误：需要 python3 / 项目虚拟环境" >&2; exit 1; }
+
+if ! "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1
+import flask, flask_sqlalchemy, flask_migrate
+print('ok')
+PY
+then
+  echo "==> 安装后端 Python 依赖..."
+  "$PYTHON_BIN" -m pip install -r app/backend/requirements.txt
+fi
 
 # 初始化数据库（幂等，--init-db 已内置建表迁移）
 if [ ! -f "$DB" ]; then
   echo "==> 初始化数据库: $DB"
-  python3 app/backend/server.py --init-db --db "$DB" --share "$SHARE"
+  "$PYTHON_BIN" app/backend/server.py --init-db --db "$DB" --share "$SHARE"
 fi
 
 if [ "$FRONTEND" = "vanilla" ]; then
   echo "==> 启动原生版服务: http://127.0.0.1:${PORT}/app/subscription/"
   echo "    (Ctrl+C 退出)"
-  exec python3 app/backend/server.py --http "$PORT" --db "$DB" --www "app/www" --share "$SHARE"
+  exec "$PYTHON_BIN" app/backend/server.py --http "$PORT" --db "$DB" --www "app/www" --share "$SHARE"
 fi
 
 command -v node >/dev/null || { echo "错误：Vue 版需要 node/npm" >&2; exit 1; }
@@ -42,12 +56,12 @@ if [ "$BUILD" = "1" ] || [ "$FRONTEND" = "build" ]; then
   (cd frontend && npm run build)
   echo "==> 启动生产预览服务: http://127.0.0.1:${PORT}/app/subscription/"
   echo "    (Ctrl+C 退出)"
-  exec python3 app/backend/server.py --http "$PORT" --db "$DB" --www "frontend/dist" --share "$SHARE"
+  exec "$PYTHON_BIN" app/backend/server.py --http "$PORT" --db "$DB" --www "frontend/dist" --share "$SHARE"
 fi
 
 # 默认：Vue 热更新开发模式（Vite dev + 后端 API）
 echo "==> 启动后端 API 服务 (端口 $BACKEND_PORT)..."
-python3 app/backend/server.py --http "$BACKEND_PORT" --db "$DB" --www "app/www" --share "$SHARE" &
+"$PYTHON_BIN" app/backend/server.py --http "$BACKEND_PORT" --db "$DB" --www "app/www" --share "$SHARE" &
 BACKEND_PID=$!
 
 cleanup() {
