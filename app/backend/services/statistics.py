@@ -126,8 +126,10 @@ def _count_cycles_in_range(sub: dict, range_start: date, range_end: date) -> int
         start_date = date.fromisoformat(sub["start_date"])
     except (TypeError, ValueError):
         return 0
+    period_anchor = domain.billing_anchor_day(start_date)
     first_due = domain.add_one_period(
-        start_date, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"]
+        start_date, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"],
+        anchor_day=period_anchor,
     )
     if first_due is None:
         return 0
@@ -146,9 +148,11 @@ def _count_cycles_in_range(sub: dict, range_start: date, range_end: date) -> int
         return max(0, last_k - first_k + 1)
 
     step = lambda d: domain.add_one_period(
-        d, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"])
+        d, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"],
+        anchor_day=period_anchor)
     back = lambda d: domain.sub_one_period(
-        d, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"])
+        d, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"],
+        anchor_day=period_anchor)
 
     guard = 0
     while anchor > range_end:
@@ -360,7 +364,8 @@ def _events_for_month(sub: dict, year: int, month: int) -> list[dict]:
                 pass
         else:
             effective_end = domain.add_one_period(
-                start_date, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"]
+                start_date, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"],
+                anchor_day=domain.billing_anchor_day(start_date),
             )
 
     fixed_days = _fixed_cycle_days(sub)
@@ -384,7 +389,8 @@ def _events_for_month(sub: dict, year: int, month: int) -> list[dict]:
                     and current.month == month and current.year == year):
                 _push_event(events, sub, current, "cycle_start")
             nxt = domain.add_one_period(
-                current, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"])
+                current, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"],
+                anchor_day=domain.billing_anchor_day(start_date))
             if nxt is None:
                 break
             current = nxt

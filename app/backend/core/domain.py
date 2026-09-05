@@ -53,33 +53,56 @@ def _days_in_month(year: int, month: int) -> int:
     return (next_month - date(year, month, 1)).days
 
 
-def add_months(d: date, months: int) -> date:
-    """按日历月推进，月末日期保持月末锚点。
+def billing_anchor_day(d: date) -> int:
+    """订阅的跨月锚点日。
 
-    例如 2026-01-31 -> 2026-02-28 -> 2026-03-31。这样月末订阅在
-    ``add_one_period`` / ``sub_one_period`` 之间不会逐月漂移到 28 号。
-    非月末日期仍然按目标月钳制，例如 2026-01-30 -> 2026-02-28。
+    月末订阅固定为 31，短月钳制后仍能回到月末；非月末用
+    当天日号，避免「30 号被钳到 28」被误升级成月末锚点。
+    """
+    if d.day == _days_in_month(d.year, d.month):
+        return 31
+    return d.day
+
+
+def add_months(d: date, months: int, *, anchor_day: int | None = None) -> date:
+    """按日历月推进，用稳定锚点日而不是「当前是否月末」。
+
+    ``anchor_day`` 是账单日（1-31）。目标月天数不足时钳制到月末，
+    但钳制结果不会改变锚点。例如锚点 30：
+    2026-01-30 -> 2026-02-28 -> 2026-03-30。
+
+    未传入时：源日期若是月末则锚在 31（
+    2026-01-31 -> 2026-02-28，链式推进仍保持月末），否则用
+    ``d.day``。从中间结果继续推进时应传入原始
+    ``billing_anchor_day``，否则 2 月 28 日无法区分「30 号钳制」
+    与「月末订阅」。
     """
     idx = d.month - 1 + months
     year = d.year + idx // 12
     month = idx % 12 + 1
     target_last_day = _days_in_month(year, month)
-    source_is_month_end = d.day == _days_in_month(d.year, d.month)
-    day = target_last_day if source_is_month_end else min(d.day, target_last_day)
-    return date(year, month, day)
+    if anchor_day is None:
+        resolved_anchor = billing_anchor_day(d)
+    elif isinstance(anchor_day, bool) or not isinstance(anchor_day, int) or not 1 <= anchor_day <= 31:
+        raise ValueError("锚点日必须是1到31的整数")
+    else:
+        resolved_anchor = anchor_day
+    return date(year, month, min(resolved_anchor, target_last_day))
 
 
 def add_one_period(
     d: date, period_type: str, custom_value: int | None = None,
     custom_unit: str | None = None,
+    *,
+    anchor_day: int | None = None,
 ) -> date | None:
     """按订阅周期推进一期。一次性(once)订阅没有后续周期，返回 None。"""
     if period_type == "month":
-        return add_months(d, 1)
+        return add_months(d, 1, anchor_day=anchor_day)
     if period_type == "quarter":
-        return add_months(d, 3)
+        return add_months(d, 3, anchor_day=anchor_day)
     if period_type == "year":
-        return add_months(d, 12)
+        return add_months(d, 12, anchor_day=anchor_day)
     if period_type == "once":
         return None
     if period_type == "custom":
@@ -90,23 +113,25 @@ def add_one_period(
         if unit == "week":
             return d + timedelta(weeks=value)
         if unit == "month":
-            return add_months(d, value)
+            return add_months(d, value, anchor_day=anchor_day)
         if unit == "year":
-            return add_months(d, value * 12)
+            return add_months(d, value * 12, anchor_day=anchor_day)
     return None
 
 
 def sub_one_period(
     d: date, period_type: str, custom_value: int | None = None,
     custom_unit: str | None = None,
+    *,
+    anchor_day: int | None = None,
 ) -> date | None:
     """往回退一期；月末日期与 ``add_one_period`` 使用相同锚点规则。"""
     if period_type == "month":
-        return add_months(d, -1)
+        return add_months(d, -1, anchor_day=anchor_day)
     if period_type == "quarter":
-        return add_months(d, -3)
+        return add_months(d, -3, anchor_day=anchor_day)
     if period_type == "year":
-        return add_months(d, -12)
+        return add_months(d, -12, anchor_day=anchor_day)
     if period_type == "once":
         return None
     if period_type == "custom":
@@ -117,9 +142,9 @@ def sub_one_period(
         if unit == "week":
             return d - timedelta(weeks=value)
         if unit == "month":
-            return add_months(d, -value)
+            return add_months(d, -value, anchor_day=anchor_day)
         if unit == "year":
-            return add_months(d, -value * 12)
+            return add_months(d, -value * 12, anchor_day=anchor_day)
     return None
 
 
