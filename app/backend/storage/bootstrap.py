@@ -34,6 +34,7 @@ _SETTINGS_COLUMN_DEFINITIONS = {
     "exchange_rate_usd": "REAL NOT NULL DEFAULT 7.2",
     "exchange_rate_hkd": "REAL NOT NULL DEFAULT 0.92",
     "notification_days": "INTEGER NOT NULL DEFAULT 7",
+    "notification_time": "TEXT DEFAULT '09:00'",
     "do_not_disturb_start": "TEXT",
     "do_not_disturb_end": "TEXT",
     "auto_start": "INTEGER NOT NULL DEFAULT 0",

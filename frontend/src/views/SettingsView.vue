@@ -80,6 +80,7 @@ const form = reactive({
   exchange_rate_usd: 7.2,
   exchange_rate_hkd: 0.92,
   notification_days: 7,
+  notification_time: "09:00",
   notification_enabled: true,
   do_not_disturb_start: "",
   do_not_disturb_end: "",
@@ -160,6 +161,7 @@ async function loadAll() {
       exchange_rate_usd: s.exchange_rate_usd ?? 7.2,
       exchange_rate_hkd: s.exchange_rate_hkd ?? 0.92,
       notification_days: s.notification_days ?? 7,
+      notification_time: s.notification_time || "09:00",
       notification_enabled: !!s.notification_enabled,
       do_not_disturb_start: s.do_not_disturb_start || "",
       do_not_disturb_end: s.do_not_disturb_end || "",
@@ -200,7 +202,7 @@ let statusTimer = null;
 const SCOPE_FIELDS = {
   general: [
     "default_currency", "exchange_rate_usd", "exchange_rate_hkd",
-    "notification_days", "notification_enabled",
+    "notification_days", "notification_time", "notification_enabled",
     "do_not_disturb_start", "do_not_disturb_end",
   ],
   smtp: [
@@ -258,6 +260,7 @@ watch(
           exchange_rate_usd: parseFloat(form.exchange_rate_usd) || 7.2,
           exchange_rate_hkd: parseFloat(form.exchange_rate_hkd) || 0.92,
           notification_days: Number.isNaN(parsedNotificationDays) ? 7 : parsedNotificationDays,
+          notification_time: form.notification_time || null,
           smtp_port: form.smtp_port ? parseInt(form.smtp_port, 10) : null,
           do_not_disturb_start: form.do_not_disturb_start || null,
           do_not_disturb_end: form.do_not_disturb_end || null,
@@ -527,6 +530,10 @@ onMounted(loadAll);
           <span>到期提醒提前天数</span>
           <input v-model="form.notification_days" type="number" min="0" max="90" />
         </label>
+        <div class="field">
+          <span>每日固定推送时刻</span>
+          <CustomTimePicker v-model="form.notification_time" placeholder="如 09:00" />
+        </div>
         <div class="field dnd">
           <span>免打扰时段</span>
           <div class="dnd-inputs">

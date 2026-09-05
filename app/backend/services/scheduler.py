@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from datetime import datetime, timedelta
 from typing import Callable
 
 from flask import Flask
@@ -22,7 +23,7 @@ send_email = channels.send_email
 send_pushplus = channels.send_pushplus
 
 
-CHECK_INTERVAL = 3600          # 通知检查间隔 1 小时
+DEFAULT_PUSH_TIME = "09:00"    # 每日固定推送时刻默认值（24h 制 HH:MM）
 LOGGER_NAME = "subscription"
 
 
@@ -189,14 +190,41 @@ def _send_channels(settings: dict, sub: dict, title: str, body: str) -> None:
 # 主循环
 # --------------------------------------------------------------------------- #
 
+def seconds_until_next_push(now: datetime, clock_text: str | None) -> float:
+    """返回距离下一次本地时间 clock_text（HH:MM）的秒数。
+
+    clock_text 为空/非法时回退到默认推送时刻；恰好等于该时刻时
+    视为已过，顺延到明天同一时刻。
+    """
+    minutes = notifications.parse_clock(clock_text)
+    if minutes is None:
+        minutes = notifications.parse_clock(DEFAULT_PUSH_TIME)
+    target = now.replace(hour=minutes // 60, minute=minutes % 60, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return max(0.0, (target - now).total_seconds())
+
+
+def _next_delay(app: Flask) -> float:
+    """读取推送时刻配置并计算到下一个触发点的等待秒数。"""
+    try:
+        with app.app_context():
+            clock_text = repositories.get_app_settings().get("notification_time")
+    except Exception:  # noqa: BLE001
+        _logger().exception("读取推送时刻配置失败，使用默认 %s", DEFAULT_PUSH_TIME)
+        clock_text = DEFAULT_PUSH_TIME
+    return seconds_until_next_push(datetime.now(), clock_text)
+
+
 def _loop(app: Flask, reminder_days: int | None) -> None:
     while True:
+        # 先睡到下一个每日推送时刻（启动后不立即执行）
+        time.sleep(_next_delay(app))
         try:
             with app.app_context():
                 _check_reminders(reminder_days)
         except Exception:  # noqa: BLE001
             _logger().exception("定时任务执行出错")
-        time.sleep(CHECK_INTERVAL)
 
 
 def start_scheduler(app: Flask, reminder_days: int | None = None) -> threading.Thread:

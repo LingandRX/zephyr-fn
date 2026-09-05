@@ -26,7 +26,7 @@ def _logger() -> logging.Logger:
     return logging.getLogger(LOGGER_NAME)
 
 
-def _parse_clock(value: Any) -> int | None:
+def parse_clock(value: Any) -> int | None:
     """把 HH:MM 转成当天分钟数；非法配置返回 None。"""
     if value in (None, ""):
         return None
@@ -47,8 +47,8 @@ def is_do_not_disturb(settings: dict | None = None,
                       now: datetime | None = None) -> bool:
     """判断当前时间是否处于免打扰区间，精确到分钟并支持跨午夜。"""
     settings = settings if settings is not None else repositories.get_app_settings()
-    start = _parse_clock(settings.get("do_not_disturb_start"))
-    end = _parse_clock(settings.get("do_not_disturb_end"))
+    start = parse_clock(settings.get("do_not_disturb_start"))
+    end = parse_clock(settings.get("do_not_disturb_end"))
     if start is None or end is None or start == end:
         return False
 
