@@ -18,6 +18,7 @@ class AppSettings(db.Model):
     exchange_rate_usd = Column(Float, nullable=False, default=7.2)
     exchange_rate_hkd = Column(Float, nullable=False, default=0.92)
     notification_days = Column(Integer, nullable=False, default=7)
+    notification_time = Column(String(8), nullable=True, default="09:00")
     do_not_disturb_start = Column(String(8), nullable=True)
     do_not_disturb_end = Column(String(8), nullable=True)
     auto_start = Column(Integer, nullable=False, default=0)

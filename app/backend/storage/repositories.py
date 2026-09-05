@@ -52,7 +52,8 @@ SUBSCRIPTION_FIELDS = (
 # 设置字段白名单
 SETTINGS_FIELDS = (
     "dark_mode", "default_currency", "exchange_rate_usd", "exchange_rate_hkd",
-    "notification_days", "do_not_disturb_start", "do_not_disturb_end",
+    "notification_days", "notification_time",
+    "do_not_disturb_start", "do_not_disturb_end",
     "auto_start", "tray_mode", "email_enabled", "smtp_host", "smtp_port",
     "smtp_username", "smtp_password", "smtp_from_address", "email_template",
     "notification_enabled", "pushplus_enabled", "pushplus_token",
