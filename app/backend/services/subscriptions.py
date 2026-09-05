@@ -126,9 +126,11 @@ def renew_subscription(sub_id: str, user_id: str) -> dict | None:
     if current is None or current["period_type"] == "once":
         return None
     due = date.fromisoformat(current["next_due_date"] or current["start_date"])
+    start = date.fromisoformat(current["start_date"])
     next_due = domain.add_one_period(
         due, current["period_type"], current["custom_period_value"],
         current["custom_period_unit"],
+        anchor_day=domain.billing_anchor_day(start),
     )
     if next_due is None:
         return None

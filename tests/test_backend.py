@@ -30,6 +30,55 @@ class DomainTests(unittest.TestCase):
         self.assertEqual(domain.add_one_period(date(2026, 1, 31), "month"), date(2026, 2, 28))
         self.assertEqual(domain.add_one_period(date(2026, 8, 31), "month"), date(2026, 9, 30))
 
+    def test_add_months_keeps_thirtieth_after_february(self):
+        from datetime import date
+        start = date(2026, 1, 30)
+        self.assertEqual(domain.billing_anchor_day(start), 30)
+        self.assertEqual(domain.add_months(start, 1), date(2026, 2, 28))
+        self.assertEqual(domain.add_months(start, 2), date(2026, 3, 30))
+        self.assertEqual(domain.add_months(start, 3), date(2026, 4, 30))
+
+        feb = domain.add_months(start, 1)
+        self.assertEqual(
+            domain.add_months(feb, 1, anchor_day=30), date(2026, 3, 30))
+        self.assertEqual(
+            domain.add_one_period(feb, "month", anchor_day=30), date(2026, 3, 30))
+        self.assertEqual(
+            domain.sub_one_period(feb, "month", anchor_day=30), start)
+
+    def test_add_months_keeps_month_end_anchor(self):
+        from datetime import date
+        start = date(2026, 1, 31)
+        self.assertEqual(domain.billing_anchor_day(start), 31)
+        self.assertEqual(domain.add_months(start, 1), date(2026, 2, 28))
+        self.assertEqual(domain.add_months(start, 2), date(2026, 3, 31))
+        self.assertEqual(
+            domain.add_months(date(2026, 2, 28), 1, anchor_day=31),
+            date(2026, 3, 31),
+        )
+        # 中间结果若不传锚点，2 月 28 日仍按月末处理（兼容旧行为）
+        self.assertEqual(domain.add_months(date(2026, 2, 28), 1), date(2026, 3, 31))
+
+    def test_add_months_leap_day_and_negative(self):
+        from datetime import date
+        self.assertEqual(domain.add_months(date(2024, 1, 29), 1), date(2024, 2, 29))
+        self.assertEqual(domain.add_months(date(2024, 1, 29), 2), date(2024, 3, 29))
+        self.assertEqual(
+            domain.add_months(date(2024, 2, 29), 1, anchor_day=29), date(2024, 3, 29))
+        self.assertEqual(domain.add_months(date(2026, 3, 30), -1), date(2026, 2, 28))
+        self.assertEqual(
+            domain.add_months(date(2026, 2, 28), -1, anchor_day=30),
+            date(2026, 1, 30),
+        )
+        self.assertEqual(domain.add_months(date(2026, 1, 31), -1), date(2025, 12, 31))
+
+    def test_add_months_rejects_invalid_anchor_day(self):
+        from datetime import date
+        with self.assertRaisesRegex(ValueError, "锚点日"):
+            domain.add_months(date(2026, 1, 30), 1, anchor_day=0)
+        with self.assertRaisesRegex(ValueError, "锚点日"):
+            domain.add_months(date(2026, 1, 30), 1, anchor_day=32)
+
     def test_add_quarter_year(self):
         from datetime import date
         self.assertEqual(domain.add_one_period(date(2026, 2, 14), "quarter"), date(2026, 5, 14))
@@ -94,6 +143,14 @@ class SubscriptionServiceTests(AppTestCase):
         })
         renewed = sub_service.renew_subscription(sub["id"], "u1")
         self.assertEqual(renewed["next_due_date"], "2027-09-01")
+
+    def test_renew_keeps_thirtieth_after_february(self):
+        sub = sub_service.create_subscription("u1", {
+            "name": "钳制日", "amount": 100, "period_type": "month",
+            "start_date": "2026-01-30", "next_due_date": "2026-02-28",
+        })
+        renewed = sub_service.renew_subscription(sub["id"], "u1")
+        self.assertEqual(renewed["next_due_date"], "2026-03-30")
 
     def test_once_auto_renew_false(self):
         sub = sub_service.create_subscription("u1", {
