@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // 页面壳 + Sub Page 回归检查：
 //   BaseLayout 提供公共壳（侧边栏/顶栏/横幅/折叠按钮），切换导航 = 切换 Sub Page。
 //   Sub Page 在主窗口内部滚动（overflow-y:auto 的 .page-host），不带动顶栏/侧边栏。
