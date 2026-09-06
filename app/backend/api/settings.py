@@ -1,4 +1,5 @@
 """应用设置 API（管理员专属，由全局中间件校验）。"""
+
 from __future__ import annotations
 
 from flask import Blueprint, request

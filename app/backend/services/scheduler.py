@@ -4,6 +4,7 @@
 ``with app.app_context()`` 获取数据库会话（Flask-SQLAlchemy 会话按
 上下文隔离，线程间互不串扰）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,7 +24,7 @@ send_email = channels.send_email
 send_pushplus = channels.send_pushplus
 
 
-DEFAULT_PUSH_TIME = "09:00"    # 每日固定推送时刻默认值（24h 制 HH:MM）
+DEFAULT_PUSH_TIME = "09:00"  # 每日固定推送时刻默认值（24h 制 HH:MM）
 LOGGER_NAME = "subscription"
 
 
@@ -35,6 +36,7 @@ def _logger() -> logging.Logger:
 # 到期提醒
 # --------------------------------------------------------------------------- #
 
+
 def _check_reminders(reminder_days: int | None = None) -> None:
     settings = repositories.get_app_settings()
     if not settings.get("notification_enabled"):
@@ -43,9 +45,7 @@ def _check_reminders(reminder_days: int | None = None) -> None:
         return
 
     try:
-        subs = notifications.get_subscriptions_needing_notification(
-            reminder_days=reminder_days
-        )
+        subs = notifications.get_subscriptions_needing_notification(reminder_days=reminder_days)
     except TypeError:
         subs = notifications.get_subscriptions_needing_notification()
     if not subs:
@@ -70,8 +70,13 @@ def _legacy_claim(subscription_id: str, channel: str) -> str | None:
     return f"legacy:{subscription_id}:{channel}"
 
 
-def _complete_claim(claim_id: str | None, subscription_id: str, channel: str,
-                    status: str, error_message: str | None = None) -> None:
+def _complete_claim(
+    claim_id: str | None,
+    subscription_id: str,
+    channel: str,
+    status: str,
+    error_message: str | None = None,
+) -> None:
     complete = getattr(notifications, "complete_notification", None)
     if callable(complete):
         complete(claim_id, subscription_id, channel, status, error_message)
@@ -83,8 +88,7 @@ def _complete_claim(claim_id: str | None, subscription_id: str, channel: str,
             _logger().exception("写入通知日志失败: %s/%s", subscription_id, channel)
 
 
-def _run_channel(sub_id: str, channel: str, sender: Callable[[], None],
-                 success_log: str) -> None:
+def _run_channel(sub_id: str, channel: str, sender: Callable[[], None], success_log: str) -> None:
     claim = getattr(notifications, "claim_notification", None)
     claim_id = claim(sub_id, channel) if callable(claim) else _legacy_claim(sub_id, channel)
     if not claim_id:
@@ -128,7 +132,9 @@ def _send_channels(settings: dict, sub: dict, title: str, body: str) -> None:
                 sub_id,
                 "email",
                 lambda: send_email(
-                    to_address, title, body,
+                    to_address,
+                    title,
+                    body,
                     host=settings.get("smtp_host"),
                     port=port,
                     username=settings.get("smtp_username"),
@@ -148,7 +154,9 @@ def _send_channels(settings: dict, sub: dict, title: str, body: str) -> None:
             pp_port = 465
         pp_username = settings.get("pushplus_smtp_username") or settings.get("smtp_username")
         pp_password = settings.get("pushplus_smtp_password") or settings.get("smtp_password")
-        pp_from_address = settings.get("pushplus_smtp_from_address") or settings.get("smtp_from_address")
+        pp_from_address = settings.get("pushplus_smtp_from_address") or settings.get(
+            "smtp_from_address"
+        )
 
         # PushPlus SMTP 模式：host 有值时走邮件通道，需预校验发件人地址
         if pp_smtp_host:
@@ -156,16 +164,17 @@ def _send_channels(settings: dict, sub: dict, title: str, body: str) -> None:
             if not pp_sender or not EMAIL_PATTERN.match(pp_sender):
                 # 配置无效：直接抛 ValueError，由 _run_channel 标记为 abandoned
                 def _raise_pp_config_error() -> None:
-                    raise ValueError(
-                        f"无效的 PushPlus 发件人地址: {pp_sender or '未配置'}"
-                    )
+                    raise ValueError(f"无效的 PushPlus 发件人地址: {pp_sender or '未配置'}")
+
                 _run_channel(sub_id, "pushplus", _raise_pp_config_error, "配置错误")
             else:
                 _run_channel(
                     sub_id,
                     "pushplus",
                     lambda: send_pushplus(
-                        settings["pushplus_token"], title, body,
+                        settings["pushplus_token"],
+                        title,
+                        body,
                         host=pp_smtp_host,
                         port=pp_port,
                         username=pp_username,
@@ -180,7 +189,9 @@ def _send_channels(settings: dict, sub: dict, title: str, body: str) -> None:
                 sub_id,
                 "pushplus",
                 lambda: send_pushplus(
-                    settings["pushplus_token"], title, body,
+                    settings["pushplus_token"],
+                    title,
+                    body,
                 ),
                 f"已发送: {title}",
             )
@@ -189,6 +200,7 @@ def _send_channels(settings: dict, sub: dict, title: str, body: str) -> None:
 # --------------------------------------------------------------------------- #
 # 主循环
 # --------------------------------------------------------------------------- #
+
 
 def seconds_until_next_push(now: datetime, clock_text: str | None) -> float:
     """返回距离下一次本地时间 clock_text（HH:MM）的秒数。

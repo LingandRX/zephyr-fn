@@ -2,36 +2,43 @@
 
 运行：python3 -m unittest discover -s tests -v
 """
+
 import os
 import sqlite3
-import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
 
 from helpers import AppTestCase
+
 from backend import config
 from backend.core import domain
 from backend.core.exceptions import ValidationError
 from backend.services import (
     calculate_statistics,
-    categories as category_service,
     get_calendar_events,
+)
+from backend.services import (
+    categories as category_service,
+)
+from backend.services import (
     subscriptions as sub_service,
 )
-from backend.storage import bootstrap, repositories
+from backend.storage import repositories
 from backend.storage.bootstrap import DEFAULT_CATEGORY_TEMPLATES
 
 
 class DomainTests(unittest.TestCase):
     def test_add_month_clamps_day(self):
         from datetime import date
+
         self.assertEqual(domain.add_one_period(date(2026, 1, 31), "month"), date(2026, 2, 28))
         self.assertEqual(domain.add_one_period(date(2026, 8, 31), "month"), date(2026, 9, 30))
 
     def test_add_months_keeps_thirtieth_after_february(self):
         from datetime import date
+
         start = date(2026, 1, 30)
         self.assertEqual(domain.billing_anchor_day(start), 30)
         self.assertEqual(domain.add_months(start, 1), date(2026, 2, 28))
@@ -39,15 +46,13 @@ class DomainTests(unittest.TestCase):
         self.assertEqual(domain.add_months(start, 3), date(2026, 4, 30))
 
         feb = domain.add_months(start, 1)
-        self.assertEqual(
-            domain.add_months(feb, 1, anchor_day=30), date(2026, 3, 30))
-        self.assertEqual(
-            domain.add_one_period(feb, "month", anchor_day=30), date(2026, 3, 30))
-        self.assertEqual(
-            domain.sub_one_period(feb, "month", anchor_day=30), start)
+        self.assertEqual(domain.add_months(feb, 1, anchor_day=30), date(2026, 3, 30))
+        self.assertEqual(domain.add_one_period(feb, "month", anchor_day=30), date(2026, 3, 30))
+        self.assertEqual(domain.sub_one_period(feb, "month", anchor_day=30), start)
 
     def test_add_months_keeps_month_end_anchor(self):
         from datetime import date
+
         start = date(2026, 1, 31)
         self.assertEqual(domain.billing_anchor_day(start), 31)
         self.assertEqual(domain.add_months(start, 1), date(2026, 2, 28))
@@ -61,10 +66,10 @@ class DomainTests(unittest.TestCase):
 
     def test_add_months_leap_day_and_negative(self):
         from datetime import date
+
         self.assertEqual(domain.add_months(date(2024, 1, 29), 1), date(2024, 2, 29))
         self.assertEqual(domain.add_months(date(2024, 1, 29), 2), date(2024, 3, 29))
-        self.assertEqual(
-            domain.add_months(date(2024, 2, 29), 1, anchor_day=29), date(2024, 3, 29))
+        self.assertEqual(domain.add_months(date(2024, 2, 29), 1, anchor_day=29), date(2024, 3, 29))
         self.assertEqual(domain.add_months(date(2026, 3, 30), -1), date(2026, 2, 28))
         self.assertEqual(
             domain.add_months(date(2026, 2, 28), -1, anchor_day=30),
@@ -74,6 +79,7 @@ class DomainTests(unittest.TestCase):
 
     def test_add_months_rejects_invalid_anchor_day(self):
         from datetime import date
+
         with self.assertRaisesRegex(ValueError, "锚点日"):
             domain.add_months(date(2026, 1, 30), 1, anchor_day=0)
         with self.assertRaisesRegex(ValueError, "锚点日"):
@@ -81,22 +87,28 @@ class DomainTests(unittest.TestCase):
 
     def test_add_quarter_year(self):
         from datetime import date
+
         self.assertEqual(domain.add_one_period(date(2026, 2, 14), "quarter"), date(2026, 5, 14))
         self.assertEqual(domain.add_one_period(date(2026, 2, 14), "year"), date(2027, 2, 14))
 
     def test_once_has_no_next(self):
         from datetime import date
+
         self.assertIsNone(domain.add_one_period(date(2026, 1, 31), "once"))
 
     def test_custom_period(self):
         from datetime import date
-        self.assertEqual(domain.add_one_period(date(2026, 3, 1), "custom", 2, "week"),
-                         date(2026, 3, 15))
-        self.assertEqual(domain.add_one_period(date(2026, 3, 1), "custom", 2, "month"),
-                         date(2026, 5, 1))
+
+        self.assertEqual(
+            domain.add_one_period(date(2026, 3, 1), "custom", 2, "week"), date(2026, 3, 15)
+        )
+        self.assertEqual(
+            domain.add_one_period(date(2026, 3, 1), "custom", 2, "month"), date(2026, 5, 1)
+        )
 
     def test_sub_is_inverse(self):
         from datetime import date
+
         d = date(2026, 5, 20)
         fwd = domain.add_one_period(d, "month")
         self.assertEqual(domain.sub_one_period(fwd, "month"), d)
@@ -108,6 +120,7 @@ class DomainTests(unittest.TestCase):
 
     def test_derive_status(self):
         from datetime import date, timedelta
+
         today = date.today()
         soon = (today + timedelta(days=3)).isoformat()
         later = (today + timedelta(days=30)).isoformat()
@@ -118,54 +131,88 @@ class DomainTests(unittest.TestCase):
 
 class SubscriptionServiceTests(AppTestCase):
     def test_create_and_get(self):
-        sub = sub_service.create_subscription("u1", {
-            "name": "Netflix", "amount": 6800, "currency": "CNY",
-            "period_type": "month", "auto_renew": True,
-            "start_date": "2026-06-11", "next_due_date": "2026-08-15",
-        })
+        sub = sub_service.create_subscription(
+            "u1",
+            {
+                "name": "Netflix",
+                "amount": 6800,
+                "currency": "CNY",
+                "period_type": "month",
+                "auto_renew": True,
+                "start_date": "2026-06-11",
+                "next_due_date": "2026-08-15",
+            },
+        )
         self.assertEqual(sub["amount"], 6800)
         self.assertEqual(sub["renewal_policy"], "auto")
         got = sub_service.get_subscription(sub["id"], "u1")
         self.assertEqual(got["name"], "Netflix")
 
     def test_multi_user_isolation(self):
-        sub_service.create_subscription("alice", {"name": "A", "amount": 100, "period_type": "month",
-                                                  "start_date": "2026-01-01"})
-        sub_service.create_subscription("bob", {"name": "B", "amount": 200, "period_type": "month",
-                                                "start_date": "2026-01-01"})
+        sub_service.create_subscription(
+            "alice",
+            {"name": "A", "amount": 100, "period_type": "month", "start_date": "2026-01-01"},
+        )
+        sub_service.create_subscription(
+            "bob", {"name": "B", "amount": 200, "period_type": "month", "start_date": "2026-01-01"}
+        )
         self.assertEqual([s["name"] for s in sub_service.list_subscriptions("alice")], ["A"])
         self.assertEqual([s["name"] for s in sub_service.list_subscriptions("bob")], ["B"])
 
     def test_renew_advances(self):
-        sub = sub_service.create_subscription("u1", {
-            "name": "iCloud", "amount": 2100, "period_type": "year",
-            "start_date": "2026-05-01", "next_due_date": "2026-09-01",
-        })
+        sub = sub_service.create_subscription(
+            "u1",
+            {
+                "name": "iCloud",
+                "amount": 2100,
+                "period_type": "year",
+                "start_date": "2026-05-01",
+                "next_due_date": "2026-09-01",
+            },
+        )
         renewed = sub_service.renew_subscription(sub["id"], "u1")
         self.assertEqual(renewed["next_due_date"], "2027-09-01")
 
     def test_renew_keeps_thirtieth_after_february(self):
-        sub = sub_service.create_subscription("u1", {
-            "name": "钳制日", "amount": 100, "period_type": "month",
-            "start_date": "2026-01-30", "next_due_date": "2026-02-28",
-        })
+        sub = sub_service.create_subscription(
+            "u1",
+            {
+                "name": "钳制日",
+                "amount": 100,
+                "period_type": "month",
+                "start_date": "2026-01-30",
+                "next_due_date": "2026-02-28",
+            },
+        )
         renewed = sub_service.renew_subscription(sub["id"], "u1")
         self.assertEqual(renewed["next_due_date"], "2026-03-30")
 
     def test_once_auto_renew_false(self):
-        sub = sub_service.create_subscription("u1", {
-            "name": "一次性", "amount": 100, "period_type": "once", "auto_renew": True,
-            "start_date": "2026-01-01",
-        })
+        sub = sub_service.create_subscription(
+            "u1",
+            {
+                "name": "一次性",
+                "amount": 100,
+                "period_type": "once",
+                "auto_renew": True,
+                "start_date": "2026-01-01",
+            },
+        )
         self.assertFalse(sub["auto_renew"])
         self.assertEqual(sub["renewal_policy"], "manual")
 
     def test_switching_from_custom_period_clears_legacy_custom_fields(self):
-        sub = sub_service.create_subscription("u1", {
-            "name": "自定义周期", "amount": 100, "period_type": "custom",
-            "custom_period_value": 2, "custom_period_unit": "week",
-            "start_date": "2026-01-01",
-        })
+        sub = sub_service.create_subscription(
+            "u1",
+            {
+                "name": "自定义周期",
+                "amount": 100,
+                "period_type": "custom",
+                "custom_period_value": 2,
+                "custom_period_unit": "week",
+                "start_date": "2026-01-01",
+            },
+        )
         updated = sub_service.update_subscription(sub["id"], "u1", {"period_type": "month"})
         self.assertEqual(updated["period_type"], "month")
         self.assertIsNone(updated["custom_period_value"])
@@ -173,17 +220,29 @@ class SubscriptionServiceTests(AppTestCase):
 
     def test_notes_are_limited_to_120_characters(self):
         notes = "备" * 120
-        sub = sub_service.create_subscription("u1", {
-            "name": "备注限制", "amount": 100, "period_type": "month",
-            "start_date": "2026-01-01", "notes": notes,
-        })
+        sub = sub_service.create_subscription(
+            "u1",
+            {
+                "name": "备注限制",
+                "amount": 100,
+                "period_type": "month",
+                "start_date": "2026-01-01",
+                "notes": notes,
+            },
+        )
         self.assertEqual(sub["notes"], notes)
 
         with self.assertRaisesRegex(ValidationError, "备注不能超过120字"):
-            sub_service.create_subscription("u1", {
-                "name": "超长备注", "amount": 100, "period_type": "month",
-                "start_date": "2026-01-01", "notes": "备" * 121,
-            })
+            sub_service.create_subscription(
+                "u1",
+                {
+                    "name": "超长备注",
+                    "amount": 100,
+                    "period_type": "month",
+                    "start_date": "2026-01-01",
+                    "notes": "备" * 121,
+                },
+            )
 
         with self.assertRaisesRegex(ValidationError, "备注不能超过120字"):
             sub_service.update_subscription(sub["id"], "u1", {"notes": "备" * 121})
@@ -279,6 +338,7 @@ class ReminderDaysSeedTests(unittest.TestCase):
 
     def _build_app(self, db_path: Path):
         from backend.app import create_app
+
         config.override("DB_PATH", str(db_path))
         app = create_app(allow_headerless_local_identity=True)
         app.config["TESTING"] = True
@@ -348,22 +408,43 @@ class ServicesTests(AppTestCase):
         super().setUpClass()
         with cls.ctx():
             cat = category_service.create_category("u1", {"name": "流媒体"})
-            sub_service.create_subscription("u1", {
-                "name": "Netflix", "amount": 6800, "currency": "CNY",
-                "period_type": "month", "auto_renew": True,
-                "start_date": "2026-06-11", "next_due_date": "2026-08-15",
-                "category_id": cat["id"],
-            })
-            sub_service.create_subscription("u1", {
-                "name": "iCloud", "amount": 2100, "currency": "CNY",
-                "period_type": "year", "auto_renew": True,
-                "start_date": "2026-05-01", "next_due_date": "2026-09-01",
-            })
+            sub_service.create_subscription(
+                "u1",
+                {
+                    "name": "Netflix",
+                    "amount": 6800,
+                    "currency": "CNY",
+                    "period_type": "month",
+                    "auto_renew": True,
+                    "start_date": "2026-06-11",
+                    "next_due_date": "2026-08-15",
+                    "category_id": cat["id"],
+                },
+            )
+            sub_service.create_subscription(
+                "u1",
+                {
+                    "name": "iCloud",
+                    "amount": 2100,
+                    "currency": "CNY",
+                    "period_type": "year",
+                    "auto_renew": True,
+                    "start_date": "2026-05-01",
+                    "next_due_date": "2026-09-01",
+                },
+            )
 
     def test_statistics_shape(self):
         stats = calculate_statistics("u1", "nominal")
-        for key in ("monthly_expense", "monthly_actual_expense", "yearly_expense",
-                    "upcoming_30_days", "active_count", "category_stats", "monthly_trend"):
+        for key in (
+            "monthly_expense",
+            "monthly_actual_expense",
+            "yearly_expense",
+            "upcoming_30_days",
+            "active_count",
+            "category_stats",
+            "monthly_trend",
+        ):
             self.assertIn(key, stats)
         self.assertEqual(stats["active_count"], 2)
         self.assertEqual(len(stats["monthly_trend"]), 12)
@@ -373,7 +454,6 @@ class ServicesTests(AppTestCase):
         self.assertIsInstance(trend_amounts, list)
 
     def test_calendar_events(self):
-        from datetime import date
         events = get_calendar_events("u1", 2026, 8)
         self.assertTrue(events)
         self.assertTrue(all(e["date"].startswith("2026-08") for e in events))
@@ -385,6 +465,7 @@ class StaticServeTests(AppTestCase):
     def test_flask_static_mime_detection(self):
         """Flask/werkzeug 正确检测常见静态文件 MIME 类型。"""
         import mimetypes
+
         # werkzeug 使用 mimetypes 模块，验证常见类型
         self.assertEqual(mimetypes.guess_type("style.css")[0], "text/css")
         # Python 3.11+ 返回 text/javascript，旧版返回 application/javascript
@@ -399,6 +480,7 @@ class StaticServeTests(AppTestCase):
     def test_flask_static_file_serving(self):
         """Flask 正确提供静态文件。"""
         import tempfile
+
         from backend.app import create_app
         from backend.extensions import db as _db
 

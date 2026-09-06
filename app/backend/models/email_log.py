@@ -1,7 +1,8 @@
 """邮件发送日志实体。"""
+
 from __future__ import annotations
 
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, String
 
 from ..extensions import db
 

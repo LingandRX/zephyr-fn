@@ -7,6 +7,7 @@
 2. Flask 配置类：按环境隔离（Development / Production / Testing），
    敏感信息（SECRET_KEY）通过环境变量注入。
 """
+
 from __future__ import annotations
 
 import os
@@ -177,5 +178,5 @@ def get_config(env: str | None = None) -> type[BaseConfig]:
         env = "production" if _get("TRIM_APPDEST") else "development"
     try:
         return CONFIG_CLASSES[env]
-    except KeyError:
-        raise ValueError(f"未知运行环境: {env}（可选: {', '.join(CONFIG_CLASSES)}）")
+    except KeyError as exc:
+        raise ValueError(f"未知运行环境: {env}（可选: {', '.join(CONFIG_CLASSES)}）") from exc

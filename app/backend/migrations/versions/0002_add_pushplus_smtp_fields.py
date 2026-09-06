@@ -8,6 +8,7 @@ Revision ID: 0002_add_pushplus_smtp
 Revises: 0001_baseline
 Create Date: 2026-08-29
 """
+
 from __future__ import annotations
 
 from alembic import op

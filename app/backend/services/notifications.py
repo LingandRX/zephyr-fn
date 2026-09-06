@@ -3,6 +3,7 @@
 幂等领取（claim_notification / complete_notification）委托给
 storage/repositories 的原子 UPSERT 实现；本模块保留业务算法与兼容入口。
 """
+
 from __future__ import annotations
 
 import logging
@@ -43,8 +44,7 @@ def parse_clock(value: Any) -> int | None:
     return hour * 60 + minute
 
 
-def is_do_not_disturb(settings: dict | None = None,
-                      now: datetime | None = None) -> bool:
+def is_do_not_disturb(settings: dict | None = None, now: datetime | None = None) -> bool:
     """判断当前时间是否处于免打扰区间，精确到分钟并支持跨午夜。"""
     settings = settings if settings is not None else repositories.get_app_settings()
     start = parse_clock(settings.get("do_not_disturb_start"))
@@ -152,16 +152,18 @@ def get_upcoming_notifications(user_id: str) -> list[dict]:
             continue
         if today <= due <= end:
             title, body = generate_notification_content(sub)
-            result.append({
-                "id": sub["id"],
-                "name": sub["name"],
-                "due_date": sub["next_due_date"],
-                "days_until": (due - today).days,
-                "amount": sub["amount"],
-                "currency": sub["currency"],
-                "title": title,
-                "body": body,
-            })
+            result.append(
+                {
+                    "id": sub["id"],
+                    "name": sub["name"],
+                    "due_date": sub["next_due_date"],
+                    "days_until": (due - today).days,
+                    "amount": sub["amount"],
+                    "currency": sub["currency"],
+                    "title": title,
+                    "body": body,
+                }
+            )
     result.sort(key=lambda item: item["days_until"])
     return result
 

@@ -7,6 +7,7 @@
 
 风格：圆角矩形 + 渐变背景 + 白色卡片图形（符合 fnOS 图标规范）。
 """
+
 from __future__ import annotations
 
 import struct
@@ -41,9 +42,8 @@ def rounded_rect_alpha(x, y, w, h, r, px, py):
 
 def render(size: int) -> bytes:
     W = size * SS
-    bg = (99, 102, 241)      # indigo
-    bg2 = (139, 92, 246)     # purple
-    white = (255, 255, 255)
+    bg = (99, 102, 241)  # indigo
+    bg2 = (139, 92, 246)  # purple
 
     rows = []
     for py in range(W):
@@ -62,12 +62,15 @@ def render(size: int) -> bytes:
             card_a = rounded_rect_alpha(cx, cy, cw, ch, ch * 0.16, px, py)
 
             # 卡片上的图形：芯片（小圆角矩形）+ 两条横线 + 支付圆
-            chip_a = rounded_rect_alpha(cx + cw * 0.08, cy + ch * 0.16, cw * 0.22, ch * 0.20,
-                                        ch * 0.06, px, py)
-            line1_a = rounded_rect_alpha(cx + cw * 0.08, cy + ch * 0.52, cw * 0.55, ch * 0.055,
-                                         ch * 0.03, px, py)
-            line2_a = rounded_rect_alpha(cx + cw * 0.08, cy + ch * 0.66, cw * 0.42, ch * 0.055,
-                                         ch * 0.03, px, py)
+            chip_a = rounded_rect_alpha(
+                cx + cw * 0.08, cy + ch * 0.16, cw * 0.22, ch * 0.20, ch * 0.06, px, py
+            )
+            line1_a = rounded_rect_alpha(
+                cx + cw * 0.08, cy + ch * 0.52, cw * 0.55, ch * 0.055, ch * 0.03, px, py
+            )
+            line2_a = rounded_rect_alpha(
+                cx + cw * 0.08, cy + ch * 0.66, cw * 0.42, ch * 0.055, ch * 0.03, px, py
+            )
             circle_cx, circle_cy, circle_r = cx + cw * 0.78, cy + ch * 0.30, ch * 0.13
             d = ((px + 0.5 - circle_cx) ** 2 + (py + 0.5 - circle_cy) ** 2) ** 0.5
             circle_a = clamp(1.0 - (d - circle_r)) / 255.0 if d > circle_r else 1.0
@@ -80,8 +83,7 @@ def render(size: int) -> bytes:
                 fr, fg, fb = 238, 240, 255
             else:
                 fr, fg, fb = r, g, b
-            row += bytes([clamp(int(fr)), clamp(int(fg)), clamp(int(fb)),
-                          clamp(int(alpha * 255))])
+            row += bytes([clamp(int(fr)), clamp(int(fg)), clamp(int(fb)), clamp(int(alpha * 255))])
         rows.append(bytes(row))
 
     # 超采样降采样
@@ -91,7 +93,6 @@ def render(size: int) -> bytes:
             rs = [0, 0, 0, 0]
             for sy in range(SS):
                 for sx in range(SS):
-                    i = ((py * SS + sy) * W + (px * SS + sx)) * 4
                     for c in range(4):
                         rs[c] += rows[(py * SS + sy)][(px * SS + sx) * 4 + c]
             n = SS * SS
@@ -101,13 +102,21 @@ def render(size: int) -> bytes:
 
 def _encode_png(w: int, h: int, rgba: bytes) -> bytes:
     def chunk(tag: bytes, data: bytes) -> bytes:
-        return (struct.pack(">I", len(data)) + tag + data +
-                struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF))
+        return (
+            struct.pack(">I", len(data))
+            + tag
+            + data
+            + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+        )
 
-    raw = b"".join(b"\x00" + rgba[y * w * 4:(y + 1) * w * 4] for y in range(h))
+    raw = b"".join(b"\x00" + rgba[y * w * 4 : (y + 1) * w * 4] for y in range(h))
     ihdr = struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)
-    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) +
-            chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", ihdr)
+        + chunk(b"IDAT", zlib.compress(raw, 9))
+        + chunk(b"IEND", b"")
+    )
 
 
 def main() -> None:

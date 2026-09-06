@@ -3,6 +3,7 @@
 导出端点（export-csv）保持原始文件响应，不走统一 JSON 信封；
 浏览器以导航方式直接触发下载。
 """
+
 from __future__ import annotations
 
 from flask import Blueprint, Response, g, request
@@ -36,9 +37,7 @@ def _csv_response(content: str, filename: str) -> Response:
 
 @bp.route("/backup/import-csv", methods=["POST"])
 def import_csv():
-    result = backup_service.import_from_csv(
-        request.get_data(as_text=True), g.identity.user_id
-    )
+    result = backup_service.import_from_csv(request.get_data(as_text=True), g.identity.user_id)
     return ok(result)
 
 

@@ -1,4 +1,5 @@
 """分类 API。"""
+
 from __future__ import annotations
 
 from flask import Blueprint, g, request
@@ -17,9 +18,7 @@ def list_categories():
 
 @bp.route("/categories", methods=["POST"])
 def create_category():
-    category = category_service.create_category(
-        g.identity.user_id, request.get_json(force=True)
-    )
+    category = category_service.create_category(g.identity.user_id, request.get_json(force=True))
     return ok(category), 201
 
 

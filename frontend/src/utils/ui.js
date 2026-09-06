@@ -33,7 +33,9 @@ export function setTheme(theme) {
   ui.theme = theme;
   try {
     localStorage.setItem(THEME_KEY, theme);
-  } catch {}
+  } catch {
+    // ignore localStorage errors
+  }
   applyTheme(theme);
 }
 

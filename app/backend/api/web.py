@@ -1,4 +1,5 @@
 """静态资源与 SPA fallback（非 API 路径）。"""
+
 from __future__ import annotations
 
 from flask import Blueprint, Response, jsonify, send_file

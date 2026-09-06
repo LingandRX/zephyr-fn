@@ -1,4 +1,5 @@
 """通知 API（即将到期 / 渠道测试）。"""
+
 from __future__ import annotations
 
 from datetime import date
@@ -35,11 +36,7 @@ def test_email():
     except (ValueError, TypeError):
         port = 465
     username = payload.get("smtp_username") or settings.get("smtp_username")
-    from_address = (
-        payload.get("smtp_from_address")
-        or settings.get("smtp_from_address")
-        or username
-    )
+    from_address = payload.get("smtp_from_address") or settings.get("smtp_from_address") or username
 
     password_draft = payload.get("smtp_password")
     if password_draft and not _is_secret_placeholder(password_draft):
@@ -48,10 +45,7 @@ def test_email():
         password = settings.get("smtp_password")
 
     to_address = (
-        payload.get("to_address")
-        or payload.get("smtp_to_address")
-        or from_address
-        or username
+        payload.get("to_address") or payload.get("smtp_to_address") or from_address or username
     )
     if not to_address:
         raise ValidationError("请提供测试接收邮箱（或配置发件人/用户名）")
@@ -157,4 +151,5 @@ def test_pushplus():
 
 def _is_secret_placeholder(value) -> bool:
     from ..storage.repositories import is_secret_placeholder
+
     return is_secret_placeholder(value)

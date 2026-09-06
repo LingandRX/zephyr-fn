@@ -3,6 +3,7 @@
 对外接口只暴露脱敏视图（``smtp_password_configured`` / ``smtp_password_masked``），
 绝不包含密钥原文；更新时通过 SettingsSchema 过滤掩码占位符，保持已有密钥。
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping

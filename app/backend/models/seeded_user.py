@@ -1,4 +1,5 @@
 """默认分类补种标记实体（记录已播种过默认分类的用户）。"""
+
 from __future__ import annotations
 
 from sqlalchemy import Column, String

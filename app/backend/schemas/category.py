@@ -3,6 +3,7 @@
 名称归一化（NFC / 全角转半角 / 非法字符 / 长度）为纯函数；
 重名检测与数量上限依赖数据库，在 services/categories 中完成。
 """
+
 from __future__ import annotations
 
 import re

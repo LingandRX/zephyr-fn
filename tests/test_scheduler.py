@@ -1,4 +1,5 @@
 """scheduler 调度基准测试：每日固定推送时刻的等待秒数。"""
+
 from __future__ import annotations
 
 import sys

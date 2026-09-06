@@ -9,6 +9,7 @@
 - monthly_trend        近 12 个月趋势
 - get_calendar_events  按月生成日历到期事件
 """
+
 from __future__ import annotations
 
 import math
@@ -24,9 +25,11 @@ def _divide_round(amount: int, divisor: int) -> int:
 
 def _monthly_amount(sub: dict, mode: str) -> int:
     """单个订阅折算为每月金额（分）。"""
-    amount = (sub["actual_amount"]
-              if mode == "actual" and sub.get("actual_amount") is not None
-              else sub["amount"])
+    amount = (
+        sub["actual_amount"]
+        if mode == "actual" and sub.get("actual_amount") is not None
+        else sub["amount"]
+    )
     period = sub["period_type"]
     if period == "month":
         return amount
@@ -37,16 +40,22 @@ def _monthly_amount(sub: dict, mode: str) -> int:
     if period == "custom":
         unit = sub.get("custom_period_unit") or "month"
         value = max(1, int(sub.get("custom_period_value") or 1))
-        months = {"day": value / 30.0, "week": value / 4.0,
-                  "month": float(value), "year": float(value) * 12.0}.get(unit, 1.0)
+        months = {
+            "day": value / 30.0,
+            "week": value / 4.0,
+            "month": float(value),
+            "year": float(value) * 12.0,
+        }.get(unit, 1.0)
         return _divide_round(amount, months) if months else amount
     return amount  # once：一次性按全额折算
 
 
 def _yearly_amount(sub: dict, mode: str) -> int:
-    amount = (sub["actual_amount"]
-              if mode == "actual" and sub.get("actual_amount") is not None
-              else sub["amount"])
+    amount = (
+        sub["actual_amount"]
+        if mode == "actual" and sub.get("actual_amount") is not None
+        else sub["amount"]
+    )
     period = sub["period_type"]
     if period == "month":
         return amount * 12
@@ -128,7 +137,10 @@ def _count_cycles_in_range(sub: dict, range_start: date, range_end: date) -> int
         return 0
     period_anchor = domain.billing_anchor_day(start_date)
     first_due = domain.add_one_period(
-        start_date, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"],
+        start_date,
+        sub["period_type"],
+        sub["custom_period_value"],
+        sub["custom_period_unit"],
         anchor_day=period_anchor,
     )
     if first_due is None:
@@ -147,12 +159,23 @@ def _count_cycles_in_range(sub: dict, range_start: date, range_end: date) -> int
         last_k = math.floor((range_end - anchor).days / fixed_days)
         return max(0, last_k - first_k + 1)
 
-    step = lambda d: domain.add_one_period(
-        d, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"],
-        anchor_day=period_anchor)
-    back = lambda d: domain.sub_one_period(
-        d, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"],
-        anchor_day=period_anchor)
+    def step(d):
+        return domain.add_one_period(
+            d,
+            sub["period_type"],
+            sub["custom_period_value"],
+            sub["custom_period_unit"],
+            anchor_day=period_anchor,
+        )
+
+    def back(d):
+        return domain.sub_one_period(
+            d,
+            sub["period_type"],
+            sub["custom_period_value"],
+            sub["custom_period_unit"],
+            anchor_day=period_anchor,
+        )
 
     guard = 0
     while anchor > range_end:
@@ -225,9 +248,11 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
             continue
         active_count += 1
 
-        amount = (sub["actual_amount"]
-                  if mode == "actual" and sub.get("actual_amount") is not None
-                  else sub["amount"])
+        amount = (
+            sub["actual_amount"]
+            if mode == "actual" and sub.get("actual_amount") is not None
+            else sub["amount"]
+        )
         cny_amount = _convert_to_cny(amount, sub["currency"], settings)
 
         monthly_amount = _monthly_amount(sub, mode)
@@ -235,7 +260,9 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
         monthly_expense += cny_monthly
 
         if sub["auto_renew"]:
-            monthly_actual_expense += _count_cycles_in_range(sub, month_start, month_end) * cny_amount
+            monthly_actual_expense += (
+                _count_cycles_in_range(sub, month_start, month_end) * cny_amount
+            )
         else:
             pay_date = sub["first_payment_date"] or sub["start_date"]
             try:
@@ -275,9 +302,7 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
             if sub["auto_renew"]:
                 cycles = _count_cycles_in_range(sub, ms, me)
                 if cycles > 0:
-                    monthly_amounts[m_key] = (
-                        monthly_amounts.get(m_key, 0) + cycles * cny_amount
-                    )
+                    monthly_amounts[m_key] = monthly_amounts.get(m_key, 0) + cycles * cny_amount
             else:
                 pay_date = sub["first_payment_date"] or sub["start_date"]
                 try:
@@ -285,34 +310,39 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
                 except (ValueError, TypeError):
                     pd = None
                 if pd and ms <= pd <= me:
-                    monthly_amounts[m_key] = (
-                        monthly_amounts.get(m_key, 0) + cny_amount
-                    )
+                    monthly_amounts[m_key] = monthly_amounts.get(m_key, 0) + cny_amount
 
     category_stats = []
     for cat_id, amount_cny in cat_monthly.items():
         name = cats.get(cat_id, {}).get("name", "未分类") if cat_id != "uncategorized" else "未分类"
         yearly_cny = cat_yearly.get(cat_id, 0)
         percentage = round(amount_cny / monthly_expense * 100, 1) if monthly_expense else 0.0
-        category_stats.append({
-            "category_id": cat_id,
-            "category_name": name,
-            "amount": _to_default_currency(amount_cny, default_currency, settings),
-            "yearly_amount": _to_default_currency(yearly_cny, default_currency, settings),
-            "percentage": percentage,
-        })
+        category_stats.append(
+            {
+                "category_id": cat_id,
+                "category_name": name,
+                "amount": _to_default_currency(amount_cny, default_currency, settings),
+                "yearly_amount": _to_default_currency(yearly_cny, default_currency, settings),
+                "percentage": percentage,
+            }
+        )
     category_stats.sort(key=lambda x: -x["amount"])
 
     monthly_trend = [
-        {"month": ms.strftime("%Y-%m"),
-         "amount": _to_default_currency(monthly_amounts.get(ms.strftime("%Y-%m"), 0),
-                                        default_currency, settings)}
+        {
+            "month": ms.strftime("%Y-%m"),
+            "amount": _to_default_currency(
+                monthly_amounts.get(ms.strftime("%Y-%m"), 0), default_currency, settings
+            ),
+        }
         for ms in month_starts
     ]
 
     return {
         "monthly_expense": _to_default_currency(monthly_expense, default_currency, settings),
-        "monthly_actual_expense": _to_default_currency(monthly_actual_expense, default_currency, settings),
+        "monthly_actual_expense": _to_default_currency(
+            monthly_actual_expense, default_currency, settings
+        ),
         "yearly_expense": _to_default_currency(yearly_expense, default_currency, settings),
         "upcoming_30_days": _to_default_currency(upcoming_30_days, default_currency, settings),
         "active_count": active_count,
@@ -345,7 +375,9 @@ def _events_for_month(sub: dict, year: int, month: int) -> list[dict]:
        - 若非自动续费或一次性订阅：显示一条“服务到期”事件 (service_end)。
     """
     events: list[dict] = []
-    auto_renew = domain.should_auto_renew_on_wake(sub.get("auto_renew", False), sub.get("renewal_policy", "auto"))
+    auto_renew = domain.should_auto_renew_on_wake(
+        sub.get("auto_renew", False), sub.get("renewal_policy", "auto")
+    )
 
     # 1. 开始日期 / 首付日期 -> 首次扣款 (new_subscription)
     start_str = sub.get("first_payment_date") or sub.get("start_date")
@@ -382,15 +414,15 @@ def _events_for_month(sub: dict, year: int, month: int) -> list[dict]:
 def _push_event(events: list, sub: dict, d: date, event_type: str) -> None:
     if not domain.is_calendar_event_visible(sub["lifecycle"], sub["updated_at"], d):
         return
-    amount = (sub["actual_amount"]
-              if sub.get("actual_amount") is not None
-              else sub["amount"])
-    events.append({
-        "date": d.isoformat(),
-        "subscription_id": sub["id"],
-        "name": sub["name"],
-        "amount": amount,
-        "amount_formatted": f"{domain.CURRENCY_SYMBOLS.get(sub['currency'], '¥')}{amount / 100:.2f}",
-        "currency": sub["currency"],
-        "event_type": event_type,
-    })
+    amount = sub["actual_amount"] if sub.get("actual_amount") is not None else sub["amount"]
+    events.append(
+        {
+            "date": d.isoformat(),
+            "subscription_id": sub["id"],
+            "name": sub["name"],
+            "amount": amount,
+            "amount_formatted": f"{domain.CURRENCY_SYMBOLS.get(sub['currency'], '¥')}{amount / 100:.2f}",
+            "currency": sub["currency"],
+            "event_type": event_type,
+        }
+    )

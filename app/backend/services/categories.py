@@ -1,4 +1,5 @@
 """分类业务服务：名称去重/上限校验 → 仓储编排；默认分类补种。"""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -49,6 +50,7 @@ def ensure_default_categories_for_user(user_id: str) -> bool:
 # CRUD
 # --------------------------------------------------------------------------- #
 
+
 def list_categories(user_id: str) -> list[dict]:
     return repositories.get_all_categories(user_id)
 
@@ -97,6 +99,7 @@ def _ensure_unique_name(user_id: str, name: str, exclude_id: str | None = None) 
 # --------------------------------------------------------------------------- #
 # 备份/导入导出辅助
 # --------------------------------------------------------------------------- #
+
 
 def insert_category_raw(cat: Mapping[str, Any], user_id: str | None = None) -> bool:
     return repositories.insert_category_raw(cat, user_id)

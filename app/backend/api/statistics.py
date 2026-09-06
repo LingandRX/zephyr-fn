@@ -1,4 +1,5 @@
 """统计与日历 API。"""
+
 from __future__ import annotations
 
 from datetime import date
@@ -26,5 +27,5 @@ def get_calendar():
         year = int(request.args.get("year", date.today().year))
         month = int(request.args.get("month", date.today().month))
     except ValueError as exc:
-        raise ValidationError("year/month 必须是整数")
+        raise ValidationError("year/month 必须是整数") from exc
     return ok(get_calendar_events(g.identity.user_id, year, month))

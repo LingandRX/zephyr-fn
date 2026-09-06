@@ -4,6 +4,7 @@
 （回退 db_version、删除 v9/v10 索引、插入重复数据），
 再调用 bootstrap.bootstrap_legacy_database() 验证就地迁移行为。
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -11,6 +12,7 @@ import unittest
 from datetime import date
 
 from helpers import AppTestCase
+
 from backend.extensions import db
 from backend.services import notifications
 from backend.storage import bootstrap, repositories
@@ -21,6 +23,7 @@ class NotificationDbTests(AppTestCase):
         super().setUp()
         # 每个测试从干净的通知表开始（类级共享数据库）
         from sqlalchemy import text
+
         db.session.execute(text("DELETE FROM notification_logs"))
         db.session.commit()
 
@@ -32,9 +35,11 @@ class NotificationDbTests(AppTestCase):
         return conn
 
     def _rows(self):
-        return self._raw().execute(
-            "SELECT * FROM notification_logs ORDER BY subscription_id, channel"
-        ).fetchall()
+        return (
+            self._raw()
+            .execute("SELECT * FROM notification_logs ORDER BY subscription_id, channel")
+            .fetchall()
+        )
 
     def _version(self):
         raw = self._raw()
@@ -44,10 +49,11 @@ class NotificationDbTests(AppTestCase):
     def _simulate_legacy(self, version: int) -> None:
         """把库回退到指定旧版本：补 db_version 表 + 回退版本号。"""
         raw = self._raw()
-        raw.execute("CREATE TABLE IF NOT EXISTS db_version "
-                    "(id INTEGER PRIMARY KEY CHECK (id=1), version INTEGER NOT NULL)")
-        raw.execute("INSERT OR REPLACE INTO db_version (id, version) VALUES (1, ?)",
-                    (version,))
+        raw.execute(
+            "CREATE TABLE IF NOT EXISTS db_version "
+            "(id INTEGER PRIMARY KEY CHECK (id=1), version INTEGER NOT NULL)"
+        )
+        raw.execute("INSERT OR REPLACE INTO db_version (id, version) VALUES (1, ?)", (version,))
         raw.commit()
 
     def test_v9_upgrade_deduplicates_before_creating_unique_index(self):
@@ -65,15 +71,35 @@ class NotificationDbTests(AppTestCase):
             "VALUES (?,?,?,?,?,?,?)",
             [
                 # sent 即使较旧，也应胜过 failed。
-                ("sent-old", "sub-a", today, "email", "sent", None,
-                 "2026-08-01T00:00:00Z"),
-                ("failed-new", "sub-a", today, "email", "failed", "late failure",
-                 "2026-08-18T00:00:00Z"),
+                ("sent-old", "sub-a", today, "email", "sent", None, "2026-08-01T00:00:00Z"),
+                (
+                    "failed-new",
+                    "sub-a",
+                    today,
+                    "email",
+                    "failed",
+                    "late failure",
+                    "2026-08-18T00:00:00Z",
+                ),
                 # 同为 failed 时保留最新记录。
-                ("failed-old", "sub-b", today, "push", "failed", "old failure",
-                 "2026-08-01T00:00:00Z"),
-                ("failed-new-2", "sub-b", today, "push", "failed", "new failure",
-                 "2026-08-18T00:00:00Z"),
+                (
+                    "failed-old",
+                    "sub-b",
+                    today,
+                    "push",
+                    "failed",
+                    "old failure",
+                    "2026-08-01T00:00:00Z",
+                ),
+                (
+                    "failed-new-2",
+                    "sub-b",
+                    today,
+                    "push",
+                    "failed",
+                    "new failure",
+                    "2026-08-18T00:00:00Z",
+                ),
             ],
         )
         raw.commit()
@@ -92,13 +118,13 @@ class NotificationDbTests(AppTestCase):
         raw = self._raw()
         indexes = raw.execute("PRAGMA index_list(notification_logs)").fetchall()
         identity_index = next(
-            index for index in indexes
-            if index[1] == "idx_notification_logs_identity"
+            index for index in indexes if index[1] == "idx_notification_logs_identity"
         )
         self.assertTrue(identity_index[2])
-        columns = [row[2] for row in raw.execute(
-            'PRAGMA index_info("idx_notification_logs_identity")'
-        ).fetchall()]
+        columns = [
+            row[2]
+            for row in raw.execute('PRAGMA index_info("idx_notification_logs_identity")').fetchall()
+        ]
         self.assertEqual(columns, ["subscription_id", "notification_date", "channel"])
 
     def test_log_notification_is_single_row_upsert_and_sent_is_terminal(self):
@@ -159,11 +185,10 @@ class NotificationDbTests(AppTestCase):
         raw.execute("DELETE FROM subscriptions")
         raw.execute("DELETE FROM categories")
         raw.executemany(
-            "INSERT INTO categories (id, user_id, name, icon, sort_order) "
-            "VALUES (?,?,?,?,?)",
+            "INSERT INTO categories (id, user_id, name, icon, sort_order) " "VALUES (?,?,?,?,?)",
             [
-                ("cat-a", "u1", "Stream", None, 0),       # 保留（rowid 最小）
-                ("cat-b", "u1", "stream", None, 1),       # ASCII 大小写重复 -> 删除
+                ("cat-a", "u1", "Stream", None, 0),  # 保留（rowid 最小）
+                ("cat-b", "u1", "stream", None, 1),  # ASCII 大小写重复 -> 删除
                 ("cat-c", "u1", "Ｓｔｒｅａｍ", None, 2),  # 全角重复 -> 删除
                 ("cat-d", "u2", "Games", None, 0),
             ],
@@ -174,12 +199,51 @@ class NotificationDbTests(AppTestCase):
             "lifecycle, renewal_policy, billing_status, created_at, updated_at) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
-                ("sub-1", "u1", "Netflix", 100, "CNY", "cat-b", "month", "2026-01-01",
-                 "active", "auto", "normal", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
-                ("sub-2", "u1", "Spotify", 50, "CNY", "cat-c", "month", "2026-01-01",
-                 "active", "auto", "normal", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
-                ("sub-3", "u2", "Steam", 30, "CNY", "cat-d", "month", "2026-01-01",
-                 "active", "auto", "normal", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
+                (
+                    "sub-1",
+                    "u1",
+                    "Netflix",
+                    100,
+                    "CNY",
+                    "cat-b",
+                    "month",
+                    "2026-01-01",
+                    "active",
+                    "auto",
+                    "normal",
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                ),
+                (
+                    "sub-2",
+                    "u1",
+                    "Spotify",
+                    50,
+                    "CNY",
+                    "cat-c",
+                    "month",
+                    "2026-01-01",
+                    "active",
+                    "auto",
+                    "normal",
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                ),
+                (
+                    "sub-3",
+                    "u2",
+                    "Steam",
+                    30,
+                    "CNY",
+                    "cat-d",
+                    "month",
+                    "2026-01-01",
+                    "active",
+                    "auto",
+                    "normal",
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                ),
             ],
         )
         raw.commit()
@@ -195,9 +259,7 @@ class NotificationDbTests(AppTestCase):
             [{"id": "cat-a", "name": "Stream"}, {"id": "cat-d", "name": "Games"}],
         )
 
-        merged = raw.execute(
-            "SELECT id, category_id FROM subscriptions ORDER BY id"
-        ).fetchall()
+        merged = raw.execute("SELECT id, category_id FROM subscriptions ORDER BY id").fetchall()
         self.assertEqual(
             [dict(row) for row in merged],
             [

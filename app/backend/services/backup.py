@@ -3,20 +3,20 @@
 负责订阅/分类数据的序列化（导出）与反序列化（导入），
 以 CSV 为交换格式。
 """
+
 from __future__ import annotations
 
 import csv
 import io
 import re
 from datetime import date
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 from ..core import domain
 from ..extensions import db
 from ..models import Category, Subscription
 from ..storage import repositories
-
 
 MAX_IMPORT_ROWS = 10_000
 MAX_NAME_LENGTH = 200
@@ -51,17 +51,38 @@ _BILLING_ALIASES = {
 }
 _LIFECYCLE_ALIASES = {
     **{key: key for key in domain.LIFECYCLES},
-    **{str(label).strip(): key for key, label in domain.STATUS_LABELS.items()
-       if key in domain.LIFECYCLES},
+    **{
+        str(label).strip(): key
+        for key, label in domain.STATUS_LABELS.items()
+        if key in domain.LIFECYCLES
+    },
 }
 
 _SUBSCRIPTION_COLUMNS = (
-    "id", "user_id", "name", "amount", "currency", "actual_amount",
-    "category_id", "notes", "period_type", "custom_period_value",
-    "custom_period_unit", "auto_renew", "sharing_role", "sharing_count",
-    "start_date", "first_payment_date", "next_due_date", "lifecycle",
-    "renewal_policy", "billing_status", "grace_period_ends_at",
-    "sync_version", "created_at", "updated_at",
+    "id",
+    "user_id",
+    "name",
+    "amount",
+    "currency",
+    "actual_amount",
+    "category_id",
+    "notes",
+    "period_type",
+    "custom_period_value",
+    "custom_period_unit",
+    "auto_renew",
+    "sharing_role",
+    "sharing_count",
+    "start_date",
+    "first_payment_date",
+    "next_due_date",
+    "lifecycle",
+    "renewal_policy",
+    "billing_status",
+    "grace_period_ends_at",
+    "sync_version",
+    "created_at",
+    "updated_at",
 )
 
 
@@ -115,35 +136,52 @@ def export_csv(user_id: str | None = None, *, include_all: bool = False) -> str:
     cats = {c["id"]: c["name"] for c in categories}
     buf = io.StringIO(newline="")
     writer = csv.writer(buf)
-    writer.writerow([
-        "名称", "金额", "货币", "周期类型", "首次付款日", "下次到期日",
-        "生命周期", "续费策略", "账单状态", "分类", "备注", "ID",
-        "开始日期", "自定义周期值", "自定义周期单位",
-    ])
+    writer.writerow(
+        [
+            "名称",
+            "金额",
+            "货币",
+            "周期类型",
+            "首次付款日",
+            "下次到期日",
+            "生命周期",
+            "续费策略",
+            "账单状态",
+            "分类",
+            "备注",
+            "ID",
+            "开始日期",
+            "自定义周期值",
+            "自定义周期单位",
+        ]
+    )
     for sub in subscriptions:
-        writer.writerow([
-            sub["name"],
-            f"{sub['amount'] / 100:.2f}",
-            sub["currency"],
-            _period_label(sub["period_type"]),
-            sub.get("first_payment_date") or "",
-            sub.get("next_due_date") or "",
-            _lifecycle_label(sub["lifecycle"]),
-            _renewal_label(sub["renewal_policy"]),
-            _billing_label(sub["billing_status"]),
-            cats.get(sub.get("category_id"), "未分类") if sub.get("category_id") else "未分类",
-            sub.get("notes") or "",
-            sub.get("id") or "",
-            sub.get("start_date") or "",
-            sub.get("custom_period_value") or "",
-            sub.get("custom_period_unit") or "",
-        ])
+        writer.writerow(
+            [
+                sub["name"],
+                f"{sub['amount'] / 100:.2f}",
+                sub["currency"],
+                _period_label(sub["period_type"]),
+                sub.get("first_payment_date") or "",
+                sub.get("next_due_date") or "",
+                _lifecycle_label(sub["lifecycle"]),
+                _renewal_label(sub["renewal_policy"]),
+                _billing_label(sub["billing_status"]),
+                cats.get(sub.get("category_id"), "未分类") if sub.get("category_id") else "未分类",
+                sub.get("notes") or "",
+                sub.get("id") or "",
+                sub.get("start_date") or "",
+                sub.get("custom_period_value") or "",
+                sub.get("custom_period_unit") or "",
+            ]
+        )
     return "\ufeff" + buf.getvalue()
 
 
 # --------------------------------------------------------------------------- #
 # 导入模板
 # --------------------------------------------------------------------------- #
+
 
 def csv_template() -> str:
     """生成 CSV 导入模板（含表头、示例行与右侧填写说明）。"""
@@ -163,26 +201,86 @@ def csv_template() -> str:
     )
     buf = io.StringIO(newline="")
     writer = csv.writer(buf)
-    writer.writerow([
-        "名称", "金额", "货币", "周期类型", "首次付款日", "下次到期日",
-        "生命周期", "续费策略", "账单状态", "分类", "备注", "ID",
-        "开始日期", "自定义周期值", "自定义周期单位", "填写说明",
-    ])
-    writer.writerow([
-        "影音会员", "19.00", "CNY", "月付", "2026-01-15", "2026-02-15",
-        "活跃", "自动续费", "正常", "影音", "家庭共享", "",
-        "2026-01-15", "", "", "",
-    ])
-    writer.writerow([
-        "云端存储", "99.00", "CNY", "年付", "2026-03-01", "2027-03-01",
-        "活跃", "自动续费", "正常", "工具", "", "",
-        "2026-03-01", "", "", "",
-    ])
-    writer.writerow([
-        "临时服务", "5.00", "USD", "自定义", "2026-05-01", "2026-06-01",
-        "活跃", "到期停止", "已支付", "其他", "", "",
-        "2026-05-01", "1", "month", instructions,
-    ])
+    writer.writerow(
+        [
+            "名称",
+            "金额",
+            "货币",
+            "周期类型",
+            "首次付款日",
+            "下次到期日",
+            "生命周期",
+            "续费策略",
+            "账单状态",
+            "分类",
+            "备注",
+            "ID",
+            "开始日期",
+            "自定义周期值",
+            "自定义周期单位",
+            "填写说明",
+        ]
+    )
+    writer.writerow(
+        [
+            "影音会员",
+            "19.00",
+            "CNY",
+            "月付",
+            "2026-01-15",
+            "2026-02-15",
+            "活跃",
+            "自动续费",
+            "正常",
+            "影音",
+            "家庭共享",
+            "",
+            "2026-01-15",
+            "",
+            "",
+            "",
+        ]
+    )
+    writer.writerow(
+        [
+            "云端存储",
+            "99.00",
+            "CNY",
+            "年付",
+            "2026-03-01",
+            "2027-03-01",
+            "活跃",
+            "自动续费",
+            "正常",
+            "工具",
+            "",
+            "",
+            "2026-03-01",
+            "",
+            "",
+            "",
+        ]
+    )
+    writer.writerow(
+        [
+            "临时服务",
+            "5.00",
+            "USD",
+            "自定义",
+            "2026-05-01",
+            "2026-06-01",
+            "活跃",
+            "到期停止",
+            "已支付",
+            "其他",
+            "",
+            "",
+            "2026-05-01",
+            "1",
+            "month",
+            instructions,
+        ]
+    )
     return "\ufeff" + buf.getvalue()
 
 
@@ -190,8 +288,10 @@ def csv_template() -> str:
 # 输入校验与规范化
 # --------------------------------------------------------------------------- #
 
-def _clean_text(value: Any, field: str, *, required: bool = False,
-                max_length: int | None = None) -> str | None:
+
+def _clean_text(
+    value: Any, field: str, *, required: bool = False, max_length: int | None = None
+) -> str | None:
     if value is None:
         text = ""
     else:
@@ -214,8 +314,9 @@ def _clean_external_id(value: Any) -> str | None:
     return text
 
 
-def _parse_nonnegative_int(value: Any, field: str, *, allow_none: bool = False,
-                           default: int | None = None) -> int | None:
+def _parse_nonnegative_int(
+    value: Any, field: str, *, allow_none: bool = False, default: int | None = None
+) -> int | None:
     if value in (None, ""):
         if allow_none:
             return default
@@ -248,8 +349,9 @@ def _parse_bool(value: Any, field: str, default: bool = False) -> bool:
     raise ValueError(f"{field}必须是布尔值")
 
 
-def _parse_date(value: Any, field: str, *, default: str | None = None,
-                allow_none: bool = True) -> str | None:
+def _parse_date(
+    value: Any, field: str, *, default: str | None = None, allow_none: bool = True
+) -> str | None:
     if value in (None, ""):
         if default is not None:
             return default
@@ -277,8 +379,9 @@ def _clean_timestamp(value: Any, default: str) -> str:
     return text or default
 
 
-def _canonical(value: Any, aliases: dict[str, str], field: str,
-               *, default: str | None = None) -> str | None:
+def _canonical(
+    value: Any, aliases: dict[str, str], field: str, *, default: str | None = None
+) -> str | None:
     if value in (None, ""):
         return default
     text = str(value).strip()
@@ -292,8 +395,7 @@ def _subscription_key(name: str, amount: int, period_type: str) -> str:
     return f"{name.strip()}|{amount}|{period_type}".lower()
 
 
-def _normalize_imported_sub(raw: dict, user_id: str,
-                            category_id: str | None = None) -> dict:
+def _normalize_imported_sub(raw: dict, user_id: str, category_id: str | None = None) -> dict:
     target_user = _require_user_id(user_id)
     if not isinstance(raw, dict):
         raise ValueError("订阅记录必须是对象")
@@ -305,9 +407,7 @@ def _normalize_imported_sub(raw: dict, user_id: str,
         raise ValueError(f"不支持的货币: {currency}")
 
     amount = _parse_nonnegative_int(raw.get("amount"), "金额", default=0)
-    actual_amount = _parse_nonnegative_int(
-        raw.get("actual_amount"), "实际金额", allow_none=True
-    )
+    actual_amount = _parse_nonnegative_int(raw.get("actual_amount"), "实际金额", allow_none=True)
     start_date = _parse_date(
         raw.get("start_date"), "首次日期", default=date.today().isoformat(), allow_none=False
     )
@@ -333,22 +433,16 @@ def _normalize_imported_sub(raw: dict, user_id: str,
     if period_type == "once":
         auto_renew, renewal_policy = False, "manual"
     else:
-        auto_renew, renewal_policy = domain.normalize_renewal_on_create(
-            auto_renew, explicit_policy
-        )
+        auto_renew, renewal_policy = domain.normalize_renewal_on_create(auto_renew, explicit_policy)
 
-    lifecycle = _canonical(
-        raw.get("lifecycle"), _LIFECYCLE_ALIASES, "生命周期", default="active"
-    )
+    lifecycle = _canonical(raw.get("lifecycle"), _LIFECYCLE_ALIASES, "生命周期", default="active")
     billing_status = _canonical(
         raw.get("billing_status"), _BILLING_ALIASES, "账单状态", default="normal"
     )
 
     notes = _clean_text(raw.get("notes"), "备注", max_length=MAX_NOTES_LENGTH)
     sharing_role = _clean_text(raw.get("sharing_role"), "共享角色", max_length=64)
-    sharing_count = _parse_nonnegative_int(
-        raw.get("sharing_count"), "共享人数", allow_none=True
-    )
+    sharing_count = _parse_nonnegative_int(raw.get("sharing_count"), "共享人数", allow_none=True)
     sync_version = _parse_nonnegative_int(raw.get("sync_version"), "同步版本", default=1)
     if sync_version < 1:
         raise ValueError("同步版本必须大于 0")
@@ -383,9 +477,9 @@ def _normalize_imported_sub(raw: dict, user_id: str,
         "lifecycle": lifecycle,
         "renewal_policy": renewal_policy,
         "billing_status": billing_status,
-        "grace_period_ends_at": _clean_timestamp(
-            raw.get("grace_period_ends_at"), now
-        ) if raw.get("grace_period_ends_at") not in (None, "") else None,
+        "grace_period_ends_at": _clean_timestamp(raw.get("grace_period_ends_at"), now)
+        if raw.get("grace_period_ends_at") not in (None, "")
+        else None,
         "sync_version": sync_version,
         "created_at": _clean_timestamp(raw.get("created_at"), now),
         "updated_at": _clean_timestamp(raw.get("updated_at"), now),
@@ -396,11 +490,17 @@ def _normalize_imported_sub(raw: dict, user_id: str,
 # 事务与冲突规划
 # --------------------------------------------------------------------------- #
 
+
 def _insert_category_conn(session: Any, category: dict) -> None:
-    session.add(Category(
-        id=category["id"], user_id=category["user_id"], name=category["name"],
-        icon=category.get("icon"), sort_order=category.get("sort_order", 0),
-    ))
+    session.add(
+        Category(
+            id=category["id"],
+            user_id=category["user_id"],
+            name=category["name"],
+            icon=category.get("icon"),
+            sort_order=category.get("sort_order", 0),
+        )
+    )
 
 
 def _insert_subscription_conn(session: Any, sub: dict) -> None:
@@ -412,19 +512,25 @@ def _load_existing_subscriptions(user_id: str) -> tuple[dict[str, dict], set[str
     rows = repositories.get_all_subscriptions_raw()
     by_id = {str(row["id"]): row for row in rows if row.get("id")}
     keys = {
-        _subscription_key(str(row.get("name") or ""), int(row.get("amount") or 0),
-                          str(row.get("period_type") or ""))
-        for row in rows if row.get("user_id") == target_user
+        _subscription_key(
+            str(row.get("name") or ""),
+            int(row.get("amount") or 0),
+            str(row.get("period_type") or ""),
+        )
+        for row in rows
+        if row.get("user_id") == target_user
     }
-    try:
-        keys.update(str(key).lower() for key in repositories.get_subscription_dedup_keys(target_user))
+    try:  # noqa: SIM105
+        keys.update(
+            str(key).lower() for key in repositories.get_subscription_dedup_keys(target_user)
+        )
     except Exception:  # noqa: BLE001
         pass
     return by_id, keys
 
 
 def _load_category_state(user_id: str) -> tuple[dict[str, dict], dict[str, dict], dict[str, dict]]:
-    target_user = _require_user_id(user_id)
+    _require_user_id(user_id)  # validate user_id
     all_categories = repositories.get_all_categories_raw()
     target_categories = [c for c in all_categories if c.get("user_id")]
     global_by_id = {str(c["id"]): c for c in all_categories if c.get("id")}
@@ -446,9 +552,9 @@ def _category_name(value: Any) -> str | None:
     return text
 
 
-def _plan_categories(user_id: str, categories_in: list[Any],
-                     referenced_names: set[str]) -> tuple[dict[str, str], dict[str, str],
-                                                          list[dict], int]:
+def _plan_categories(
+    user_id: str, categories_in: list[Any], referenced_names: set[str]
+) -> tuple[dict[str, str], dict[str, str], list[dict], int]:
     target_user = _require_user_id(user_id)
     global_by_id, target_by_id, target_by_name = _load_category_state(target_user)
     source_to_target: dict[str, str] = {}
@@ -459,8 +565,9 @@ def _plan_categories(user_id: str, categories_in: list[Any],
     pending_names: dict[str, str] = {}
     conflicts = 0
 
-    def ensure_category(name: str, source_id: str | None = None,
-                        icon: Any = None, sort_order: Any = 0) -> str:
+    def ensure_category(
+        name: str, source_id: str | None = None, icon: Any = None, sort_order: Any = 0
+    ) -> str:
         nonlocal conflicts
         if name in name_to_target:
             target_id = name_to_target[name]
@@ -469,9 +576,11 @@ def _plan_categories(user_id: str, categories_in: list[Any],
             return target_id
 
         target_id = source_id
-        if target_id and target_id in global_by_id:
-            if (global_by_id[target_id].get("user_id") != target_user
-                    or target_by_id.get(target_id, {}).get("name") != name):
+        if target_id and target_id in global_by_id:  # noqa: SIM102
+            if (
+                global_by_id[target_id].get("user_id") != target_user
+                or target_by_id.get(target_id, {}).get("name") != name
+            ):
                 conflicts += 1
                 target_id = None
         if not target_id:
@@ -521,8 +630,9 @@ def _safe_sort_order(value: Any) -> int:
         return 0
 
 
-def _resolve_category_id(source_id: Any, source_to_target: dict[str, str],
-                         target_user: str) -> str | None:
+def _resolve_category_id(
+    source_id: Any, source_to_target: dict[str, str], target_user: str
+) -> str | None:
     if source_id in (None, ""):
         return None
     source = _clean_external_id(source_id)
@@ -540,12 +650,15 @@ def _resolve_category_id(source_id: Any, source_to_target: dict[str, str],
     return None
 
 
-def _prepare_subscription_items(raw_items: list[Any], user_id: str,
-                                existing_by_id: dict[str, dict],
-                                existing_keys: set[str],
-                                source_name: str,
-                                category_id_map: dict[str, str],
-                                category_name_map: dict[str, str]) -> tuple[list[dict], list[dict], int, int]:
+def _prepare_subscription_items(
+    raw_items: list[Any],
+    user_id: str,
+    existing_by_id: dict[str, dict],
+    existing_keys: set[str],
+    source_name: str,
+    category_id_map: dict[str, str],
+    category_name_map: dict[str, str],
+) -> tuple[list[dict], list[dict], int, int]:
     target_user = _require_user_id(user_id)
     planned: list[dict] = []
     failed: list[dict] = []
@@ -562,12 +675,9 @@ def _prepare_subscription_items(raw_items: list[Any], user_id: str,
         try:
             source_id = _clean_external_id(raw.get("id"))
             category_name = _category_name(
-                raw.get("_category_name") if "_category_name" in raw
-                else raw.get("category_name")
+                raw.get("_category_name") if "_category_name" in raw else raw.get("category_name")
             )
-            category_id = _resolve_category_id(
-                raw.get("category_id"), category_id_map, target_user
-            )
+            category_id = _resolve_category_id(raw.get("category_id"), category_id_map, target_user)
             if category_id is None and category_name:
                 category_id = category_name_map.get(category_name)
             sub = _normalize_imported_sub(raw, target_user, category_id)
@@ -593,7 +703,9 @@ def _prepare_subscription_items(raw_items: list[Any], user_id: str,
     return planned, failed, skipped, id_conflicts
 
 
-def _commit_import(categories: list[dict], subscriptions: list[dict]) -> tuple[bool, str | None, bool]:
+def _commit_import(
+    categories: list[dict], subscriptions: list[dict]
+) -> tuple[bool, str | None, bool]:
     """在单个事务中写入导入数据；失败整体回滚。"""
     if not categories and not subscriptions:
         return True, None, True
@@ -609,10 +721,17 @@ def _commit_import(categories: list[dict], subscriptions: list[dict]) -> tuple[b
         return False, str(exc), True
 
 
-def _import_result(success_count: int = 0, skipped_duplicates: int = 0,
-                  added_categories: int = 0, failed_rows: list[dict] | None = None,
-                  id_conflicts: int = 0, category_conflicts: int = 0,
-                  *, error: str | None = None, atomic: bool = True) -> dict:
+def _import_result(
+    success_count: int = 0,
+    skipped_duplicates: int = 0,
+    added_categories: int = 0,
+    failed_rows: list[dict] | None = None,
+    id_conflicts: int = 0,
+    category_conflicts: int = 0,
+    *,
+    error: str | None = None,
+    atomic: bool = True,
+) -> dict:
     result = {
         "success_count": success_count,
         "skipped_duplicates": skipped_duplicates,
@@ -630,6 +749,7 @@ def _import_result(success_count: int = 0, skipped_duplicates: int = 0,
 # --------------------------------------------------------------------------- #
 # CSV 导入
 # --------------------------------------------------------------------------- #
+
 
 def _parse_csv_amount(value: str) -> int:
     text = (value or "").strip()
@@ -702,28 +822,28 @@ def import_from_csv(csv_data: str, user_id: str) -> dict:
                 _col(row, columns, "生命周期"), _LIFECYCLE_ALIASES, "生命周期", default="active"
             )
             category_name = _category_name(_col(row, columns, "分类"))
-            raw_items.append({
-                "id": _col(row, columns, "ID") or None,
-                "name": name,
-                "amount": _parse_csv_amount(_col(row, columns, "金额")),
-                "currency": (_col(row, columns, "货币") or "CNY").upper(),
-                "period_type": period_type,
-                "first_payment_date": _col(row, columns, "首次付款日") or None,
-                "next_due_date": _col(row, columns, "下次到期日") or None,
-                "start_date": (
-                    _col(row, columns, "开始日期")
-                    or _col(row, columns, "首次付款日")
-                    or None
-                ),
-                "custom_period_value": _col(row, columns, "自定义周期值") or None,
-                "custom_period_unit": _col(row, columns, "自定义周期单位") or None,
-                "lifecycle": lifecycle,
-                "renewal_policy": renewal_policy,
-                "billing_status": billing_status,
-                "notes": _col(row, columns, "备注") or None,
-                "_category_name": category_name,
-                "auto_renew": renewal_policy == "auto" if renewal_policy else True,
-            })
+            raw_items.append(
+                {
+                    "id": _col(row, columns, "ID") or None,
+                    "name": name,
+                    "amount": _parse_csv_amount(_col(row, columns, "金额")),
+                    "currency": (_col(row, columns, "货币") or "CNY").upper(),
+                    "period_type": period_type,
+                    "first_payment_date": _col(row, columns, "首次付款日") or None,
+                    "next_due_date": _col(row, columns, "下次到期日") or None,
+                    "start_date": (
+                        _col(row, columns, "开始日期") or _col(row, columns, "首次付款日") or None
+                    ),
+                    "custom_period_value": _col(row, columns, "自定义周期值") or None,
+                    "custom_period_unit": _col(row, columns, "自定义周期单位") or None,
+                    "lifecycle": lifecycle,
+                    "renewal_policy": renewal_policy,
+                    "billing_status": billing_status,
+                    "notes": _col(row, columns, "备注") or None,
+                    "_category_name": category_name,
+                    "auto_renew": renewal_policy == "auto" if renewal_policy else True,
+                }
+            )
         except (TypeError, ValueError) as exc:
             failed.append({"row": row_index, "reason": str(exc)})
 
@@ -736,21 +856,32 @@ def import_from_csv(csv_data: str, user_id: str) -> dict:
             _plan_categories(target_user, [], referenced_names)
         )
         planned, failed_rows, skipped, id_conflicts = _prepare_subscription_items(
-            raw_items, target_user, existing_by_id, existing_keys, "csv",
-            source_to_target, category_name_map,
+            raw_items,
+            target_user,
+            existing_by_id,
+            existing_keys,
+            "csv",
+            source_to_target,
+            category_name_map,
         )
         failed.extend(failed_rows)
         ok, error, atomic = _commit_import(pending_categories, planned)
         if not ok:
             return _import_result(
-                skipped_duplicates=skipped, failed_rows=failed,
-                id_conflicts=id_conflicts, category_conflicts=category_conflicts,
-                error=f"导入事务失败: {error}", atomic=atomic,
+                skipped_duplicates=skipped,
+                failed_rows=failed,
+                id_conflicts=id_conflicts,
+                category_conflicts=category_conflicts,
+                error=f"导入事务失败: {error}",
+                atomic=atomic,
             )
         return _import_result(
-            success_count=len(planned), skipped_duplicates=skipped,
-            added_categories=len(pending_categories), failed_rows=failed,
-            id_conflicts=id_conflicts, category_conflicts=category_conflicts,
+            success_count=len(planned),
+            skipped_duplicates=skipped,
+            added_categories=len(pending_categories),
+            failed_rows=failed,
+            id_conflicts=id_conflicts,
+            category_conflicts=category_conflicts,
             atomic=atomic,
         )
     except Exception as exc:  # noqa: BLE001

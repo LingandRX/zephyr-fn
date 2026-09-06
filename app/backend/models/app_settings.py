@@ -1,4 +1,5 @@
 """全局应用设置实体（单行，id 恒为 1）。"""
+
 from __future__ import annotations
 
 from sqlalchemy import CheckConstraint, Column, Float, Integer, String
@@ -8,9 +9,7 @@ from ..extensions import db
 
 class AppSettings(db.Model):
     __tablename__ = "app_settings"
-    __table_args__ = (
-        CheckConstraint("id = 1", name="ck_app_settings_singleton"),
-    )
+    __table_args__ = (CheckConstraint("id = 1", name="ck_app_settings_singleton"),)
 
     id = Column(Integer, primary_key=True, autoincrement=False)
     dark_mode = Column(String(16), nullable=False, default="system")
@@ -44,8 +43,13 @@ class AppSettings(db.Model):
     updated_at = Column(String(32), nullable=False)
 
     # 可序列化的布尔字段
-    _BOOL_FIELDS = ("auto_start", "tray_mode", "email_enabled",
-                    "notification_enabled", "pushplus_enabled")
+    _BOOL_FIELDS = (
+        "auto_start",
+        "tray_mode",
+        "email_enabled",
+        "notification_enabled",
+        "pushplus_enabled",
+    )
 
     def to_dict(self) -> dict:
         data = {column.name: getattr(self, column.name) for column in self.__table__.columns}

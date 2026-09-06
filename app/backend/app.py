@@ -6,11 +6,12 @@
 - 数据库启动流程：旧库就地升级（bootstrap）→ Alembic 自动迁移（幂等）；
 - 全局 Error Handler 统一转译 ``{code, message, data}`` 响应。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Flask, jsonify, Response
+from flask import Flask, Response, jsonify
 from flask_migrate import upgrade
 
 from . import config as app_config
@@ -97,14 +98,17 @@ def create_app(
 # 全局异常处理
 # --------------------------------------------------------------------------- #
 
+
 def _register_error_handlers(app: Flask) -> None:
     @app.errorhandler(exceptions.ApiError)
     def handle_api_error(exc: exceptions.ApiError) -> tuple[Response, int | None]:
-        return jsonify({
-            "code": exc.code,
-            "message": exc.message,
-            "data": exc.payload,
-        }), exc.status_code
+        return jsonify(
+            {
+                "code": exc.code,
+                "message": exc.message,
+                "data": exc.payload,
+            }
+        ), exc.status_code
 
     @app.errorhandler(ValueError)
     def handle_value_error(exc: ValueError) -> Response:

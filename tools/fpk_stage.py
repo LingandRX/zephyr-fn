@@ -5,6 +5,7 @@ fnpack packages everything under app/ into app.tgz and does not honor .gitignore
 Windows venv/symlinks and CRLF shell scripts are stripped here so the NAS
 installer can extract and run the package.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -104,9 +105,7 @@ def is_ignored_file(path: Path) -> bool:
     suffix = path.suffix.lower()
     if suffix in IGNORE_SUFFIXES:
         return True
-    if name.endswith(".db-shm") or name.endswith(".db-wal"):
-        return True
-    return False
+    return name.endswith(".db-shm") or name.endswith(".db-wal")
 
 
 def should_normalize(rel: Path) -> bool:
@@ -171,9 +170,7 @@ def bump_manifest_file(path: Path) -> tuple[str, str] | None:
         state["new"] = new_ver
         return f"version={new_ver}"
 
-    new_content, count = re.subn(
-        r"^version=(.+)$", repl, content, count=1, flags=re.MULTILINE
-    )
+    new_content, count = re.subn(r"^version=(.+)$", repl, content, count=1, flags=re.MULTILINE)
     if count == 0:
         eprint("    警告：manifest 中未找到 version= 字段，跳过自增")
         return None
@@ -244,7 +241,7 @@ def commit_version(stage: Path) -> None:
         return
     shutil.copyfile(src, REPO_ROOT / "manifest")
     eprint(f"==> 已写回仓库版本号: {read_version(src)}")
-    try:
+    try:  # noqa: SIM105
         flag.unlink()
     except OSError:
         pass
@@ -284,9 +281,7 @@ def newest_fpk(stage: Path) -> Path:
         candidates.append((mtime, item))
     if not candidates:
         found = iter_fpk_candidates(stage)
-        detail = "无" if not found else ", ".join(
-            f"{p} (mtime 早于本次 prepare)" for p in found
-        )
+        detail = "无" if not found else ", ".join(f"{p} (mtime 早于本次 prepare)" for p in found)
         raise SystemExit(
             "错误：未找到本次 fnpack 产出的 .fpk（请确认 fnpack build 已成功）。"
             f" 已扫描: {detail}"
@@ -298,9 +293,7 @@ def newest_fpk(stage: Path) -> Path:
 def is_windows_link_target(linkname: str) -> bool:
     if "\\" in linkname:
         return True
-    if len(linkname) >= 3 and linkname[1] == ":" and linkname[0].isalpha():
-        return True
-    return False
+    return len(linkname) >= 3 and linkname[1] == ":" and linkname[0].isalpha()
 
 
 def inspect_app_tgz(data: bytes) -> list[str]:
@@ -308,7 +301,7 @@ def inspect_app_tgz(data: bytes) -> list[str]:
     if len(data) > MAX_APP_TGZ_BYTES:
         errors.append(f"app.tgz 过大（{len(data)} bytes），通常说明打进了 venv 或其它无关文件")
     try:
-        inner = tarfile.open(fileobj=io.BytesIO(data), mode="r:*")
+        inner = tarfile.open(fileobj=io.BytesIO(data), mode="r:*")  # noqa: SIM115
     except tarfile.TarError as exc:
         return [f"app.tgz 不是合法 tar/gzip: {exc}"]
 
@@ -323,7 +316,9 @@ def inspect_app_tgz(data: bytes) -> list[str]:
         errors.append("app.tgz 缺少 backend Python 源码")
     if not any(name.endswith("vendor/manylinux2014_x86_64/flask/__init__.py") for name in names):
         errors.append("app.tgz 缺少 Linux x86_64 vendor（请先运行 tools/vendor_deps.py）")
-    if any("/vendor/" in name and (name.endswith(".pyd") or "win32" in name.lower()) for name in names):
+    if any(
+        "/vendor/" in name and (name.endswith(".pyd") or "win32" in name.lower()) for name in names
+    ):
         errors.append("app.tgz vendor 含 Windows 二进制，飞牛无法导入")
 
     symlink_count = 0
@@ -335,9 +330,7 @@ def inspect_app_tgz(data: bytes) -> list[str]:
         if member.issym() or member.islnk():
             symlink_count += 1
             if is_windows_link_target(member.linkname):
-                errors.append(
-                    f"app.tgz 含 Windows 符号链接: {name} -> {member.linkname}"
-                )
+                errors.append(f"app.tgz 含 Windows 符号链接: {name} -> {member.linkname}")
     if symlink_count > MAX_SYMLINKS:
         errors.append(f"app.tgz 含 {symlink_count} 条符号/硬链接（飞牛解压常因此失败）")
 
@@ -359,7 +352,7 @@ def verify_fpk(fpk: Path) -> None:
     if not fpk.is_file():
         raise SystemExit(f"错误：找不到 {fpk}")
     try:
-        outer = tarfile.open(fpk, "r:gz")
+        outer = tarfile.open(fpk, "r:gz")  # noqa: SIM115
     except tarfile.TarError as exc:
         raise SystemExit(f"错误：{fpk.name} 不是合法 tar.gz: {exc}") from exc
 
@@ -378,7 +371,7 @@ def verify_fpk(fpk: Path) -> None:
             eprint(f"  - {item}")
         raise SystemExit(1)
 
-    inner = tarfile.open(fileobj=io.BytesIO(data), mode="r:*")
+    inner = tarfile.open(fileobj=io.BytesIO(data), mode="r:*")  # noqa: SIM115
     files = [m for m in inner.getmembers() if m.isfile()]
     eprint(
         f"==> 校验通过: {fpk.name}  "
@@ -391,7 +384,7 @@ def patch_outer_modes(src: Path, dst: Path) -> None:
     tmp = dst.with_name(dst.name + ".rewriting")
     if tmp.exists():
         tmp.unlink()
-    with tarfile.open(src, "r:gz") as inn:
+    with tarfile.open(src, "r:gz") as inn:  # noqa: SIM117
         with tarfile.open(tmp, "w:gz", format=tarfile.USTAR_FORMAT, compresslevel=9) as out:
             for member in inn.getmembers():
                 info = member
@@ -429,7 +422,7 @@ def finalize(stage: Path, skip_verify: bool) -> Path:
     else:
         patch_outer_modes(src, dest)
         if src.parent.resolve() == stage.resolve():
-            try:
+            try:  # noqa: SIM105
                 src.unlink()
             except OSError:
                 pass

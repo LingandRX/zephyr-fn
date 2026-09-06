@@ -5,6 +5,7 @@
 - response.py   : 统一响应结构 {code, message, data}
 - middleware.py : 请求边界中间件（身份解析、权限校验、网关前缀剥离）
 """
+
 from __future__ import annotations
 
 from . import domain

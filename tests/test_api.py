@@ -2,12 +2,13 @@
 
 使用 Flask 测试客户端与统一响应信封 {code, message, data}。
 """
+
 from __future__ import annotations
 
-import json
 import unittest
 
 from helpers import AppTestCase
+
 from backend import config
 from backend.extensions import db
 from backend.services import subscriptions as sub_service
@@ -91,10 +92,12 @@ class FlaskApiSecurityTests(AppTestCase):
         """管理员设置接口：密钥脱敏、掩码更新保持原密钥。"""
         headers = self._identity_headers("admin", is_admin=True)
         with self.ctx():
-            repositories.update_app_settings({
-                "smtp_password": "smtp-initial-secret",
-                "pushplus_token": "push-initial-token",
-            })
+            repositories.update_app_settings(
+                {
+                    "smtp_password": "smtp-initial-secret",
+                    "pushplus_token": "push-initial-token",
+                }
+            )
 
         response = self.client.get("/api/settings", headers=headers)
         self.assertEqual(response.status_code, 200)
@@ -215,8 +218,12 @@ class FlaskApiSecurityTests(AppTestCase):
         response = self.client.post(
             "/api/subscriptions",
             headers=headers,
-            json={"name": "Spotify", "amount": 1500, "period_type": "month",
-                  "start_date": "2026-01-01"},
+            json={
+                "name": "Spotify",
+                "amount": 1500,
+                "period_type": "month",
+                "start_date": "2026-01-01",
+            },
         )
         self.assertEqual(response.status_code, 201)
         body = response.get_json()
@@ -231,7 +238,8 @@ class FlaskApiSecurityTests(AppTestCase):
 
         # 更新
         response = self.client.put(
-            f"/api/subscriptions/{sub_id}", headers=headers,
+            f"/api/subscriptions/{sub_id}",
+            headers=headers,
             json={"amount": 1800},
         )
         self.assertEqual(response.get_json()["data"]["amount"], 1800)
@@ -253,6 +261,7 @@ class FlaskApiSecurityTests(AppTestCase):
 def create_app_production_like():
     """创建不允许无身份头访问的应用（模拟 Unix Socket 网关模式）。"""
     from backend.app import create_app as _factory
+
     return _factory(allow_headerless_local_identity=False)
 
 

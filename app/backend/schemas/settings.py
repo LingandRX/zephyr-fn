@@ -7,6 +7,7 @@
 
 密钥脱敏（对外只暴露 *_configured / *_masked）在 services/settings 完成。
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -18,8 +19,13 @@ from ..storage.repositories import SETTINGS_FIELDS, is_secret_placeholder
 _SECRET_FIELDS = ("smtp_password", "pushplus_token", "pushplus_smtp_password")
 _INT_FIELDS = ("notification_days", "smtp_port", "pushplus_smtp_port")
 _FLOAT_FIELDS = ("exchange_rate_usd", "exchange_rate_hkd")
-_BOOL_FIELDS = ("auto_start", "tray_mode", "email_enabled",
-                "notification_enabled", "pushplus_enabled")
+_BOOL_FIELDS = (
+    "auto_start",
+    "tray_mode",
+    "email_enabled",
+    "notification_enabled",
+    "pushplus_enabled",
+)
 
 
 class SettingsSchema:
@@ -31,10 +37,7 @@ class SettingsSchema:
             raise ValidationError("请求数据必须是对象")
 
         updates: dict[str, Any] = {}
-        cleared_fields = {
-            field for field in _SECRET_FIELDS
-            if data.get(f"{field}_clear")
-        }
+        cleared_fields = {field for field in _SECRET_FIELDS if data.get(f"{field}_clear")}
         for field in cleared_fields:
             updates[field] = None
 
