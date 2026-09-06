@@ -32,6 +32,9 @@ IGNORE_DIR_NAMES = {
     "instance",
     "node_modules",
     "venv",
+    "testing",
+    "tests",
+    "test",
 }
 IGNORE_FILE_NAMES = {
     ".DS_Store",
@@ -47,6 +50,7 @@ IGNORE_SUFFIXES = {
     ".log",
     ".pyc",
     ".pyo",
+    ".pyi",
     ".swp",
 }
 FORBIDDEN_APP_PARTS = (

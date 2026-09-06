@@ -33,6 +33,47 @@ def vendor_ok(dest: Path) -> bool:
     return all((dest / name).is_dir() for name in MARKER_PACKAGES)
 
 
+def prune_vendor(dest: Path) -> None:
+    """清理测试套件、字节码缓存、文档以及 dist-info 中非运行必需的文件，大幅减少小文件数量。"""
+    removed_files = 0
+    removed_dirs = 0
+
+    # 1. 递归删除测试目录与 __pycache__
+    for p in list(dest.rglob("*")):
+        if not p.exists():
+            continue
+        if p.is_dir() and p.name in ("__pycache__", "testing", "tests", "test"):
+            shutil.rmtree(p, ignore_errors=True)
+            removed_dirs += 1
+            continue
+
+        if p.is_file():
+            # 删除编译缓存、类型存根、说明文档
+            if p.suffix.lower() in (".pyc", ".pyo", ".pyi"):
+                p.unlink(missing_ok=True)
+                removed_files += 1
+                continue
+
+            # dist-info 中仅保留 METADATA / entry_points.txt / top_level.txt
+            if p.parent.name.endswith(".dist-info"):
+                if p.name not in ("METADATA", "entry_points.txt", "top_level.txt"):
+                    if p.is_dir():
+                        shutil.rmtree(p, ignore_errors=True)
+                        removed_dirs += 1
+                    else:
+                        p.unlink(missing_ok=True)
+                        removed_files += 1
+
+    # 删除 dist-info 内部可能残留的空目录（如 licenses 等）
+    for dist in dest.glob("*.dist-info"):
+        for sub in list(dist.iterdir()):
+            if sub.is_dir():
+                shutil.rmtree(sub, ignore_errors=True)
+                removed_dirs += 1
+
+    eprint(f"    瘦身完成: {dest.name} (清理了 {removed_dirs} 个目录, {removed_files} 个文件)")
+
+
 def install_platform(platform: str) -> None:
     dest = VENDOR_ROOT / platform
     if dest.exists():
@@ -69,6 +110,8 @@ def install_platform(platform: str) -> None:
         extra_dir = dest / extra
         if extra_dir.is_dir():
             shutil.rmtree(extra_dir)
+
+    prune_vendor(dest)
 
     if not vendor_ok(dest):
         raise SystemExit(f"错误：{dest} 缺少 Flask 依赖，vendor 不完整")

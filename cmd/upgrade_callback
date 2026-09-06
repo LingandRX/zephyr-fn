@@ -19,9 +19,12 @@ echo "TRIM_PKGVAR=${TRIM_PKGVAR:-}"
 cd "${TRIM_APPDEST}/backend"
 "${PYTHON_BIN}" server.py --init-db
 
-# 放开数据目录读写权限，避免升级后不同运行用户导致 sqlite3 readonly
+# 放开必要的数据与日志目录读写权限，避免不同运行用户导致 sqlite3 readonly。
+# 注意：不要使用 chmod -R 777 全量遍历（当 backups/logs 较多时会导致极慢的磁盘 IO 遍历）
 if [ -n "${TRIM_PKGVAR:-}" ] && [ -d "${TRIM_PKGVAR}" ]; then
-  chmod -R 777 "${TRIM_PKGVAR}" 2>/dev/null || chmod -R ugo+rwX "${TRIM_PKGVAR}" 2>/dev/null || true
+  chmod 777 "${TRIM_PKGVAR}" 2>/dev/null || true
+  chmod 777 "${TRIM_PKGVAR}/logs" "${TRIM_PKGVAR}/backups" 2>/dev/null || true
+  find "${TRIM_PKGVAR}" -maxdepth 1 -name "*.db*" -exec chmod 666 {} + 2>/dev/null || true
 fi
 
 echo "==== upgrade_callback 完成 ===="
