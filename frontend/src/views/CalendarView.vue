@@ -107,14 +107,15 @@ function buildGrid() {
       more: dayEvents.length > 2 ? dayEvents.length - 2 : 0,
     });
   }
-  // 下月占位至 35 格（5 行 x 7 列）
+  // 下月占位：固定保证 35 格（5 行 × 7 列）
   const nextMonthYear = month === 12 ? year + 1 : year;
   const nextMonthNum = month === 12 ? 1 : month + 1;
-  for (let i = 1; cells.length < 35; i++) {
-    const ds = `${nextMonthYear}-${String(nextMonthNum).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+  let nextDay = 1;
+  while (cells.length < 35) {
+    const ds = `${nextMonthYear}-${String(nextMonthNum).padStart(2, "0")}-${String(nextDay).padStart(2, "0")}`;
     const dayEvents = byDate[ds] || [];
     cells.push({
-      day: i,
+      day: nextDay,
       dateStr: ds,
       other: true,
       today: ds === todayStr,
@@ -122,13 +123,27 @@ function buildGrid() {
       visibleEvents: dayEvents.slice(0, 2),
       more: dayEvents.length > 2 ? dayEvents.length - 2 : 0,
     });
+    nextDay++;
   }
 
-  grid.value = cells;
+  // 若某些月份（如跨 6 周）超过 35 格，截取或维持 5 行（35 格）
+  grid.value = cells.slice(0, 35);
 
-  // 默认选中今天或当月第一个有事件的日期
-  if (!selectedDateStr.value || !selectedDateStr.value.startsWith(`${year}-${String(month).padStart(2, "0")}`)) {
-    selectedDateStr.value = todayStr.startsWith(`${year}-${String(month).padStart(2, "0")}`) ? todayStr : null;
+  // 切换月份时，如果之前未选中或者选中日期不在当月：
+  // 保持与之前类似的默认行为；但若之前明细已在打开状态，则寻找当月第一个有事件的日期并选中，
+  // 确保直接平滑更新内容而不经历 close->open 的动画断层。
+  const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
+  if (!selectedDateStr.value || !selectedDateStr.value.startsWith(monthPrefix)) {
+    if (detailsOpen.value) {
+      const firstEventCell = grid.value.find((c) => !c.other && c.events && c.events.length > 0);
+      if (firstEventCell) {
+        selectedDateStr.value = firstEventCell.dateStr;
+      } else {
+        selectedDateStr.value = todayStr.startsWith(monthPrefix) ? todayStr : null;
+      }
+    } else {
+      selectedDateStr.value = todayStr.startsWith(monthPrefix) ? todayStr : null;
+    }
   }
 }
 
@@ -201,7 +216,6 @@ function prevMonth(delta) {
   calMonth.value += delta;
   if (calMonth.value < 1) { calMonth.value = 12; calYear.value--; }
   if (calMonth.value > 12) { calMonth.value = 1; calYear.value++; }
-  selectedDateStr.value = `${calYear.value}-${String(calMonth.value).padStart(2, "0")}-01`;
   loadMonth();
 }
 
