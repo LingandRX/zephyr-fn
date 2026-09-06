@@ -1,7 +1,28 @@
 #!/bin/bash
 # 升级完成后: 确保数据库 schema 为最新 (幂等)
-set -e
-PYTHON_BIN="/var/apps/python312/target/bin/python3"
+set -euo pipefail
+
+if [ -n "${TRIM_PKGVAR:-}" ]; then
+  mkdir -p "${TRIM_PKGVAR}/logs"
+  exec >>"${TRIM_PKGVAR}/logs/upgrade.log" 2>&1
+else
+  exec >>/tmp/subscription-upgrade.log 2>&1
+fi
+
+echo "==== upgrade_callback $(date 2>/dev/null || true) pid=$$ ===="
+echo "TRIM_APPDEST=${TRIM_APPDEST:-}"
+echo "TRIM_PKGVAR=${TRIM_PKGVAR:-}"
+
+# shellcheck source=/dev/null
+. "${TRIM_APPDEST}/backend/vendor_env.sh"
+
 cd "${TRIM_APPDEST}/backend"
-"$PYTHON_BIN" server.py --init-db
+"${PYTHON_BIN}" server.py --init-db
+
+# 放开数据目录读写权限，避免升级后不同运行用户导致 sqlite3 readonly
+if [ -n "${TRIM_PKGVAR:-}" ] && [ -d "${TRIM_PKGVAR}" ]; then
+  chmod -R 777 "${TRIM_PKGVAR}" 2>/dev/null || chmod -R ugo+rwX "${TRIM_PKGVAR}" 2>/dev/null || true
+fi
+
+echo "==== upgrade_callback 完成 ===="
 exit 0

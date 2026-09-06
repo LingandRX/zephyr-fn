@@ -1,0 +1,7 @@
+# 飞牛生命周期脚本必须是 LF，否则 NAS 上 shebang 变成 /bin/bash\r 无法执行
+cmd/* text eol=lf
+wizard/* text eol=lf
+config/* text eol=lf
+manifest text eol=lf
+*.sh text eol=lf
+app/backend/vendor_env.sh text eol=lf

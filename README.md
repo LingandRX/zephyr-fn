@@ -130,20 +130,37 @@ python3 -m unittest discover -s tests -v
 
 ## 打包与安装（飞牛 fnOS）
 
+请用仓库脚本一键打包，不要在项目根目录直接 `fnpack build`。
+`fnpack` 会把 `app/` 下几乎所有文件打进 `app.tgz`，**不读 `.gitignore`**。
+Windows 开发机上的 `app/backend/.venv`（含指向 `C:\...` 的符号链接）一旦打进去，飞牛安装时就会报「解压 app.tgz 失败」。
+
 ```bash
-# 1. 前置：构建 Vue 前端并同步到 app/www（同时清理 __pycache__）
-./build.sh
+# Linux / macOS / Git Bash
+./package.sh
+# 跳过版本自增：NO_BUMP=1 ./package.sh
 
-# 2. 生成图标（如未生成）
-python3 tools/gen_icons.py
+# Windows PowerShell
+.\package.ps1
+# 跳过版本自增：.\package.ps1 -NoBump
+```
 
-# 3. 打包（需安装 fnpack，见 https://developer.fnnas.com/docs/cli/fnpack/）
-fnpack build
-# 产出 subscription.fpk；注意：打包前务必先运行 ./build.sh，
-# 否则 app/www 不是 Vue 产物（git 中的 baseline 是 vanilla 原生版）
+脚本流程：`build.sh`/`build.ps1` 构建前端 → 生成图标 →
+`tools/vendor_deps.py` 预置 Linux cp312 轮子到 `app/backend/vendor/`（x86_64 + aarch64）→
+拷到干净暂存目录（排除 `.venv` / `.idea` / `__pycache__`，`cmd/` 转为 LF；
+默认只在暂存目录自增 version，**打包失败不会改仓库 manifest**）→
+`fnpack build --directory <stage>` → 把 `cmd/*` 执行位置为 `0755` 并校验 `app.tgz`，
+校验通过后才把新版本写回 `manifest`。
+产出仓库根目录的 `subscription.fpk`。
 
-# 4. 在飞牛 fnOS 设备上安装
-appcenter-cli install-fpk subscription-0.1.0.fpk
+安装回调不再在设备上 `pip install`。若安装失败，SSH 查看
+`$TRIM_PKGVAR/logs/install.log`（通常在 `/var/apps/subscription/var/logs/install.log` 附近，以设备为准）。
+
+校验失败（体积过大、含 `.venv`、含 Windows 符号链接、缺少 `www/index.html`）会让打包以非 0 退出。
+应急跳过校验：`SKIP_VERIFY=1`（不推荐）。
+
+```bash
+# 仅在飞牛设备上安装已产出的包
+appcenter-cli install-fpk subscription.fpk
 # 或应用中心 -> 手动安装
 ```
 

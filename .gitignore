@@ -51,6 +51,7 @@ venv/
 env/
 ENV/
 node_modules/
+app/backend/vendor/
 
 # ===== 运行数据（本地开发） =====
 data/
@@ -66,3 +67,4 @@ app/www/
 # ===== fnOS 应用包构建产物 =====
 *.fpk
 fnpack-output/
+.tmp/

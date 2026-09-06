@@ -1,33 +1,45 @@
 #!/bin/bash
 # 订阅管理 - 服务生命周期控制 (start/stop/status)
 
-PYTHON_BIN="${PYTHON_BIN:-/var/apps/python312/target/bin/python3}"
 BACKEND_DIR="${TRIM_APPDEST}/backend"
 DATA_DIR="${TRIM_PKGVAR}"
 PID_FILE="${TRIM_PKGVAR}/server.pid"
 LOG_DIR="${TRIM_PKGVAR}/logs"
 ERR_LOG="${TRIM_TEMP_LOGFILE:-/tmp/subscription-error.log}"
 
-if [ ! -x "$PYTHON_BIN" ]; then
-  echo "Python 运行时不可用: $PYTHON_BIN (请确认 install_dep_apps=python312)" > "$ERR_LOG"
+if [ -z "${TRIM_APPDEST:-}" ] || [ -z "${TRIM_PKGVAR:-}" ]; then
+  echo "TRIM_APPDEST/TRIM_PKGVAR 未设置" > "$ERR_LOG"
   exit 1
 fi
 
 start_server() {
+  # shellcheck source=/dev/null
+  . "${TRIM_APPDEST}/backend/vendor_env.sh" >>"$ERR_LOG" 2>&1 || exit 1
+  if [ ! -x "$PYTHON_BIN" ]; then
+    echo "Python 运行时不可用: $PYTHON_BIN (请确认 install_dep_apps=python312)" > "$ERR_LOG"
+    exit 1
+  fi
   mkdir -p "$DATA_DIR" "$LOG_DIR"
+  chmod 777 "$DATA_DIR" "$LOG_DIR" 2>/dev/null || true
   if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
     echo "subscription already running"
     exit 0
   fi
+  # 清理可能残留的死 socket，避免等待循环误判
+  rm -f "${TRIM_APPDEST}/app.sock"
+
   cd "$BACKEND_DIR" || { echo "backend 目录不存在: $BACKEND_DIR" > "$ERR_LOG"; exit 1; }
   nohup "$PYTHON_BIN" "$BACKEND_DIR/server.py" >> "$LOG_DIR/server.log" 2>&1 &
   echo $! > "$PID_FILE"
-  # 等待统一网关 socket 出现
+  # 等待统一网关 socket 出现 (最长等 15 秒)
   for _ in $(seq 1 30); do
     [ -S "${TRIM_APPDEST}/app.sock" ] && break
     sleep 0.5
   done
-  [ -S "${TRIM_APPDEST}/app.sock" ] || echo "warning: app.sock 未在预期时间内创建, 请查看 $LOG_DIR/server.log" > "$ERR_LOG"
+  if [ ! -S "${TRIM_APPDEST}/app.sock" ]; then
+    echo "error: app.sock 未在预期时间内创建, 启动失败, 请查看 $LOG_DIR/server.log" > "$ERR_LOG"
+    exit 1
+  fi
 }
 
 case "$1" in
@@ -39,15 +51,12 @@ case "$1" in
       PID=$(cat "$PID_FILE")
       rm -f "$PID_FILE"
       kill "$PID" 2>/dev/null
-      # 等待进程退出（最多 5 秒）
       for _ in $(seq 1 10); do
         kill -0 "$PID" 2>/dev/null || break
         sleep 0.5
       done
-      # 如果仍未退出，强制终止
       kill -0 "$PID" 2>/dev/null && kill -9 "$PID" 2>/dev/null
     fi
-    # 清理可能残留的 socket 文件（进程退出后）
     rm -f "${TRIM_APPDEST}/app.sock"
     ;;
   status)

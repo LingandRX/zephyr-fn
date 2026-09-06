@@ -37,7 +37,36 @@ from pathlib import Path
 # 兼容直接执行（python3 server.py，cmd/main / dev.sh / install_callback 均如此）：
 # 把 backend 包的父目录（app/）加入 sys.path，以包方式导入，
 # 保证各模块的相对导入（from ..core import ...）统一生效。
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_BACKEND_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(_BACKEND_DIR.parent))
+
+
+def _prepend_vendor(backend_dir: Path) -> None:
+    """NAS 上使用打包打进的 manylinux 轮子；本地 Windows/macOS 开发仍走自己的环境。"""
+    if not (os.environ.get("TRIM_APPDEST") or sys.platform.startswith("linux")):
+        return
+    vendor_root = backend_dir / "vendor"
+    if not vendor_root.is_dir():
+        return
+    machine = os.environ.get("TRIM_SYS_ARCH") or ""
+    if not machine and hasattr(os, "uname"):
+        machine = os.uname().machine
+    machine = machine.lower()
+    tag = {
+        "x86_64": "manylinux2014_x86_64",
+        "amd64": "manylinux2014_x86_64",
+        "x64": "manylinux2014_x86_64",
+        "x86": "manylinux2014_x86_64",
+        "aarch64": "manylinux2014_aarch64",
+        "arm64": "manylinux2014_aarch64",
+        "arm": "manylinux2014_aarch64",
+    }.get(machine, "manylinux2014_x86_64")
+    dest = vendor_root / tag
+    if (dest / "flask").is_dir():
+        sys.path.insert(0, str(dest))
+
+
+_prepend_vendor(_BACKEND_DIR)
 
 from backend import config  # noqa: E402
 from backend.app import create_app  # noqa: E402
@@ -98,15 +127,26 @@ def _cleanup_old_logs(log_dir: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 def _run_unix_socket(app, sock_path: str) -> None:
-    """在 Unix domain socket 上运行 Flask 应用。"""
-    import threading
-    from http.server import HTTPServer
+    """在 Unix domain socket 上运行 Flask WSGI 应用。"""
+    import socket
+    import sys
+    from wsgiref.simple_server import WSGIRequestHandler, WSGIServer
+    from socketserver import ThreadingMixIn
 
-    from werkzeug.serving import WSGIRequestHandler
+    class UnixWSGIServer(ThreadingMixIn, WSGIServer):
+        """标准库的多线程 Unix Socket WSGI 服务器。"""
+        address_family = socket.AF_UNIX
+        daemon_threads = True
 
-    class UnixWSGIServer(HTTPServer):
-        """基于 HTTPServer 的 Unix Socket WSGI 服务器。"""
-        address_family = __import__("socket").AF_UNIX
+        def __init__(self, path: str, handler_cls) -> None:
+            self.server_address = path
+            self.server_name = "localhost"
+            self.server_port = 80
+            # 直接调用 BaseServer.__init__，避开 TCPServer 内部的 (host, port) 解析与自动绑定
+            super(WSGIServer, self).__init__(path, handler_cls)
+            self.socket = socket.socket(self.address_family, socket.SOCK_STREAM)
+            self.server_bind()
+            self.server_activate()
 
         def server_bind(self) -> None:
             if os.path.exists(self.server_address):
@@ -114,42 +154,42 @@ def _run_unix_socket(app, sock_path: str) -> None:
                     os.unlink(self.server_address)
                 except OSError:
                     pass
-            super().server_bind()
-
-    class ThreadedUnixWSGIServer(UnixWSGIServer):
-        """多线程版本。"""
-        def process_request(self, request, client_address) -> None:
-            t = threading.Thread(target=self.process_request_thread, args=(request, client_address))
-            t.daemon = True
-            t.start()
-
-        def process_request_thread(self, request, client_address) -> None:
+            self.socket.bind(self.server_address)
             try:
-                self.finish_request(request, client_address)
-            except Exception:
-                self.handle_error(request, client_address)
-            finally:
-                self.shutdown_request(request)
+                os.chmod(self.server_address, 0o666)
+            except OSError:
+                pass
+            self.setup_environ()
 
-    class QuietHandler(WSGIRequestHandler):
-        """抑制 werkzeug 默认的请求日志（我们有自己的 logger）。"""
-        def log_request(self, code="-", size="-") -> None:
+        def server_activate(self) -> None:
+            self.socket.listen(self.request_queue_size)
+
+    class UnixWSGIHandler(WSGIRequestHandler):
+        """抑制标准库繁杂请求日志，并注入 Unix Socket 所需的 WSGI 环境变量。"""
+        def log_message(self, format, *args) -> None:
             pass
 
-    from werkzeug.serving import run_simple
+        def address_string(self) -> str:
+            # Unix Domain Socket 下 client_address 为空字符串或空元组，避免 BaseHTTPRequestHandler 索引越界
+            return "127.0.0.1"
 
-    # werkzeug 的 run_simple 不直接支持 Unix Socket，手动创建服务器
-    server = ThreadedUnixWSGIServer(sock_path, QuietHandler)
-    server.app = app  # type: ignore[attr-defined]
+        def get_environ(self) -> dict:
+            if not self.client_address or not self.client_address[0]:
+                self.client_address = ("127.0.0.1", 0)
+            env = super().get_environ()
+            env["SERVER_NAME"] = "localhost"
+            env["SERVER_PORT"] = "80"
+            env["REMOTE_ADDR"] = env.get("HTTP_X_REAL_IP") or env.get("HTTP_X_FORWARDED_FOR", "").split(",")[0].strip() or "127.0.0.1"
+            # 兼容网关传递的协议（https/http）
+            proto = env.get("HTTP_X_FORWARDED_PROTO")
+            if proto:
+                env["wsgi.url_scheme"] = proto
+            else:
+                env["wsgi.url_scheme"] = "http"
+            return env
 
-    from werkzeug.server import WSGIRequestHandler as _WRH
-
-    class UnixHandler(_WRH):
-        """让 werkzeug WSGI handler 在 Unix Socket 上工作。"""
-        def run(self, application) -> None:
-            self.server.app = application  # type: ignore[attr-defined]
-            from werkzeug.serving import WSGIRequestHandler as _W
-            _W.run(self, application)
+    server = UnixWSGIServer(sock_path, UnixWSGIHandler)
+    server.set_app(app)
 
     log.info("监听统一网关 Unix Socket: %s", sock_path)
     try:
@@ -159,7 +199,10 @@ def _run_unix_socket(app, sock_path: str) -> None:
     finally:
         server.server_close()
         if os.path.exists(sock_path):
-            os.unlink(sock_path)
+            try:
+                os.unlink(sock_path)
+            except OSError:
+                pass
 
 
 # --------------------------------------------------------------------------- #
