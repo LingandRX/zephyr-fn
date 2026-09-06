@@ -64,6 +64,7 @@ const modalOpen = ref(false);
 const modalTitle = ref("新增订阅");
 const editingId = ref(null);
 const form = ref(emptyForm());
+const NEW_SUB_DRAFT_KEY = "zephyr_new_sub_draft";
 
 function todayStr() {
   const d = new Date();
@@ -76,6 +77,45 @@ function emptyForm() {
     custom_value: "1", custom_unit: "month", auto_renew: true,
     start_date: todayStr(), first_payment_date: "", next_due_date: "", notes: "",
   };
+}
+
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(NEW_SUB_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft() {
+  if (editingId.value) return;
+  try {
+    localStorage.setItem(NEW_SUB_DRAFT_KEY, JSON.stringify(form.value));
+  } catch {
+    // 忽略存储异常
+  }
+}
+
+function clearDraft() {
+  try {
+    localStorage.removeItem(NEW_SUB_DRAFT_KEY);
+  } catch {
+    // 忽略存储异常
+  }
+}
+
+function resetForm() {
+  const fresh = emptyForm();
+  fresh.first_payment_date = fresh.start_date;
+  const next = calcNextDueDate(fresh.start_date, fresh.period_type);
+  if (next) fresh.next_due_date = next;
+  form.value = fresh;
+  if (!editingId.value) {
+    clearDraft();
+  }
 }
 
 const notesLength = computed(() => Array.from(form.value.notes || "").length);
@@ -112,11 +152,22 @@ watch(
       const next = calcNextDueDate(sd, pt);
       if (next) form.value.next_due_date = next;
     }
-    // 开始日期变化时，始终同步更新首次付款日期
-    if (sd) {
+    // 开始日期变化时，若首次付款日期为空或未主动修改，保持首次付款日期跟随
+    if (sd && !form.value.first_payment_date) {
       form.value.first_payment_date = sd;
     }
   },
+);
+
+// 新增模式下草稿内容变动时自动持久化到本地
+watch(
+  form,
+  () => {
+    if (!isEditingSubscription.value && !editingId.value) {
+      saveDraft();
+    }
+  },
+  { deep: true },
 );
 
 // 侧边栏「新增订阅」按钮触发（跨组件响应式状态）
@@ -220,9 +271,16 @@ function openModal(sub = null) {
       notes: sub.notes || "",
     };
   } else {
-    const fresh = emptyForm();
-    fresh.first_payment_date = fresh.start_date;
-    form.value = fresh;
+    const draft = loadDraft();
+    if (draft) {
+      form.value = { ...emptyForm(), ...draft };
+    } else {
+      const fresh = emptyForm();
+      fresh.first_payment_date = fresh.start_date;
+      const next = calcNextDueDate(fresh.start_date, fresh.period_type);
+      if (next) fresh.next_due_date = next;
+      form.value = fresh;
+    }
   }
   modalOpen.value = true;
 }
@@ -253,6 +311,7 @@ async function save() {
       await updateSubscription(editingId.value, body);
     } else {
       await createSubscription(body);
+      clearDraft();
     }
     toast(editingId.value ? "已保存" : "已新增");
     modalOpen.value = false;
@@ -586,8 +645,11 @@ onMounted(loadAll);
           </div>
           </div>
           <div class="modal-foot">
-            <button type="button" class="btn" @click="modalOpen = false">取消</button>
-            <button type="submit" class="btn btn-primary">保存</button>
+            <button type="button" class="btn" @click="resetForm">重置</button>
+            <div class="modal-foot-actions">
+              <button type="button" class="btn" @click="modalOpen = false">取消</button>
+              <button type="submit" class="btn btn-primary">保存</button>
+            </div>
           </div>
         </form>
       </div>
@@ -1126,5 +1188,17 @@ onMounted(loadAll);
     padding: 12px 20px 6px;
     border-top: 1px solid var(--border);
   }
+}
+
+.modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-foot-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 </style>
