@@ -335,74 +335,47 @@ def get_calendar_events(user_id: str, year: int, month: int) -> list[dict]:
 
 
 def _events_for_month(sub: dict, year: int, month: int) -> list[dict]:
+    """生成某个订阅在指定年月的日历事件。
+
+    业务规则：
+    1. 开始日期 (start_date / first_payment_date)：
+       - 在该日期当月显示一条“首次扣费”事件 (new_subscription)。
+    2. 到期日 / 扣费日 (next_due_date)：
+       - 若自动续费且非一次性订阅：显示一条“续费扣费”事件 (auto_renew)，代表续期扣款，不显示到期。
+       - 若非自动续费或一次性订阅：显示一条“服务到期”事件 (service_end)。
+    """
     events: list[dict] = []
-    if sub["period_type"] == "once":
-        due = sub.get("next_due_date")
-        if due:
-            try:
-                d = date.fromisoformat(due)
-            except ValueError:
-                return events
-            if d.year == year and d.month == month:
-                _push_event(events, sub, d, domain.calendar_due_event_type(sub["renewal_policy"]))
-        return events
+    auto_renew = domain.should_auto_renew_on_wake(sub.get("auto_renew", False), sub.get("renewal_policy", "auto"))
 
-    try:
-        start_date = date.fromisoformat(sub["start_date"])
-    except ValueError:
-        return events
-
-    target_start = date(year, month, 1)
-    target_end = domain.add_months(target_start, 1) - timedelta(days=1)
-
-    effective_end = None
-    if not domain.should_auto_renew_on_wake(sub["auto_renew"], sub["renewal_policy"]):
-        if sub.get("next_due_date"):
-            try:
-                effective_end = date.fromisoformat(sub["next_due_date"])
-            except ValueError:
-                pass
-        else:
-            effective_end = domain.add_one_period(
-                start_date, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"],
-                anchor_day=domain.billing_anchor_day(start_date),
-            )
-
-    fixed_days = _fixed_cycle_days(sub)
-    if fixed_days:
-        offset = max(0, (target_start - start_date).days)
-        index = (offset + fixed_days - 1) // fixed_days
-        current = start_date + timedelta(days=index * fixed_days)
-        while current <= target_end:
-            if not effective_end or current < effective_end:
-                _push_event(events, sub, current, "cycle_start")
-            current += timedelta(days=fixed_days)
-    else:
-        current = start_date
-        guard = 0
-        while current <= target_end:
-            guard += 1
-            if guard >= 10_000:
-                break
-            is_within = (current < effective_end) if effective_end else True
-            if (is_within and target_start <= current <= target_end
-                    and current.month == month and current.year == year):
-                _push_event(events, sub, current, "cycle_start")
-            nxt = domain.add_one_period(
-                current, sub["period_type"], sub["custom_period_value"], sub["custom_period_unit"],
-                anchor_day=domain.billing_anchor_day(start_date))
-            if nxt is None:
-                break
-            current = nxt
-
-    due = sub.get("next_due_date")
-    if due:
+    # 1. 开始日期 / 首付日期 -> 首次扣款 (new_subscription)
+    start_str = sub.get("first_payment_date") or sub.get("start_date")
+    start_d: date | None = None
+    if start_str:
         try:
-            d = date.fromisoformat(due)
+            start_d = date.fromisoformat(start_str)
         except ValueError:
-            return events
-        if d.year == year and d.month == month:
-            _push_event(events, sub, d, domain.calendar_due_event_type(sub["renewal_policy"]))
+            start_d = None
+        if start_d and start_d.year == year and start_d.month == month:
+            _push_event(events, sub, start_d, "new_subscription")
+
+    # 2. 到期日 / 续费扣费日 (next_due_date)
+    due_str = sub.get("next_due_date")
+    if due_str:
+        try:
+            due_d = date.fromisoformat(due_str)
+        except ValueError:
+            due_d = None
+
+        if due_d and due_d.year == year and due_d.month == month:
+            # 自动续费订阅（且不是一次性订阅）：显示“续费扣费”
+            if auto_renew and sub.get("period_type") != "once":
+                # 避免与 start_date 同一天时产生重复事件
+                if not (start_d and start_d == due_d):
+                    _push_event(events, sub, due_d, "auto_renew")
+            else:
+                # 不自动续费或一次性：到期日显示“服务到期”
+                _push_event(events, sub, due_d, "service_end")
+
     return events
 
 

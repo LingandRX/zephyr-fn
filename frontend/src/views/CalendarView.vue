@@ -2,6 +2,7 @@
 // 日历视图：按月渲染扣费 / 服务到期事件
 import { ref, computed, watch, nextTick, onMounted, onActivated, onBeforeUnmount } from "vue";
 import { getCalendar } from "../services/api.js";
+import { fmtCents } from "../utils/format.js";
 import { toast } from "../utils/ui.js";
 import CustomDatePicker from "../components/CustomDatePicker.vue";
 
@@ -15,6 +16,45 @@ const detailsCardRef = ref(null);
 const detailsVisible = ref(false);
 const detailsVisibilityReady = ref(false);
 let detailsObserver = null;
+
+// 区分事件类型辅助方法
+function initialOf(name) {
+  const s = String(name ?? "").trim();
+  return s ? [...s][0].toUpperCase() : "?";
+}
+
+function getEventMeta(e) {
+  if (!e) return { type: "due", label: "续费扣款", shortLabel: "扣费", dotClass: "dot-due", tagClass: "tag-due", eventClass: "due" };
+  const t = e.event_type;
+  if (t === "service_end" || t === "due_date") {
+    return {
+      type: "end",
+      label: "服务到期",
+      shortLabel: "到期",
+      dotClass: "dot-end",
+      tagClass: "tag-end",
+      eventClass: "end",
+    };
+  }
+  if (t === "new_subscription" || t === "first_payment") {
+    return {
+      type: "new",
+      label: "首次扣费",
+      shortLabel: "首付",
+      dotClass: "dot-new",
+      tagClass: "tag-new",
+      eventClass: "new",
+    };
+  }
+  return {
+    type: "due",
+    label: "续费扣款",
+    shortLabel: "扣费",
+    dotClass: "dot-due",
+    tagClass: "tag-due",
+    eventClass: "due",
+  };
+}
 
 // 格式化顶部日历年月显示
 function formatCalHeader(val) {
@@ -165,9 +205,27 @@ const selectedDayEvents = computed(() => {
   return target ? target.events : [];
 });
 
-const selectedDayTotal = computed(() => {
-  return selectedDayEvents.value.reduce((acc, cur) => acc + (cur.amount || 0), 0);
+const selectedDayTotalFormatted = computed(() => {
+  const events = selectedDayEvents.value;
+  if (!events.length) return "";
+  // 按币种分别求和扣费类金额
+  const map = {};
+  for (const e of events) {
+    // 服务到期不计入扣款总计
+    if (e.event_type === "service_end") continue;
+    const cur = e.currency || "CNY";
+    map[cur] = (map[cur] || 0) + (e.amount || 0);
+  }
+  const entries = Object.entries(map);
+  if (!entries.length) return "";
+  return entries.map(([cur, sum]) => fmtCents(sum, cur)).join(" + ");
 });
+
+const isOnlyServiceEnd = computed(() => {
+  const events = selectedDayEvents.value;
+  return events.length > 0 && events.every((e) => e.event_type === "service_end");
+});
+
 // 明细展开态：选中且有事件的日期（供 details-collapsed 类驱动开合动画）
 const detailsOpen = computed(() => !!selectedDateStr.value && selectedDayEvents.value.length > 0);
 
@@ -255,7 +313,8 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
         <!-- <button class="btn btn-sm btn-ghost today-btn" @click="goToday">今天</button> -->
       </div>
       <div class="cal-legend">
-        <span class="legend-item"><i class="dot dot-due"></i>扣费</span>
+        <span class="legend-item"><i class="dot dot-new"></i>首次扣费</span>
+        <span class="legend-item"><i class="dot dot-due"></i>续费扣费</span>
         <span class="legend-item"><i class="dot dot-end"></i>服务到期</span>
       </div>
     </div>
@@ -289,10 +348,12 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
                   v-for="(e, j) in c.visibleEvents"
                   :key="j"
                   class="cal-event"
-                  :class="e.event_type === 'service_end' ? 'end' : 'due'"
-                  :title="`${e.name} ${e.amount_formatted}`"
+                  :class="getEventMeta(e).eventClass"
+                  :title="`${e.name} ${getEventMeta(e).label} ${e.amount_formatted}`"
                 >
+                  <span class="event-avatar">{{ initialOf(e.name) }}</span>
                   <span class="event-name">{{ e.name }}</span>
+                  <span class="event-type-pill">{{ getEventMeta(e).shortLabel }}</span>
                   <span class="event-amt">{{ e.amount_formatted }}</span>
                 </div>
                 <div v-if="c.more" class="cal-event more-badge">+{{ c.more }} 项</div>
@@ -305,7 +366,7 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
                 v-for="(e, j) in c.events.slice(0, 3)"
                 :key="j"
                 class="mob-dot"
-                :class="e.event_type === 'service_end' ? 'dot-end' : 'dot-due'"
+                :class="getEventMeta(e).dotClass"
               ></span>
               <span v-if="c.events.length > 3" class="mob-dot-more">+</span>
             </div>
@@ -327,9 +388,12 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
           <div class="details-date">
             <span class="details-date-label">
               <svg class="detail-cal-icon" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M853.333333 149.333333h-138.666666V106.666667c0-17.066667-14.933333-32-32-32s-32 14.933333-32 32v42.666666h-277.333334V106.666667c0-17.066667-14.933333-32-32-32s-32 14.933333-32 32v42.666666H170.666667c-40.533333 0-74.666667 34.133333-74.666667 74.666667v618.666667C96 883.2 130.133333 917.333333 170.666667 917.333333h682.666666c40.533333 0 74.666667-34.133333 74.666667-74.666666v-618.666667C928 183.466667 893.866667 149.333333 853.333333 149.333333zM170.666667 213.333333h138.666666v64c0 17.066667 14.933333 32 32 32s32-14.933333 32-32v-64h277.333334v64c0 17.066667 14.933333 32 32 32s32-14.933333 32-32v-64H853.333333c6.4 0 10.666667 4.266667 10.666667 10.666667v194.133333c-4.266667-2.133333-6.4-2.133333-10.666667-2.133333H170.666667c-4.266667 0-6.4 0-10.666667 2.133333v-194.133333c0-6.4 4.266667-10.666667 10.666667-10.666667z m682.666666 640H170.666667c-6.4 0-10.666667-4.266667-10.666667-10.666666V477.866667c4.266667 2.133333 6.4 2.133333 10.666667 2.133333h682.666666c4.266667 0 6.4 0 10.666667-2.133333v364.8c0 6.4-4.266667 10.666667-10.666667 10.666666z"/><path d="M384 608h-85.333333c-17.066667 0-32 14.933333-32 32s14.933333 32 32 32h85.333333c17.066667 0 32-14.933333 32-32s-14.933333-32-32-32zM725.333333 608h-192c-17.066667 0-32 14.933333-32 32s14.933333 32 32 32h192c17.066667 0 32-14.933333 32-32s-14.933333-32-32-32z"/></svg>
-              {{ selectedDateStr }} 扣费明细
+              {{ selectedDateStr }} {{ isOnlyServiceEnd ? '到期明细' : '扣费明细' }}
             </span>
-            <span class="details-count">共 {{ selectedDayEvents.length }} 笔 (合计 ¥{{ (selectedDayTotal / 100).toFixed(2) }})</span>
+            <span class="details-count">
+              共 {{ selectedDayEvents.length }} 笔
+              <template v-if="selectedDayTotalFormatted"> (合计 {{ selectedDayTotalFormatted }})</template>
+            </span>
           </div>
           <button
             type="button"
@@ -342,9 +406,16 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
         <div class="details-list">
           <div v-for="(e, idx) in selectedDayEvents" :key="idx" class="detail-item">
             <div class="detail-left">
-              <span class="detail-dot" :class="e.event_type === 'service_end' ? 'dot-end' : 'dot-due'"></span>
-              <span class="detail-name">{{ e.name }}</span>
-              <span class="detail-type-tag">{{ e.event_type === 'service_end' ? '服务到期' : '续费扣款' }}</span>
+              <span class="detail-avatar">{{ initialOf(e.name) }}</span>
+              <div class="detail-info">
+                <div class="detail-title-row">
+                  <span class="detail-name">{{ e.name }}</span>
+                  <span
+                    class="detail-type-tag"
+                    :class="getEventMeta(e).tagClass"
+                  >{{ getEventMeta(e).label }}</span>
+                </div>
+              </div>
             </div>
             <div class="detail-right">
               <span class="detail-amount">{{ e.amount_formatted }}</span>
@@ -433,6 +504,7 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   border-radius: 50%;
   display: inline-block;
 }
+.dot-new { background: var(--primary); }
 .dot-due { background: var(--amber); }
 .dot-end { background: var(--red); }
 
@@ -568,19 +640,58 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   min-width: 0;
   line-height: 1.2;
 }
+.cal-event.new {
+  border-left: 3px solid var(--primary);
+  background: rgba(59, 130, 246, 0.05);
+}
 .cal-event.due {
   border-left: 3px solid var(--amber);
 }
 .cal-event.end {
   border-left: 3px solid var(--red);
+  background: rgba(239, 68, 68, 0.05);
+}
+.event-avatar {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--card-2);
+  color: var(--text);
+  font-size: 9px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
 }
 .event-name {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1;
+  flex: 1 1 0%;
   min-width: 0;
   font-weight: 500;
+}
+.event-type-pill {
+  font-size: 9px;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.cal-event.new .event-type-pill {
+  color: var(--primary);
+  background: rgba(59, 130, 246, 0.12);
+}
+.cal-event.due .event-type-pill {
+  color: var(--amber);
+  background: rgba(245, 158, 11, 0.12);
+}
+.cal-event.end .event-type-pill {
+  color: var(--red);
+  background: rgba(239, 68, 68, 0.12);
 }
 .event-amt {
   flex-shrink: 0;
@@ -711,11 +822,31 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   flex: 1 1 auto;
   min-width: 0;
 }
-.detail-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.detail-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--card-2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+}
+.detail-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.detail-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 .detail-name {
   font-size: 13px;
@@ -726,11 +857,24 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
 }
 .detail-type-tag {
   font-size: 10px;
-  padding: 1px 5px;
+  padding: 2px 6px;
   background: var(--bg-2);
   color: var(--muted);
-  border-radius: 3px;
+  border-radius: 4px;
   flex-shrink: 0;
+  font-weight: 500;
+}
+.detail-type-tag.tag-new {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--primary);
+}
+.detail-type-tag.tag-due {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--amber);
+}
+.detail-type-tag.tag-end {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--red);
 }
 .detail-amount {
   font-size: 13px;
@@ -921,6 +1065,9 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
     border-radius: 50%;
     flex-shrink: 0;
   }
+  .mob-dot.dot-new { background: var(--primary); }
+  .mob-dot.dot-due { background: var(--amber); }
+  .mob-dot.dot-end { background: var(--red); }
   .mob-dot-more {
     font-size: 9px;
     color: var(--muted);

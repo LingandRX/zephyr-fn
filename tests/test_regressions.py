@@ -37,9 +37,15 @@ class ServicesRegressionTests(unittest.TestCase):
         )
 
     def test_old_daily_subscription_calendar_is_generated(self):
-        events = services._events_for_month(self._daily_sub(), 2026, 8)
-        cycle_events = [e for e in events if e["event_type"] == "cycle_start"]
-        self.assertEqual(len(cycle_events), 31)
+        # 针对 2000 年 1 月，start_date 为 2000-01-01，next_due_date 为 2000-01-02（自动续费订阅）
+        events = services._events_for_month(self._daily_sub(), 2000, 1)
+        new_events = [e for e in events if e["event_type"] == "new_subscription"]
+        renew_events = [e for e in events if e["event_type"] == "auto_renew"]
+        end_events = [e for e in events if e["event_type"] == "service_end"]
+        # 开始日期 2000-01-01 显示首次扣费，自动续费到期日 2000-01-02 显示续费扣费（不额外显示到期）
+        self.assertEqual(len(new_events), 1)
+        self.assertEqual(len(renew_events), 1)
+        self.assertEqual(len(end_events), 0)
 
     def test_zero_actual_amount_is_respected(self):
         sub = self._daily_sub()
