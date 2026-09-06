@@ -201,7 +201,7 @@ def has_legacy_marker() -> bool:
     """存在 db_version 表说明是旧手写迁移库；Alembic 库只有 alembic_version。"""
     with db.engine.connect() as conn:
         row = conn.execute(
-            text("SELECT COUNT(*) FROM sqlite_master " "WHERE type='table' AND name='db_version'")
+            text("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='db_version'")
         ).scalar_one()
     return row > 0
 
@@ -406,7 +406,7 @@ def _ensure_category_schema(conn: Any) -> None:
         )
     )
     conn.execute(
-        text("CREATE INDEX IF NOT EXISTS idx_cat_user_sort " "ON categories(user_id, sort_order)")
+        text("CREATE INDEX IF NOT EXISTS idx_cat_user_sort ON categories(user_id, sort_order)")
     )
 
 

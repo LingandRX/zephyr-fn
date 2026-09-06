@@ -185,7 +185,7 @@ class NotificationDbTests(AppTestCase):
         raw.execute("DELETE FROM subscriptions")
         raw.execute("DELETE FROM categories")
         raw.executemany(
-            "INSERT INTO categories (id, user_id, name, icon, sort_order) " "VALUES (?,?,?,?,?)",
+            "INSERT INTO categories (id, user_id, name, icon, sort_order) VALUES (?,?,?,?,?)",
             [
                 ("cat-a", "u1", "Stream", None, 0),  # 保留（rowid 最小）
                 ("cat-b", "u1", "stream", None, 1),  # ASCII 大小写重复 -> 删除

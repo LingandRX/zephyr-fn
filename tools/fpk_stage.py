@@ -283,8 +283,7 @@ def newest_fpk(stage: Path) -> Path:
         found = iter_fpk_candidates(stage)
         detail = "无" if not found else ", ".join(f"{p} (mtime 早于本次 prepare)" for p in found)
         raise SystemExit(
-            "错误：未找到本次 fnpack 产出的 .fpk（请确认 fnpack build 已成功）。"
-            f" 已扫描: {detail}"
+            f"错误：未找到本次 fnpack 产出的 .fpk（请确认 fnpack build 已成功）。 已扫描: {detail}"
         )
     candidates.sort(key=lambda x: x[0], reverse=True)
     return candidates[0][1]

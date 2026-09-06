@@ -33,7 +33,7 @@ def _column_exists(table: str, column: str) -> bool:
 def upgrade() -> None:
     # 每日固定推送时刻（幂等：跳过已存在的列）
     if not _column_exists("app_settings", "notification_time"):
-        op.execute("ALTER TABLE app_settings " "ADD COLUMN notification_time TEXT DEFAULT '09:00'")
+        op.execute("ALTER TABLE app_settings ADD COLUMN notification_time TEXT DEFAULT '09:00'")
 
 
 def downgrade() -> None:
