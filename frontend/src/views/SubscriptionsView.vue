@@ -118,6 +118,17 @@ function resetForm() {
   }
 }
 
+function isMobileDevice() {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(max-width: 860px)").matches;
+}
+
+function handleBackdropClick() {
+  if (isMobileDevice()) {
+    modalOpen.value = false;
+  }
+}
+
 const notesLength = computed(() => Array.from(form.value.notes || "").length);
 const isEditingSubscription = ref(false);
 
@@ -556,7 +567,7 @@ onMounted(loadAll);
     </div>
 
     <!-- 新增/编辑弹窗 -->
-    <div v-if="modalOpen" class="modal" @click.self="modalOpen = false">
+    <div v-if="modalOpen" class="modal" @click.self="handleBackdropClick">
       <div class="modal-card">
         <div class="modal-head">
           <h2>{{ modalTitle }}</h2>
