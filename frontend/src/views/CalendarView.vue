@@ -107,10 +107,10 @@ function buildGrid() {
       more: dayEvents.length > 2 ? dayEvents.length - 2 : 0,
     });
   }
-  // 下月占位至 42 格
+  // 下月占位至 35 格（5 行 x 7 列）
   const nextMonthYear = month === 12 ? year + 1 : year;
   const nextMonthNum = month === 12 ? 1 : month + 1;
-  for (let i = 1; cells.length < 42; i++) {
+  for (let i = 1; cells.length < 35; i++) {
     const ds = `${nextMonthYear}-${String(nextMonthNum).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
     const dayEvents = byDate[ds] || [];
     cells.push({
@@ -796,8 +796,8 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   .cal-grid {
     flex: 1 1 auto;
     min-height: 0;
-    /* 首行周标题 auto，其余 6 行等分剩余高度，整体撑满卡片 */
-    grid-template-rows: auto repeat(6, minmax(0, 1fr));
+    /* 首行周标题 auto，其余 5 行等分剩余高度，整体撑满卡片 */
+    grid-template-rows: auto repeat(5, minmax(0, 1fr));
     align-content: stretch;
   }
   .cal-day {
