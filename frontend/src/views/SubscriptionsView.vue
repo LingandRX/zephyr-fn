@@ -7,7 +7,7 @@ import {
 import { fmtCents, daysLeft, PERIOD_LABEL, CUSTOM_UNIT_LABEL, yuanToCents, centsToYuan } from "../utils/format.js";
 import { ui, toast, openNewSub } from "../utils/ui.js";
 
-import CustomSelect from "../components/CustomSelect.vue";
+import HeadlessListbox from "../components/HeadlessListbox.vue";
 import CustomDatePicker from "../components/CustomDatePicker.vue";
 import SubscriptionModal from "../components/SubscriptionModal.vue";
 
@@ -239,12 +239,12 @@ onMounted(loadAll);
         <input v-model="search" type="search" placeholder="搜索订阅名称、备注..." />
       </div>
       <div class="filter-selects">
-        <CustomSelect
+        <HeadlessListbox
           v-model="filterCat"
           :options="catOptions"
           placeholder="全部分类"
         />
-        <CustomSelect
+        <HeadlessListbox
           v-model="filterStatus"
           :options="statusOptions"
           placeholder="全部状态"

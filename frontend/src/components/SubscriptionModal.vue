@@ -2,7 +2,7 @@
 import { ref, computed, watch } from "vue";
 import { CUSTOM_UNIT_LABEL, yuanToCents, centsToYuan } from "../utils/format.js";
 import { toast } from "../utils/ui.js";
-import CustomSelect from "./CustomSelect.vue";
+import HeadlessListbox from "./HeadlessListbox.vue";
 import CustomDatePicker from "./CustomDatePicker.vue";
 
 const props = defineProps({
@@ -261,7 +261,7 @@ async function save() {
             </label>
             <div class="field">
               <span>分类</span>
-              <CustomSelect
+              <HeadlessListbox
                 v-model="form.category_id"
                 :options="formCatOptions"
                 placeholder="未分类"
@@ -269,7 +269,7 @@ async function save() {
             </div>
             <div class="field">
               <span>货币</span>
-              <CustomSelect
+              <HeadlessListbox
                 v-model="form.currency"
                 :options="CURRENCY_OPTIONS"
                 :clearable="false"
@@ -281,7 +281,7 @@ async function save() {
             </label>
             <div class="field">
               <span>周期</span>
-              <CustomSelect
+              <HeadlessListbox
                 v-model="form.period_type"
                 :options="periodTypeOptions"
                 :clearable="false"
@@ -291,7 +291,7 @@ async function save() {
               <span>自定义周期</span>
               <span class="inline">
                 <input v-model="form.custom_value" type="number" min="1" />
-                <CustomSelect
+                <HeadlessListbox
                   v-model="form.custom_unit"
                   :options="customUnitOptions"
                   :clearable="false"

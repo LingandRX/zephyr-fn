@@ -10,7 +10,7 @@ import {
 } from "../services/api.js";
 import { toast } from "../utils/ui.js";
 
-import CustomSelect from "../components/CustomSelect.vue";
+import HeadlessListbox from "../components/HeadlessListbox.vue";
 import CustomTimePicker from "../components/CustomTimePicker.vue";
 
 const CURRENCY_OPTIONS = [
@@ -502,7 +502,7 @@ onMounted(loadAll);
         <h3>通用与汇率</h3>
         <div class="field">
           <span>默认货币</span>
-          <CustomSelect
+          <HeadlessListbox
             v-model="form.default_currency"
             :options="CURRENCY_OPTIONS"
             :clearable="false"
