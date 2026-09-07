@@ -1,5 +1,10 @@
 <script setup>
 import { ref, computed, watch } from "vue";
+import {
+  Dialog,
+  DialogPanel,
+  DialogTitle,
+} from "@headlessui/vue";
 import { CUSTOM_UNIT_LABEL, yuanToCents, centsToYuan } from "../utils/format.js";
 import { toast } from "../utils/ui.js";
 import HeadlessListbox from "./HeadlessListbox.vue";
@@ -242,16 +247,23 @@ async function save() {
 </script>
 
 <template>
-  <div v-if="modelValue" class="modal" @click.self="handleBackdropClick">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2>{{ modalTitle }}</h2>
-        <button class="modal-close" @click="close">
-          <svg width="16" height="16" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true">
-            <path d="M556.8 512L832 236.8c12.8-12.8 12.8-32 0-44.8-12.8-12.8-32-12.8-44.8 0L512 467.2l-275.2-277.333333c-12.8-12.8-32-12.8-44.8 0-12.8 12.8-12.8 32 0 44.8l275.2 277.333333-277.333333 275.2c-12.8 12.8-12.8 32 0 44.8 6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333L512 556.8 787.2 832c6.4 6.4 14.933333 8.533333 23.466667 8.533333s17.066667-2.133333 23.466666-8.533333c12.8-12.8 12.8-32 0-44.8L556.8 512z"/>
-          </svg>
-        </button>
-      </div>
+  <Dialog
+    :open="modelValue"
+    @close="close"
+    class="modal-dialog-root"
+  >
+    <div class="modal-dialog-backdrop" aria-hidden="true" />
+
+    <div class="modal-dialog-container">
+      <DialogPanel class="modal-card">
+        <div class="modal-head">
+          <DialogTitle as="h2">{{ modalTitle }}</DialogTitle>
+          <button type="button" class="modal-close" @click="close" aria-label="关闭弹窗">
+            <svg width="16" height="16" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true">
+              <path d="M556.8 512L832 236.8c12.8-12.8 12.8-32 0-44.8-12.8-12.8-32-12.8-44.8 0L512 467.2l-275.2-277.333333c-12.8-12.8-32-12.8-44.8 0-12.8 12.8-12.8 32 0 44.8l275.2 277.333333-277.333333 275.2c-12.8 12.8-12.8 32 0 44.8 6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333L512 556.8 787.2 832c6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466666-8.533333c12.8-12.8 12.8-32 0-44.8L556.8 512z"/>
+            </svg>
+          </button>
+        </div>
       <form class="modal-form" @submit.prevent="save">
         <div class="modal-scroll">
           <div class="form-grid">
@@ -350,11 +362,51 @@ async function save() {
           </div>
         </div>
       </form>
+      </DialogPanel>
     </div>
-  </div>
+  </Dialog>
 </template>
 
 <style scoped>
+:global(.modal-dialog-root) {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+}
+
+:global(.modal-dialog-backdrop) {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  animation: modal-fade-in 0.18s ease-out;
+}
+
+:global(.modal-dialog-container) {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  pointer-events: none;
+}
+
+.modal-dialog-container .modal-card {
+  pointer-events: auto;
+  animation: modal-zoom-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-zoom-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 .notes-field {
   position: relative;
 }
@@ -388,7 +440,7 @@ async function save() {
 
 /* ---------------- 弹窗移动端适配 (<=860px) ---------------- */
 @media (max-width: 860px) {
-  .modal {
+  :global(.modal-dialog-container) {
     align-items: center;
     padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
   }
