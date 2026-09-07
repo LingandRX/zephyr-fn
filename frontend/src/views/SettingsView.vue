@@ -11,7 +11,7 @@ import {
 import { toast } from "../utils/ui.js";
 
 import HeadlessListbox from "../components/HeadlessListbox.vue";
-import CustomTimePicker from "../components/CustomTimePicker.vue";
+import HeadlessTimePicker from "../components/HeadlessTimePicker.vue";
 
 const CURRENCY_OPTIONS = [
   { label: "CNY (¥)", value: "CNY" },
@@ -532,14 +532,14 @@ onMounted(loadAll);
         </label>
         <div class="field">
           <span>每日固定推送时刻</span>
-          <CustomTimePicker v-model="form.notification_time" placeholder="如 09:00" />
+          <HeadlessTimePicker v-model="form.notification_time" placeholder="如 09:00" />
         </div>
         <div class="field dnd">
           <span>免打扰时段</span>
           <div class="dnd-inputs">
-            <CustomTimePicker v-model="form.do_not_disturb_start" placeholder="开始时间" />
+            <HeadlessTimePicker v-model="form.do_not_disturb_start" placeholder="开始时间" />
             <span class="dnd-separator">—</span>
-            <CustomTimePicker v-model="form.do_not_disturb_end" placeholder="结束时间" />
+            <HeadlessTimePicker v-model="form.do_not_disturb_end" placeholder="结束时间" />
           </div>
         </div>
         <div class="sub-hint-row">
