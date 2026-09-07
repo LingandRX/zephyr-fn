@@ -8,7 +8,7 @@ import {
 import { CUSTOM_UNIT_LABEL, yuanToCents, centsToYuan } from "../utils/format.js";
 import { toast } from "../utils/ui.js";
 import HeadlessListbox from "./HeadlessListbox.vue";
-import CustomDatePicker from "./CustomDatePicker.vue";
+import HeadlessDatePicker from "./HeadlessDatePicker.vue";
 
 const props = defineProps({
   modelValue: {
@@ -316,7 +316,7 @@ async function save() {
             </label>
             <div class="field">
               <span>开始日期 *</span>
-              <CustomDatePicker
+              <HeadlessDatePicker
                 v-model="form.start_date"
                 placeholder="选择开始日期"
                 :clearable="false"
@@ -324,7 +324,7 @@ async function save() {
             </div>
             <div class="field">
               <span>首次付款日</span>
-              <CustomDatePicker
+              <HeadlessDatePicker
                 v-model="form.first_payment_date"
                 placeholder="首次付款日"
                 :clearable="true"
@@ -332,7 +332,7 @@ async function save() {
             </div>
             <div class="field span-2">
               <span>下次扣费日</span>
-              <CustomDatePicker
+              <HeadlessDatePicker
                 v-model="form.next_due_date"
                 placeholder="下次扣费日"
                 :clearable="true"

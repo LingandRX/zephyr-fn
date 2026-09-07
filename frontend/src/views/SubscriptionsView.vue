@@ -8,7 +8,7 @@ import { fmtCents, daysLeft, PERIOD_LABEL, CUSTOM_UNIT_LABEL, yuanToCents, cents
 import { ui, toast, openNewSub } from "../utils/ui.js";
 
 import HeadlessListbox from "../components/HeadlessListbox.vue";
-import CustomDatePicker from "../components/CustomDatePicker.vue";
+import HeadlessDatePicker from "../components/HeadlessDatePicker.vue";
 import SubscriptionModal from "../components/SubscriptionModal.vue";
 
 const subs = ref([]);

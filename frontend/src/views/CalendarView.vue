@@ -4,7 +4,7 @@ import { ref, computed, watch, nextTick, onMounted, onActivated, onBeforeUnmount
 import { getCalendar } from "../services/api.js";
 import { fmtCents } from "../utils/format.js";
 import { toast } from "../utils/ui.js";
-import CustomDatePicker from "../components/CustomDatePicker.vue";
+import HeadlessDatePicker from "../components/HeadlessDatePicker.vue";
 
 
 const now = new Date();
@@ -300,7 +300,7 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
       <div class="cal-nav">
         <button class="btn btn-sm" title="上一月" @click="prevMonth(-1)">‹</button>
         <div class="cal-title-wrap">
-          <CustomDatePicker
+          <HeadlessDatePicker
             v-model="calendarPickerDate"
             type="month"
             :clearable="true"
