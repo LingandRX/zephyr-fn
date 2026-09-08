@@ -3,6 +3,9 @@
 // 支持子页面（Tabs）切换展示
 import { ref, reactive, computed, watch, nextTick, onMounted } from "vue";
 import {
+  TabGroup, TabList, Tab, TabPanels, TabPanel,
+} from "@headlessui/vue";
+import {
   getSettings, saveSettings, getCategories, createCategory, deleteCategory,
   importCsv, download,
   testEmailNotification, testPushPlusNotification,
@@ -12,6 +15,7 @@ import { toast } from "../utils/ui.js";
 
 import HeadlessListbox from "../components/HeadlessListbox.vue";
 import HeadlessTimePicker from "../components/HeadlessTimePicker.vue";
+import HeadlessSwitch from "../components/HeadlessSwitch.vue";
 
 const CURRENCY_OPTIONS = [
   { label: "CNY (¥)", value: "CNY" },
@@ -39,7 +43,7 @@ const TABS = [
   ] },
 ];
 
-const activeTab = ref("general");
+const activeTabIndex = ref(0);
 const loaded = ref(false);
 const saving = ref(false);
 const saveStatusText = ref("");
@@ -70,10 +74,12 @@ async function loadLogTail() {
   }
 }
 
-// 切到「运行日志」页签时自动加载
-watch(activeTab, (t) => {
-  if (t === "logs") loadLogTail();
-});
+// 切换 Tab 时的回调
+function handleTabChange(index) {
+  activeTabIndex.value = index;
+  // 切到「运行日志」页签时自动加载
+  if (TABS[index]?.key === "logs") loadLogTail();
+}
 
 const form = reactive({
   default_currency: "CNY",
@@ -477,27 +483,33 @@ onMounted(loadAll);
 <template>
   <div class="page settings-page">
     <!-- 子页面导航栏 -->
-    <div class="settings-tabs-nav">
-      <button
-        v-for="t in TABS"
-        :key="t.key"
-        type="button"
-        class="tab-btn"
-        :class="{ active: activeTab === t.key }"
-        @click="activeTab = t.key"
-      >
-        <span class="tab-icon" aria-hidden="true">
-          <svg v-if="t.svg" class="tab-item-icon" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true">
-            <path v-for="(d, i) in t.svg" :key="i" :d="d" />
-          </svg>
-          <template v-else>{{ t.icon }}</template>
-        </span>
-        <span class="tab-label">{{ t.label }}</span>
-      </button>
-    </div>
+    <TabGroup :selectedIndex="activeTabIndex" @change="handleTabChange">
+      <TabList class="settings-tabs-nav">
+        <Tab
+          v-for="t in TABS"
+          :key="t.key"
+          as="template"
+          v-slot="{ selected }"
+        >
+          <button
+            type="button"
+            class="tab-btn"
+            :class="{ active: selected }"
+          >
+            <span class="tab-icon" aria-hidden="true">
+              <svg v-if="t.svg" class="tab-item-icon" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true">
+                <path v-for="(d, i) in t.svg" :key="i" :d="d" />
+              </svg>
+              <template v-else>{{ t.icon }}</template>
+            </span>
+            <span class="tab-label">{{ t.label }}</span>
+          </button>
+        </Tab>
+      </TabList>
 
-    <!-- 子页面 1：常规设置 -->
-    <div v-show="activeTab === 'general'" class="settings-section">
+      <TabPanels>
+        <!-- 子页面 1：常规设置 -->
+        <TabPanel class="settings-section">
       <div class="card">
         <h3>通用与汇率</h3>
         <div class="field">
@@ -522,10 +534,10 @@ onMounted(loadAll);
 
       <div class="card">
         <h3>提醒偏好</h3>
-        <label class="field checkbox">
-          <input v-model="form.notification_enabled" type="checkbox" />
-          <span>启用到期提醒</span>
-        </label>
+        <HeadlessSwitch
+          v-model="form.notification_enabled"
+          label="启用到期提醒"
+        />
         <label class="field">
           <span>到期提醒提前天数</span>
           <input v-model="form.notification_days" type="number" min="0" max="90" />
@@ -547,17 +559,18 @@ onMounted(loadAll);
           <span v-if="saveStatusText && saveScopes.has('general')" class="save-status-badge" :class="{ saving }">{{ saveStatusText }}</span>
         </div>
       </div>
-    </div>
+    </TabPanel>
 
-    <!-- 子页面 2：通知渠道 -->
-    <div v-show="activeTab === 'notifications'" class="settings-section">
+        <!-- 子页面 2：通知渠道 -->
+        <TabPanel class="settings-section">
       <div class="card">
         <div class="section-header">
           <h3>邮件通知 (SMTP)</h3>
-          <label class="field checkbox switch-box">
-            <input v-model="form.email_enabled" type="checkbox" />
-            <span>启用</span>
-          </label>
+          <HeadlessSwitch
+            v-model="form.email_enabled"
+            label="启用"
+            class="switch-box"
+          />
         </div>
         <Transition name="ch-collapse">
           <div v-if="form.email_enabled" class="fields-group">
@@ -617,10 +630,11 @@ onMounted(loadAll);
       <div class="card">
         <div class="section-header">
           <h3>PushPlus 微信推送</h3>
-          <label class="field checkbox switch-box">
-            <input v-model="form.pushplus_enabled" type="checkbox" />
-            <span>启用</span>
-          </label>
+          <HeadlessSwitch
+            v-model="form.pushplus_enabled"
+            label="启用"
+            class="switch-box"
+          />
         </div>
         <Transition name="ch-collapse">
           <div v-if="form.pushplus_enabled" class="channel-body">
@@ -691,10 +705,10 @@ onMounted(loadAll);
           </div>
         </Transition>
       </div>
-    </div>
+    </TabPanel>
 
-    <!-- 子页面 3：分类管理 -->
-    <div v-show="activeTab === 'categories'" class="settings-section">
+        <!-- 子页面 3：分类管理 -->
+        <TabPanel class="settings-section">
       <div class="card">
         <h3>新增分类</h3>
         <div class="cat-editor">
@@ -721,10 +735,10 @@ onMounted(loadAll);
           <span v-if="!cats.length" class="muted">暂无分类</span>
         </div>
       </div>
-    </div>
+    </TabPanel>
 
-    <!-- 子页面 4：数据与备份 -->
-    <div v-show="activeTab === 'backup'" class="settings-section">
+        <!-- 子页面 4：数据与备份 -->
+        <TabPanel class="settings-section">
       <div class="card">
         <h3>数据与备份</h3>
         <p class="muted">
@@ -739,10 +753,10 @@ onMounted(loadAll);
           </label>
         </div>
       </div>
-    </div>
+    </TabPanel>
 
-    <!-- 子页面 5：运行日志 -->
-    <div v-show="activeTab === 'logs'" class="settings-section">
+        <!-- 子页面 5：运行日志 -->
+        <TabPanel class="settings-section">
       <div class="card">
         <div class="section-header">
           <h3>运行日志</h3>
@@ -759,7 +773,9 @@ onMounted(loadAll);
         <div v-else-if="logLoading" class="empty">加载中…</div>
         <div v-else class="empty">暂无日志</div>
       </div>
-    </div>
+    </TabPanel>
+      </TabPanels>
+    </TabGroup>
   </div>
 </template>
 

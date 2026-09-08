@@ -9,6 +9,7 @@ import { CUSTOM_UNIT_LABEL, yuanToCents, centsToYuan } from "../utils/format.js"
 import { toast } from "../utils/ui.js";
 import HeadlessListbox from "./HeadlessListbox.vue";
 import HeadlessDatePicker from "./HeadlessDatePicker.vue";
+import HeadlessSwitch from "./HeadlessSwitch.vue";
 
 const props = defineProps({
   modelValue: {
@@ -310,10 +311,11 @@ async function save() {
                 />
               </span>
             </div>
-            <label class="field checkbox span-2">
-              <input v-model="form.auto_renew" type="checkbox" />
-              <span>自动续费</span>
-            </label>
+            <HeadlessSwitch
+              v-model="form.auto_renew"
+              label="自动续费"
+              class="span-2"
+            />
             <div class="field">
               <span>开始日期 *</span>
               <HeadlessDatePicker
