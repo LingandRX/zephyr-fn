@@ -1,10 +1,5 @@
 <script setup>
-import { computed, ref, nextTick, watch } from "vue";
-import {
-  Popover,
-  PopoverButton,
-  PopoverPanel,
-} from "@headlessui/vue";
+import { computed, ref, nextTick, onMounted, onBeforeUnmount } from "vue";
 
 const props = defineProps({
   modelValue: {
@@ -35,8 +30,12 @@ const props = defineProps({
 
 const emit = defineEmits(["update:modelValue", "change", "clear"]);
 
+const timePickerRef = ref(null);
+const dropdownRef = ref(null);
 const hoursColRef = ref(null);
 const minutesColRef = ref(null);
+const isOpen = ref(false);
+const dropdownPos = ref({ top: 0, left: 0 });
 
 // 解析 modelValue 为时和分
 const parsedTime = computed(() => {
@@ -108,10 +107,71 @@ function scrollColumnsToSelected() {
   }
 }
 
+// 动态计算浮层位置（Teleport 到 body 后使用 fixed 定位）
+function updatePosition() {
+  if (!timePickerRef.value) return;
+  const rect = timePickerRef.value.getBoundingClientRect();
+
+  // 若触发器滚动出当前可视区域，自动关闭
+  if (rect.bottom < 0 || rect.top > window.innerHeight) {
+    onClose();
+    return;
+  }
+
+  const panelWidth = 196;
+  const panelHeight = dropdownRef.value?.offsetHeight || 270;
+  const gap = 4;
+  const padding = 12;
+
+  // 纵向计算：下方空间不足且上方空间更大时向上展开
+  const spaceBelow = window.innerHeight - rect.bottom - padding;
+  const spaceAbove = rect.top - padding;
+  let top = 0;
+
+  if (spaceBelow < panelHeight && spaceAbove > spaceBelow) {
+    top = Math.max(padding, rect.top - panelHeight - gap);
+  } else {
+    top = rect.bottom + gap;
+  }
+
+  // 横向计算：默认与触发器左对齐，右侧超出视口时向左靠齐
+  let left = rect.left;
+  if (left + panelWidth > window.innerWidth - padding) {
+    left = Math.max(padding, rect.right - panelWidth);
+  }
+  if (left < padding) {
+    left = padding;
+  }
+
+  dropdownPos.value = {
+    top: Math.round(top),
+    left: Math.round(left),
+  };
+}
+
 function onOpen() {
+  isOpen.value = true;
   nextTick(() => {
+    updatePosition();
     scrollColumnsToSelected();
   });
+  window.addEventListener("scroll", updatePosition, true);
+  window.addEventListener("resize", updatePosition);
+}
+
+function onClose() {
+  isOpen.value = false;
+  window.removeEventListener("scroll", updatePosition, true);
+  window.removeEventListener("resize", updatePosition);
+}
+
+function toggleDropdown() {
+  if (props.disabled) return;
+  if (isOpen.value) {
+    onClose();
+  } else {
+    onOpen();
+  }
 }
 
 function emitTime(h, m) {
@@ -144,7 +204,7 @@ function selectMinute(m, e) {
   emitTime(h, m);
 }
 
-function selectNow(closeFn, e) {
+function selectNow(e) {
   if (e) {
     e.stopPropagation();
     e.preventDefault();
@@ -154,22 +214,22 @@ function selectNow(closeFn, e) {
   const h = String(d.getHours()).padStart(2, "0");
   const m = String(d.getMinutes()).padStart(2, "0");
   emitTime(h, m);
-  if (closeFn) closeFn();
+  onClose();
 }
 
-function handleConfirm(closeFn, e) {
+function handleConfirm(e) {
   if (e) {
     e.stopPropagation();
     e.preventDefault();
   }
   if (!props.modelValue) {
-    selectNow(closeFn, e);
-  } else if (closeFn) {
-    closeFn();
+    selectNow(e);
+  } else {
+    onClose();
   }
 }
 
-function handleClear(closeFn, e) {
+function handleClear(e) {
   if (e) {
     e.stopPropagation();
     e.preventDefault();
@@ -178,56 +238,103 @@ function handleClear(closeFn, e) {
   emit("update:modelValue", props.clearValue);
   emit("change", props.clearValue);
   emit("clear");
-  if (closeFn) closeFn();
+  onClose();
 }
+
+// 处理点击外部与按键关闭
+function handleClickOutside(event) {
+  if (!isOpen.value) return;
+  const clickedTrigger = timePickerRef.value && timePickerRef.value.contains(event.target);
+  const clickedDropdown = dropdownRef.value && dropdownRef.value.contains(event.target);
+  if (!clickedTrigger && !clickedDropdown) {
+    onClose();
+  }
+}
+
+function handleKeydown(event) {
+  if (event.key === "Escape" && isOpen.value) {
+    onClose();
+  }
+}
+
+onMounted(() => {
+  document.addEventListener("pointerdown", handleClickOutside);
+  document.addEventListener("keydown", handleKeydown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("pointerdown", handleClickOutside);
+  document.removeEventListener("keydown", handleKeydown);
+  window.removeEventListener("scroll", updatePosition, true);
+  window.removeEventListener("resize", updatePosition);
+});
 </script>
 
 <template>
   <div
+    ref="timePickerRef"
     class="custom-time-picker"
-    :class="{ 'is-disabled': disabled, 'can-clear': canClear }"
+    :class="{
+      'is-disabled': disabled,
+      'can-clear': canClear,
+      'is-open': isOpen,
+    }"
   >
-    <Popover as="div" class="popover-wrapper" v-slot="{ open, close }">
-      <PopoverButton
-        as="div"
-        class="custom-time-picker-trigger"
-        :class="{ 'is-disabled': disabled }"
-        @click="onOpen"
+    <div
+      class="custom-time-picker-trigger"
+      :class="{ 'is-disabled': disabled }"
+      :tabindex="disabled ? -1 : 0"
+      role="combobox"
+      :aria-expanded="isOpen"
+      @click="toggleDropdown"
+    >
+      <span
+        class="custom-time-picker-label"
+        :class="{ 'is-placeholder': !hasValue }"
       >
-        <span
-          class="custom-time-picker-label"
-          :class="{ 'is-placeholder': !hasValue }"
+        {{ displayLabel }}
+      </span>
+
+      <div class="custom-time-picker-actions">
+        <button
+          v-if="canClear"
+          type="button"
+          class="custom-time-picker-clear-btn"
+          title="清除"
+          aria-label="清除时间"
+          @pointerdown.stop
+          @touchstart.stop
+          @click.stop.prevent="handleClear"
         >
-          {{ displayLabel }}
+          <svg width="12" height="12" viewBox="0 0 1024 1024" fill="currentColor">
+            <path d="M556.8 512L832 236.8c12.8-12.8 12.8-32 0-44.8-12.8-12.8-32-12.8-44.8 0L512 467.2l-275.2-277.333333c-12.8-12.8-32-12.8-44.8 0-12.8 12.8-12.8 32 0 44.8l275.2 277.333333-277.333333 275.2c-12.8 12.8-12.8 32 0 44.8 6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333L512 556.8 787.2 832c6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466666-8.533333c12.8-12.8 12.8-32 0-44.8L556.8 512z"/>
+          </svg>
+        </button>
+
+        <span class="custom-time-picker-icon" aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
         </span>
+      </div>
+    </div>
 
-        <div class="custom-time-picker-actions">
-          <button
-            v-if="canClear"
-            type="button"
-            class="custom-time-picker-clear-btn"
-            title="清除"
-            aria-label="清除时间"
-            @pointerdown.stop
-            @touchstart.stop
-            @click.stop.prevent="handleClear(null, $event)"
-          >
-            <svg width="12" height="12" viewBox="0 0 1024 1024" fill="currentColor">
-              <path d="M556.8 512L832 236.8c12.8-12.8 12.8-32 0-44.8-12.8-12.8-32-12.8-44.8 0L512 467.2l-275.2-277.333333c-12.8-12.8-32-12.8-44.8 0-12.8 12.8-12.8 32 0 44.8l275.2 277.333333-277.333333 275.2c-12.8 12.8-12.8 32 0 44.8 6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333L512 556.8 787.2 832c6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466666-8.533333c12.8-12.8 12.8-32 0-44.8L556.8 512z"/>
-            </svg>
-          </button>
-
-          <span class="custom-time-picker-icon" aria-hidden="true">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-          </span>
-        </div>
-      </PopoverButton>
-
+    <!-- Teleport 到 body，彻底脱离父级 overflow 裁剪与层叠上下文限制 -->
+    <Teleport to="body">
       <transition name="dropdown-fade">
-        <PopoverPanel class="custom-time-picker-dropdown">
+        <div
+          v-if="isOpen"
+          ref="dropdownRef"
+          class="custom-time-picker-dropdown"
+          :style="{
+            position: 'fixed',
+            top: `${dropdownPos.top}px`,
+            left: `${dropdownPos.left}px`,
+            zIndex: 1000,
+          }"
+          @click.stop
+        >
           <div class="time-header">
             <span class="time-col-title">时</span>
             <span class="time-col-title">分</span>
@@ -267,7 +374,7 @@ function handleClear(closeFn, e) {
             <button
               type="button"
               class="quick-btn"
-              @click="selectNow(close, $event)"
+              @click="selectNow($event)"
             >
               此刻
             </button>
@@ -276,22 +383,22 @@ function handleClear(closeFn, e) {
                 v-if="clearable"
                 type="button"
                 class="quick-btn clear"
-                @click="handleClear(close, $event)"
+                @click="handleClear($event)"
               >
                 清空
               </button>
               <button
                 type="button"
                 class="quick-btn confirm"
-                @click="handleConfirm(close, $event)"
+                @click="handleConfirm($event)"
               >
                 确定
               </button>
             </div>
           </div>
-        </PopoverPanel>
+        </div>
       </transition>
-    </Popover>
+    </Teleport>
   </div>
 </template>
 
@@ -303,16 +410,6 @@ function handleClear(closeFn, e) {
   box-sizing: border-box;
   user-select: none;
   font-size: var(--fs-sm);
-}
-
-.popover-wrapper {
-  position: relative;
-  width: 100%;
-}
-
-.custom-time-picker:has([data-headlessui-state*="open"]),
-.popover-wrapper[data-headlessui-state*="open"] {
-  z-index: 50;
 }
 
 .custom-time-picker-trigger {
@@ -336,8 +433,7 @@ function handleClear(closeFn, e) {
 }
 
 .custom-time-picker-trigger:focus-visible,
-.custom-time-picker:has([data-headlessui-state*="open"]) .custom-time-picker-trigger,
-.popover-wrapper[data-headlessui-state*="open"] .custom-time-picker-trigger {
+.custom-time-picker.is-open .custom-time-picker-trigger {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.2);
 }
@@ -372,8 +468,7 @@ function handleClear(closeFn, e) {
   transition: color 0.15s ease;
 }
 
-.custom-time-picker:has([data-headlessui-state*="open"]) .custom-time-picker-icon,
-.popover-wrapper[data-headlessui-state*="open"] .custom-time-picker-icon {
+.custom-time-picker.is-open .custom-time-picker-icon {
   color: var(--primary);
 }
 
@@ -405,10 +500,8 @@ function handleClear(closeFn, e) {
 
 /* 下拉面板 */
 .custom-time-picker-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
   width: 196px;
+  max-width: min(196px, calc(100vw - 24px));
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -416,7 +509,6 @@ function handleClear(closeFn, e) {
   box-sizing: border-box;
   padding: 8px 10px 10px;
   user-select: none;
-  z-index: var(--z-notice);
   outline: none;
 }
 

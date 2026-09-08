@@ -1018,6 +1018,14 @@ onMounted(loadAll);
   .cat-editor {
     flex-direction: column;
   }
+  .dnd-inputs {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .dnd-separator {
+    display: none;
+  }
 }
 /* 通知渠道启用/关闭的内容折叠过渡 */
 .ch-collapse-enter-active,
