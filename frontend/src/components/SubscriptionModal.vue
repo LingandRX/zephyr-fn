@@ -11,6 +11,7 @@ import HeadlessListbox from "./HeadlessListbox.vue";
 import HeadlessDatePicker from "./HeadlessDatePicker.vue";
 import HeadlessSwitch from "./HeadlessSwitch.vue";
 import HeadlessButton from "./HeadlessButton.vue";
+import TemplateSelector from "./TemplateSelector.vue";
 
 const props = defineProps({
   modelValue: {
@@ -60,6 +61,7 @@ const modalTitle = computed(() => (props.subscription ? "编辑订阅" : "新增
 const isEditing = computed(() => !!props.subscription);
 const form = ref(emptyForm());
 const saving = ref(false);
+const showTemplateSelector = ref(false);
 
 function todayStr() {
   const d = new Date();
@@ -246,6 +248,17 @@ async function save() {
     saving.value = false;
   }
 }
+
+function handleTemplateSelect(template) {
+  form.value.name = template.name;
+  form.value.currency = template.currency || "CNY";
+  form.value.amount = (template.amount / 100).toFixed(2);
+  form.value.period_type = template.period_type || "month";
+  form.value.auto_renew = template.auto_renew !== false;
+  if (template.notes) {
+    form.value.notes = template.notes;
+  }
+}
 </script>
 
 <template>
@@ -269,10 +282,20 @@ async function save() {
       <form class="modal-form" @submit.prevent="save">
         <div class="modal-scroll">
           <div class="form-grid">
-            <label class="field span-2">
+            <div class="field span-2">
               <span>名称 *</span>
-              <input v-model="form.name" required placeholder="如 Netflix" />
-            </label>
+              <div class="name-input-group">
+                <input v-model="form.name" required placeholder="如 Netflix" class="name-input" />
+                <HeadlessButton
+                  v-if="!isEditing"
+                  @click="showTemplateSelector = true"
+                  class="template-btn"
+                  title="从模板选择"
+                >
+                  📋 模板
+                </HeadlessButton>
+              </div>
+            </div>
             <div class="field">
               <span>分类</span>
               <HeadlessListbox
@@ -367,6 +390,16 @@ async function save() {
       </form>
       </DialogPanel>
     </div>
+
+    <!-- 模板选择器：必须嵌套在本 Dialog 内部，作为组件树后代。
+         HeadlessUI 的堆栈机制在子 Dialog 打开时会把父 Dialog 的计数加一，
+         从而禁用父 Dialog 的「外部点击关闭」，否则点击模板卡片会被父弹窗
+         判定为外部点击而把整个新增弹窗关掉。 -->
+    <TemplateSelector
+      :model-value="showTemplateSelector"
+      @update:model-value="showTemplateSelector = $event"
+      @select="handleTemplateSelect"
+    />
   </Dialog>
 </template>
 
@@ -427,6 +460,50 @@ async function save() {
 
 .notes-counter.is-limit {
   color: var(--amber);
+}
+
+.name-input-group {
+  display: flex;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.name-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.template-btn {
+  /* iOS 系统蓝强调色 */
+  --ios-accent: #0a84ff;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+}
+
+.template-btn:hover {
+  border-color: var(--ios-accent);
+  color: var(--ios-accent);
+}
+
+:global(:root[data-theme="light"]) .template-btn {
+  --ios-accent: #007aff;
+}
+
+.template-btn:active {
+  transform: scale(0.97);
 }
 
 .modal-foot {
