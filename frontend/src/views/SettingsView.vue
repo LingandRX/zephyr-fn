@@ -16,6 +16,9 @@ import { toast } from "../utils/ui.js";
 import HeadlessListbox from "../components/HeadlessListbox.vue";
 import HeadlessTimePicker from "../components/HeadlessTimePicker.vue";
 import HeadlessSwitch from "../components/HeadlessSwitch.vue";
+import HeadlessButton from "../components/HeadlessButton.vue";
+import HeadlessInput from "../components/HeadlessInput.vue";
+import HeadlessCard from "../components/HeadlessCard.vue";
 
 const CURRENCY_OPTIONS = [
   { label: "CNY (¥)", value: "CNY" },
@@ -608,16 +611,14 @@ onMounted(loadAll);
                 <span>测试收件邮箱（选填，默认同发件人/用户名）</span>
                 <input v-model="testEmailTarget" placeholder="test@example.com" />
               </label>
-              <button
-                type="button"
-                class="btn test-btn"
+              <HeadlessButton
                 :disabled="testingEmail || (!form.smtp_host && !form.smtp_username)"
                 @click="testEmail"
               >
                 {{ testingEmail ? "发送中..." : "" }}
                 <svg v-if="!testingEmail" class="test-btn-icon" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M874.666667 181.333333H149.333333c-40.533333 0-74.666667 34.133333-74.666666 74.666667v512c0 40.533333 34.133333 74.666667 74.666666 74.666667h725.333334c40.533333 0 74.666667-34.133333 74.666666-74.666667V256c0-40.533333-34.133333-74.666667-74.666666-74.666667z m-725.333334 64h725.333334c6.4 0 10.666667 4.266667 10.666666 10.666667v25.6L512 516.266667l-373.333333-234.666667V256c0-6.4 4.266667-10.666667 10.666666-10.666667z m725.333334 533.333334H149.333333c-6.4 0-10.666667-4.266667-10.666666-10.666667V356.266667l356.266666 224c4.266667 4.266667 10.666667 4.266667 17.066667 4.266666s12.8-2.133333 17.066667-4.266666l356.266666-224V768c0 6.4-4.266667 10.666667-10.666666 10.666667z"/></svg>
                 <span>发送测试邮件</span>
-              </button>
+              </HeadlessButton>
             </div>
             <div class="sub-hint-row">
               <div class="muted sub-hint">更改后自动生效并保存</div>
@@ -686,16 +687,14 @@ onMounted(loadAll);
                 </div>
               </details>
               <div class="test-row single-action">
-                <button
-                  type="button"
-                  class="btn test-btn"
+                <HeadlessButton
                   :disabled="testingPushplus || (!form.pushplus_token && !form.pushplus_token_configured)"
                   @click="testPushPlus"
                 >
                   {{ testingPushplus ? "发送中..." : "" }}
                   <svg v-if="!testingPushplus" class="test-btn-icon" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M746.666667 949.333333H277.333333c-40.533333 0-74.666667-34.133333-74.666666-74.666666V149.333333c0-40.533333 34.133333-74.666667 74.666666-74.666666h469.333334c40.533333 0 74.666667 34.133333 74.666666 74.666666v725.333334c0 40.533333-34.133333 74.666667-74.666666 74.666666z m-469.333334-810.666666c-6.4 0-10.666667 4.266667-10.666666 10.666666v725.333334c0 6.4 4.266667 10.666667 10.666666 10.666666h469.333334c6.4 0 10.666667-4.266667 10.666666-10.666666V149.333333c0-6.4-4.266667-10.666667-10.666666-10.666666H277.333333z"/><path d="M512 768m-42.666667 0a42.666667 42.666667 0 1 0 85.333334 0 42.666667 42.666667 0 1 0-85.333334 0Z"/><path d="M597.333333 245.333333h-170.666666c-17.066667 0-32-14.933333-32-32s14.933333-32 32-32h170.666666c17.066667 0 32 14.933333 32 32s-14.933333 32-32 32z"/></svg>
                   <span>发送测试消息</span>
-                </button>
+                </HeadlessButton>
               </div>
             </div>
             <div class="sub-hint-row">
@@ -719,7 +718,7 @@ onMounted(loadAll);
             :aria-invalid="!!nameErr"
             placeholder="分类名称，如：流媒体、云服务"
           />
-          <button class="btn btn-primary" :disabled="!CAN_ADD_CAT" @click="addCategory">{{ adding ? '添加中...' : '添加分类' }}</button>
+          <HeadlessButton variant="primary" :disabled="!CAN_ADD_CAT" @click="addCategory">{{ adding ? '添加中...' : '添加分类' }}</HeadlessButton>
         </div>
         <div v-if="nameErr" class="field-err">{{ nameErr }}</div>
         <div class="muted sub-hint" style="margin-top:6px">最多{{ MAX_CAT_COUNT }}个</div>
@@ -746,8 +745,8 @@ onMounted(loadAll);
           按模板内的填写说明填好数据后「导入 CSV」。
         </p>
         <div class="backup-actions">
-          <button class="btn" @click="doDownloadTemplate">下载导入模板</button>
-          <button class="btn" @click="doExportCsv">导出 CSV</button>
+          <HeadlessButton @click="doDownloadTemplate">下载导入模板</HeadlessButton>
+          <HeadlessButton @click="doExportCsv">导出 CSV</HeadlessButton>
           <label class="btn file-btn">导入 CSV
             <input type="file" accept=".csv" hidden @change="onImportFile('csv', $event)" />
           </label>
@@ -760,9 +759,9 @@ onMounted(loadAll);
       <div class="card">
         <div class="section-header">
           <h3>运行日志</h3>
-          <button class="btn btn-sm" :disabled="logLoading" @click="loadLogTail">
+          <HeadlessButton size="sm" :disabled="logLoading" @click="loadLogTail">
             {{ logLoading ? "加载中…" : "刷新" }}
-          </button>
+          </HeadlessButton>
         </div>
         <p class="muted">
           最近 {{ LOG_LINES }} 行（{{ logFile || "app.log" }}）。日志按大小轮转（单文件 2MB，保留 5 份），

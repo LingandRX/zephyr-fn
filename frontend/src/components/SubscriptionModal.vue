@@ -10,6 +10,7 @@ import { toast } from "../utils/ui.js";
 import HeadlessListbox from "./HeadlessListbox.vue";
 import HeadlessDatePicker from "./HeadlessDatePicker.vue";
 import HeadlessSwitch from "./HeadlessSwitch.vue";
+import HeadlessButton from "./HeadlessButton.vue";
 
 const props = defineProps({
   modelValue: {
@@ -357,10 +358,10 @@ async function save() {
           </div>
         </div>
         <div class="modal-foot">
-          <button type="button" class="btn" @click="resetForm">重置</button>
+          <HeadlessButton @click="resetForm">重置</HeadlessButton>
           <div class="modal-foot-actions">
-            <button type="button" class="btn" @click="close">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="saving">保存</button>
+            <HeadlessButton @click="close">取消</HeadlessButton>
+            <HeadlessButton type="submit" variant="primary" :disabled="saving">保存</HeadlessButton>
           </div>
         </div>
       </form>

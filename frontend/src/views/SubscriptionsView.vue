@@ -10,6 +10,7 @@ import { ui, toast, openNewSub } from "../utils/ui.js";
 import HeadlessListbox from "../components/HeadlessListbox.vue";
 import HeadlessDatePicker from "../components/HeadlessDatePicker.vue";
 import SubscriptionModal from "../components/SubscriptionModal.vue";
+import HeadlessButton from "../components/HeadlessButton.vue";
 
 const subs = ref([]);
 const cats = ref([]);
@@ -408,10 +409,10 @@ onMounted(loadAll);
         </div>
         </div>
         <div class="modal-foot">
-          <button type="button" class="btn" :disabled="delBusy" @click="closeDel">取消</button>
-          <button type="button" class="btn btn-danger" :disabled="delBusy" @click="confirmDel">
+          <HeadlessButton :disabled="delBusy" @click="closeDel">取消</HeadlessButton>
+          <HeadlessButton variant="danger" :disabled="delBusy" @click="confirmDel">
             {{ delBusy ? "删除中…" : "确认删除" }}
-          </button>
+          </HeadlessButton>
         </div>
       </div>
     </div>
@@ -436,10 +437,10 @@ onMounted(loadAll);
         </div>
         </div>
         <div class="modal-foot">
-          <button type="button" class="btn" :disabled="renewBusy" @click="closeRenew">取消</button>
-          <button type="button" class="btn btn-primary" :disabled="renewBusy" @click="confirmRenew">
+          <HeadlessButton :disabled="renewBusy" @click="closeRenew">取消</HeadlessButton>
+          <HeadlessButton variant="primary" :disabled="renewBusy" @click="confirmRenew">
             {{ renewBusy ? "续费中…" : "确认续费" }}
-          </button>
+          </HeadlessButton>
         </div>
       </div>
     </div>
