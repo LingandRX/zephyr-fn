@@ -403,6 +403,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
+/* iOS 风格时间选择器 */
 .custom-time-picker {
   position: relative;
   display: block;
@@ -414,28 +415,34 @@ onBeforeUnmount(() => {
 
 .custom-time-picker-trigger {
   width: 100%;
-  height: 38px;
+  height: 44px;
   box-sizing: border-box;
-  padding: 0 8px 0 12px;
+  padding: 0 12px;
   background: var(--card-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   color: var(--text);
-  font-size: var(--fs-sm);
+  font-size: 16px;
+  font-weight: 500;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
   cursor: pointer;
   outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: all 0.2s ease;
   text-align: left;
+}
+
+.custom-time-picker-trigger:hover {
+  border-color: var(--primary);
+  background: var(--card);
 }
 
 .custom-time-picker-trigger:focus-visible,
 .custom-time-picker.is-open .custom-time-picker-trigger {
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.2);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.15);
 }
 
 .custom-time-picker-label {
@@ -443,17 +450,19 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  letter-spacing: 0.5px;
 }
 
 .custom-time-picker-label.is-placeholder {
   color: var(--muted);
+  font-weight: 400;
 }
 
 .custom-time-picker-actions {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
   flex-shrink: 0;
 }
 
@@ -461,11 +470,11 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   color: var(--muted);
   cursor: pointer;
-  transition: color 0.15s ease;
+  transition: color 0.2s ease;
 }
 
 .custom-time-picker.is-open .custom-time-picker-icon {
@@ -476,164 +485,187 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: none;
-  background: transparent;
+  background: var(--card);
   border-radius: 50%;
   color: var(--muted);
   cursor: pointer;
-  transition: color 0.15s ease, background-color 0.15s ease;
+  transition: all 0.2s ease;
   outline: none;
 }
 
 .custom-time-picker-clear-btn:hover {
   color: var(--text);
-  background-color: var(--card);
+  background: var(--border);
+  transform: scale(1.05);
 }
 
 .custom-time-picker-trigger.is-disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
+  background: var(--card-2);
 }
 
-/* 下拉面板 */
+/* iOS 风格下拉面板 */
 .custom-time-picker-dropdown {
-  width: 196px;
-  max-width: min(196px, calc(100vw - 24px));
+  width: 280px;
+  max-width: min(280px, calc(100vw - 24px));
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-modal);
+  border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
   box-sizing: border-box;
-  padding: 8px 10px 10px;
+  padding: 16px;
   user-select: none;
   outline: none;
+  overflow: hidden;
 }
 
+/* iOS 风格头部 */
 .time-header {
   display: flex;
   align-items: center;
-  justify-content: space-around;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 6px;
+  justify-content: center;
+  gap: 20px;
+  padding-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .time-col-title {
-  font-size: var(--fs-xs);
+  font-size: 13px;
   font-weight: 600;
   color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  min-width: 40px;
+  text-align: center;
 }
 
+/* iOS 风格滚轮容器 */
 .time-body {
   display: flex;
-  gap: 8px;
-  height: 180px;
+  gap: 12px;
+  height: 200px;
+  background: var(--bg-2);
+  border-radius: 12px;
+  padding: 8px;
+  position: relative;
 }
 
+/* iOS 风格滚轮列 */
 .time-column {
   flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 0 2px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  gap: 4px;
+  padding: 4px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  scroll-snap-type: y mandatory;
 }
 
 .time-column::-webkit-scrollbar {
-  width: 4px;
+  display: none;
 }
 
-.time-column::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.time-column::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
-  transition: background-color 0.15s ease;
-}
-
-.time-column::-webkit-scrollbar-thumb:hover {
-  background: var(--muted);
-}
-
+/* iOS 风格滚轮单元格 */
 .time-cell {
-  height: 28px;
+  height: 40px;
   flex-shrink: 0;
   border: none;
   background: transparent;
   color: var(--text);
-  font-size: var(--fs-sm);
-  border-radius: var(--radius-sm);
+  font-size: 18px;
+  font-weight: 500;
+  border-radius: 10px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   padding: 0;
   outline: none;
+  scroll-snap-align: center;
+  letter-spacing: 0.5px;
 }
 
 .time-cell:hover {
-  background-color: var(--card-2);
+  background-color: rgba(var(--primary-rgb), 0.1);
   color: var(--primary);
+  transform: scale(1.02);
 }
 
 .time-cell.is-selected {
-  background: linear-gradient(135deg, var(--grad-a), var(--grad-b));
+  background: var(--primary);
   color: #fff;
   font-weight: 600;
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.3);
 }
 
+/* iOS 风格底部 */
 .time-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 8px;
-  padding-top: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid var(--border);
 }
 
 .footer-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .quick-btn {
   border: none;
   background: transparent;
-  font-size: var(--fs-xs);
+  font-size: 14px;
+  font-weight: 500;
   color: var(--muted);
   cursor: pointer;
-  padding: 4px 6px;
-  border-radius: var(--radius-sm);
-  transition: color 0.15s ease, background-color 0.15s ease;
+  padding: 8px 12px;
+  border-radius: 10px;
+  transition: all 0.2s ease;
   outline: none;
+  min-width: 48px;
+  text-align: center;
 }
 
 .quick-btn:hover {
   background-color: var(--card-2);
   color: var(--text);
+  transform: translateY(-1px);
+}
+
+.quick-btn:active {
+  transform: translateY(0);
 }
 
 .quick-btn.confirm {
-  color: var(--primary);
-  font-weight: 500;
+  color: #fff;
+  background: var(--primary);
+  font-weight: 600;
 }
 
 .quick-btn.confirm:hover {
-  background-color: var(--card-2);
-  color: var(--grad-a);
+  background: var(--primary-2);
+  box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.3);
+}
+
+.quick-btn.clear {
+  color: var(--red);
 }
 
 .quick-btn.clear:hover {
-  color: var(--red);
+  background: rgba(239, 68, 68, 0.1);
 }
 
 /* 动效 */
@@ -646,5 +678,29 @@ onBeforeUnmount(() => {
 .dropdown-fade-leave-to {
   opacity: 0;
   transform: translateY(-4px);
+}
+
+/* iOS 风格滚动指示器 */
+.time-body::before,
+.time-body::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 40px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.time-body::before {
+  top: 8px;
+  background: linear-gradient(to bottom, var(--bg-2), transparent);
+  border-radius: 12px 12px 0 0;
+}
+
+.time-body::after {
+  bottom: 8px;
+  background: linear-gradient(to top, var(--bg-2), transparent);
+  border-radius: 0 0 12px 12px;
 }
 </style>
