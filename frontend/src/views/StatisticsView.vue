@@ -507,6 +507,7 @@ onActivated(() => {
 
 .desktop-cat-table {
   width: 100%;
+  padding: 0 2px;
   overflow-x: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
