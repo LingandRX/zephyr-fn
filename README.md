@@ -71,7 +71,6 @@
 │   │   └── utils/            # 格式化、UI状态与交互工具
 ├── dev.sh                    # 一键本地预览（Vue 或 vanilla）
 ├── tools/
-│   ├── gen_icons.py          # 图标生成脚本（纯 Python）
 │   ├── seed_demo_data.py     # 演示数据生成与灌库脚本
 │   └── build.sh              # 打包前构建：Vite build → 同步 app/www → 清理 __pycache__
 └── tests/                    # 测试套件（单元测试、安全测试、回归测试）

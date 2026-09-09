@@ -1,12 +1,11 @@
-﻿# 一键打包流程：构建前端 -> 生成图标 -> 干净暂存（可选升版本）-> fnpack -> 校验
+﻿# 一键打包流程：构建前端 -> 干净暂存（可选升版本）-> fnpack -> 校验
 #
 # 流程：
 #   1. .\build.ps1                # 前端构建 & 资源同步 & 清理缓存
-#   2. python tools/gen_icons.py  # 图标生成
-#   3. tools/vendor_deps.py       # 预置 Linux cp312 轮子到 app/backend/vendor
-#   4. tools/fpk_stage.py prepare # 排除 .venv/.idea 等；默认只在暂存目录自增 version
-#   5. fnpack build -d <stage>    # 只打包干净目录
-#   6. tools/fpk_stage.py finalize# 校验通过后才把新版本写回仓库 manifest
+#   2. tools/vendor_deps.py       # 预置 Linux cp312 轮子到 app/backend/vendor
+#   3. tools/fpk_stage.py prepare # 排除 .venv/.idea 等；默认只在暂存目录自增 version
+#   4. fnpack build -d <stage>    # 只打包干净目录
+#   5. tools/fpk_stage.py finalize# 校验通过后才把新版本写回仓库 manifest
 #
 # 用法：
 #   .\package.ps1
@@ -90,18 +89,13 @@ if ($PSVersionTable.PSEdition -eq "Core") {
 & $hostExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "build.ps1")
 Assert-ExitCode "build.ps1"
 
-# 2. 图标生成
-Write-Host "==> [2/6] 执行图标生成 (tools/gen_icons.py)..."
-& $PythonCmd (Join-Path $PSScriptRoot "tools\gen_icons.py")
-Assert-ExitCode "tools/gen_icons.py"
-
-# 3. 预置飞牛可用的 Linux 依赖（不要在 NAS 上 pip install 系统 Python）
-Write-Host "==> [3/6] 预置 Linux vendor 依赖..."
+# 2. 预置飞牛可用的 Linux 依赖（不要在 NAS 上 pip install 系统 Python）
+Write-Host "==> [2/5] 预置 Linux vendor 依赖..."
 & $PythonCmd (Join-Path $PSScriptRoot "tools\vendor_deps.py")
 Assert-ExitCode "tools/vendor_deps.py"
 
-# 4. 生成干净暂存目录（版本号只改暂存副本，失败不会污染仓库 manifest）
-Write-Host "==> [4/6] 准备干净打包目录..."
+# 3. 生成干净暂存目录（版本号只改暂存副本，失败不会污染仓库 manifest）
+Write-Host "==> [3/5] 准备干净打包目录..."
 $prepareArgs = @((Join-Path $PSScriptRoot "tools\fpk_stage.py"), "prepare")
 if (-not $skipBump) {
     $prepareArgs += "--bump"
@@ -116,8 +110,8 @@ if ([string]::IsNullOrWhiteSpace($STAGE)) {
 }
 $STAGE = $STAGE.Trim()
 
-# 5. fnpack 打包
-Write-Host "==> [5/6] 执行 fnpack 打包..."
+# 4. fnpack 打包
+Write-Host "==> [4/5] 执行 fnpack 打包..."
 
 if ($env:OS -match "Windows") {
     $OS_NAME = "windows"
@@ -164,7 +158,7 @@ if (-not [string]::IsNullOrEmpty($FNPACK_BIN)) {
     exit 1
 }
 
-Write-Host "==> [6/6] 规范化权限并校验 app.tgz..."
+Write-Host "==> [5/5] 规范化权限并校验 app.tgz..."
 $finalizeArgs = @((Join-Path $PSScriptRoot "tools\fpk_stage.py"), "finalize", "--stage", $STAGE)
 $FPK_PATH = (& $PythonCmd @finalizeArgs | Select-Object -Last 1)
 Assert-ExitCode "fpk_stage.py finalize"
