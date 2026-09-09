@@ -1,21 +1,37 @@
 <script setup>
 // 日历视图：按月渲染扣费 / 服务到期事件
-import { ref, computed, watch, nextTick, onMounted, onActivated, onBeforeUnmount } from "vue";
+// 视觉：iOS 风格（毛玻璃卡片 / 圆形日期 / 彩色事件胶囊）
+// 交互：Headless UI Dialog 承载窄屏「扣费明细」底部抽屉，Popover 承载窄屏图例
+import { ref, computed, onMounted, onActivated } from "vue";
+import {
+  Dialog,
+  DialogPanel,
+  DialogTitle,
+  Popover,
+  PopoverButton,
+  PopoverPanel,
+  TransitionRoot,
+  TransitionChild,
+} from "@headlessui/vue";
 import { getCalendar } from "../services/api.js";
 import { fmtCents } from "../utils/format.js";
 import { toast } from "../utils/ui.js";
 import HeadlessDatePicker from "../components/HeadlessDatePicker.vue";
-
 
 const now = new Date();
 const calYear = ref(now.getFullYear());
 const calMonth = ref(now.getMonth() + 1);
 const events = ref([]);
 const selectedDateStr = ref(null);
-const detailsCardRef = ref(null);
-const detailsVisible = ref(false);
-const detailsVisibilityReady = ref(false);
-let detailsObserver = null;
+// 窄屏明细底部抽屉（Headless UI Dialog）开合态
+const sheetOpen = ref(false);
+// 当月网格行数（5 或 6）：桌面端用它等分行高，6 行月份不再截断月末日期
+const calRows = ref(5);
+
+/** 本地日期 → YYYY-MM-DD。不能用 toISOString()：UTC 偏移会让「今天」错一天 */
+function toDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 // 区分事件类型辅助方法
 function initialOf(name) {
@@ -78,7 +94,7 @@ const calendarPickerDate = computed({
   },
 });
 
-// 6 行 7 列 = 42 格
+// 网格单元格（含跨月占位）
 const grid = ref([]);
 
 async function loadMonth() {
@@ -90,6 +106,7 @@ async function loadMonth() {
   const nextM = m === 12 ? 1 : m + 1;
 
   try {
+    // 一次性取上/当/下三个月：跨月占位格也要显示事件
     const [prevEvents, curEvents, nextEvents] = await Promise.all([
       getCalendar(prevY, prevM),
       getCalendar(y, m),
@@ -103,71 +120,58 @@ async function loadMonth() {
   buildGrid();
 }
 
+function makeCell(dateStr, day, other, todayStr, byDate) {
+  const dayEvents = byDate[dateStr] || [];
+  return {
+    day,
+    dateStr,
+    other,
+    today: dateStr === todayStr,
+    events: dayEvents,
+    visibleEvents: dayEvents.slice(0, 2),
+    more: Math.max(0, dayEvents.length - 2),
+  };
+}
+
 function buildGrid() {
   const year = calYear.value;
   const month = calMonth.value;
   const byDate = {};
   for (const e of events.value) (byDate[e.date] = byDate[e.date] || []).push(e);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = toDateStr(new Date());
 
   const first = new Date(year, month - 1, 1);
-  const startDow = first.getDay();
+  const startDow = first.getDay(); // 0 = 周日，与表头「日一二三四五六」一致
   const daysInMonth = new Date(year, month, 0).getDate();
+
+  // 行数按需 5 或 6 行（至少 5 行保持高度稳定）：
+  // 固定 35 格会让 startDow + 天数 > 35 的月份丢掉月末日期（如 2026-08 丢 30/31 日）
+  const rows = Math.max(5, Math.ceil((startDow + daysInMonth) / 7));
+  calRows.value = rows;
+  const totalCells = rows * 7;
 
   const cells = [];
   // 上月占位
   for (let i = 0; i < startDow; i++) {
-    const d = new Date(year, month - 1, -startDow + i + 1);
-    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    const dayEvents = byDate[ds] || [];
-    cells.push({
-      day: d.getDate(),
-      dateStr: ds,
-      other: true,
-      today: ds === todayStr,
-      events: dayEvents,
-      visibleEvents: dayEvents.slice(0, 2),
-      more: dayEvents.length > 2 ? dayEvents.length - 2 : 0,
-    });
+    const d = new Date(year, month - 1, i - startDow + 1);
+    cells.push(makeCell(toDateStr(d), d.getDate(), true, todayStr, byDate));
   }
   // 当月
   for (let day = 1; day <= daysInMonth; day++) {
     const ds = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    const dayEvents = byDate[ds] || [];
-    cells.push({
-      day,
-      dateStr: ds,
-      other: false,
-      today: ds === todayStr,
-      events: dayEvents,
-      visibleEvents: dayEvents.slice(0, 2),
-      more: dayEvents.length > 2 ? dayEvents.length - 2 : 0,
-    });
+    cells.push(makeCell(ds, day, false, todayStr, byDate));
   }
-  // 下月占位：固定保证 35 格（5 行 × 7 列）
+  // 下月占位
   const nextMonthYear = month === 12 ? year + 1 : year;
   const nextMonthNum = month === 12 ? 1 : month + 1;
   let nextDay = 1;
-  while (cells.length < 35) {
+  while (cells.length < totalCells) {
     const ds = `${nextMonthYear}-${String(nextMonthNum).padStart(2, "0")}-${String(nextDay).padStart(2, "0")}`;
-    const dayEvents = byDate[ds] || [];
-    cells.push({
-      day: nextDay,
-      dateStr: ds,
-      other: true,
-      today: ds === todayStr,
-      events: dayEvents,
-      visibleEvents: dayEvents.slice(0, 2),
-      more: dayEvents.length > 2 ? dayEvents.length - 2 : 0,
-    });
+    cells.push(makeCell(ds, nextDay, true, todayStr, byDate));
     nextDay++;
   }
-
-  // 若某些月份（如跨 6 周）超过 35 格，截取或维持 5 行（35 格）
-  grid.value = cells.slice(0, 35);
+  grid.value = cells;
 
   // 切换月份时，如果之前未选中或者选中日期不在当月：
   // 保持与之前类似的默认行为；但若之前明细已在打开状态，则寻找当月第一个有事件的日期并选中，
@@ -175,7 +179,7 @@ function buildGrid() {
   const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
   if (!selectedDateStr.value || !selectedDateStr.value.startsWith(monthPrefix)) {
     if (detailsOpen.value) {
-      const firstEventCell = grid.value.find((c) => !c.other && c.events && c.events.length > 0);
+      const firstEventCell = grid.value.find((c) => !c.other && c.events.length > 0);
       if (firstEventCell) {
         selectedDateStr.value = firstEventCell.dateStr;
       } else {
@@ -226,48 +230,21 @@ const isOnlyServiceEnd = computed(() => {
   return events.length > 0 && events.every((e) => e.event_type === "service_end");
 });
 
-// 明细展开态：选中且有事件的日期（供 details-collapsed 类驱动开合动画）
+// 明细展开态：选中且有事件的日期（供 details-collapsed 类驱动桌面侧栏开合）
 const detailsOpen = computed(() => !!selectedDateStr.value && selectedDayEvents.value.length > 0);
 
-function observeDetailsCard() {
-  detailsObserver?.disconnect();
-  detailsObserver = null;
-  // 切换日期时先隐藏跳转按钮，等新明细卡片完成可见性检测后再决定是否显示，避免闪烁。
-  detailsVisibilityReady.value = false;
-
-  if (!selectedDayEvents.value.length) {
-    detailsVisible.value = false;
-    return;
-  }
-
-  nextTick(() => {
-    const card = detailsCardRef.value;
-    if (!card) return;
-
-    if (typeof IntersectionObserver === "undefined") {
-      detailsVisible.value = false;
-      detailsVisibilityReady.value = true;
-      return;
-    }
-
-    const observer = new IntersectionObserver(([entry]) => {
-      if (detailsObserver !== observer) return;
-      detailsVisible.value = entry.isIntersecting;
-      detailsVisibilityReady.value = true;
-    }, { threshold: 0.25 });
-    detailsObserver = observer;
-    observer.observe(card);
-  });
+function openSheet() {
+  sheetOpen.value = true;
 }
 
-function scrollToDetails() {
-  detailsCardRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+function closeSheet() {
+  sheetOpen.value = false;
 }
 
-// 关闭扣费明细（浮层/并排两种模式共用）：清空选中日期即可
+// 关闭扣费明细（桌面侧栏）：清空选中日期即可
 function closeDetails() {
   selectedDateStr.value = null;
-  detailsVisible.value = false;
+  sheetOpen.value = false;
 }
 
 function prevMonth(delta) {
@@ -281,24 +258,26 @@ function goToday() {
   const n = new Date();
   calYear.value = n.getFullYear();
   calMonth.value = n.getMonth() + 1;
-  const todayStr = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
-  selectedDateStr.value = todayStr;
+  selectedDateStr.value = toDateStr(n);
   loadMonth();
 }
 
-watch(() => [selectedDateStr.value, selectedDayEvents.value.length], observeDetailsCard);
 // keep-alive 下「切换回本页」不会重新 onMounted，需在 onActivated 重新拉取当月数据，
 // 否则在其他页面新增订阅后切回时日历仍显示旧数据。
 onMounted(loadMonth);
 onActivated(loadMonth);
-onBeforeUnmount(() => detailsObserver?.disconnect());
 </script>
 
 <template>
   <div class="page cal-page">
     <div class="cal-head">
       <div class="cal-nav">
-        <button class="btn btn-sm" title="上一月" @click="prevMonth(-1)">‹</button>
+        <button class="cal-nav-btn" type="button" title="上一月" aria-label="上一月" @click="prevMonth(-1)">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+
         <div class="cal-title-wrap">
           <HeadlessDatePicker
             v-model="calendarPickerDate"
@@ -309,9 +288,48 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
             @clear="goToday"
           />
         </div>
-        <button class="btn btn-sm" title="下一月" @click="prevMonth(1)">›</button>
-        <!-- <button class="btn btn-sm btn-ghost today-btn" @click="goToday">今天</button> -->
+
+        <button class="cal-nav-btn" type="button" title="下一月" aria-label="下一月" @click="prevMonth(1)">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+
+        <button class="cal-today-btn" type="button" @click="goToday">今天</button>
+
+        <!-- 窄屏图例：用 Headless UI Popover 收纳，替代直接隐藏图例。
+             注意：包裹层必须是真实元素。Headless UI Popover 根节点是 Fragment，
+             父组件的 scoped data-v 不会继承到它渲染的 div 上；
+             把 class 直接写在 <Popover> 上会失效（桌面端也会显示、面板也会锚错容器）。 -->
+        <div class="cal-legend-popover">
+          <Popover>
+            <PopoverButton class="cal-legend-btn" title="图例" aria-label="事件类型图例">
+              <!-- 图例图标：三个事件色点 + 文本线，与右上角内联图例配色一致 -->
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="4.5" cy="7" r="2" style="fill: var(--ios-blue)" />
+                <circle cx="4.5" cy="12" r="2" style="fill: var(--ios-orange)" />
+                <circle cx="4.5" cy="17" r="2" style="fill: var(--ios-red)" />
+                <path d="M10 7h9.5M10 12h9.5M10 17h9.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+            </PopoverButton>
+            <PopoverPanel
+              transition
+              enter="legend-panel-enter"
+              enter-from="legend-panel-from"
+              enter-to="legend-panel-to"
+              leave="legend-panel-leave"
+              leave-from="legend-panel-to"
+              leave-to="legend-panel-from"
+              class="cal-legend-panel"
+            >
+              <div class="legend-item"><i class="dot dot-new"></i>首次扣费</div>
+              <div class="legend-item"><i class="dot dot-due"></i>续费扣费</div>
+              <div class="legend-item"><i class="dot dot-end"></i>服务到期</div>
+            </PopoverPanel>
+          </Popover>
+        </div>
       </div>
+
       <div class="cal-legend">
         <span class="legend-item"><i class="dot dot-new"></i>首次扣费</span>
         <span class="legend-item"><i class="dot dot-due"></i>续费扣费</span>
@@ -321,27 +339,31 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
 
     <div class="cal-content">
       <div class="card cal-card">
-        <div class="cal-grid">
+        <div class="cal-grid" :style="{ '--cal-rows': calRows }">
           <div v-for="(d, i) in ['日', '一', '二', '三', '四', '五', '六']" :key="'dow-' + i" class="cal-dow">{{ d }}</div>
           <div
             v-for="(c, i) in grid"
             :key="c.dateStr"
             class="cal-day"
-            :style="{ '--d': 'calc(' + Math.floor(i / 7) * 18 + 'ms)' }"
+            role="button"
+            tabindex="0"
+            :aria-label="`${c.dateStr}${c.events.length ? '，' + c.events.length + ' 笔事件' : ''}`"
+            :style="{ '--d': Math.floor(i / 7) * 18 + 'ms' }"
             :class="{
               other: c.other,
               today: c.today,
               selected: c.dateStr === selectedDateStr && !c.other,
-              'has-events': c.events && c.events.length > 0
+              'has-events': c.events.length > 0
             }"
             @click="selectDay(c)"
+            @keydown.enter="selectDay(c)"
+            @keydown.space.prevent="selectDay(c)"
           >
             <div class="cal-day-header">
-              <span class="num">{{ c.day }}</span>
-              <span v-if="c.today" class="today-tag">今</span>
+              <span class="cal-day-num">{{ c.day }}</span>
             </div>
 
-            <!-- 桌面端/宽屏：文字条模式 -->
+            <!-- 桌面端/宽屏：事件胶囊 -->
             <div class="events-wrap desktop-events">
               <template v-if="c.visibleEvents">
                 <div
@@ -360,8 +382,8 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
               </template>
             </div>
 
-            <!-- 移动端：精致圆点模式 -->
-            <div class="mobile-dots" v-if="c.events && c.events.length">
+            <!-- 移动端：圆点 -->
+            <div class="mobile-dots" v-if="c.events.length">
               <span
                 v-for="(e, j) in c.events.slice(0, 3)"
                 :key="j"
@@ -374,82 +396,185 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
         </div>
       </div>
 
-      <!-- 选中日期明细：桌面端浮叠在日历右上/并排，窄屏显示在日历下方；
-          常驻元素 + details-collapsed 类控制收起态，桌面端开合带平滑动画 -->
+      <!-- 桌面端明细侧栏：常驻元素 + details-collapsed 类控制收起态，宽度平滑开合 -->
       <div
         id="day-details"
-        ref="detailsCardRef"
         class="card day-details-card"
         :class="{ 'details-collapsed': !detailsOpen }"
       >
-        <!-- 内容容器以日期为 key：切换日期时仅内容淡入，宽度/位置不变 -->
         <div :key="selectedDateStr" class="details-body">
-        <div class="details-head">
-          <div class="details-date">
-            <span class="details-date-label">
-              <svg class="detail-cal-icon" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M853.333333 149.333333h-138.666666V106.666667c0-17.066667-14.933333-32-32-32s-32 14.933333-32 32v42.666666h-277.333334V106.666667c0-17.066667-14.933333-32-32-32s-32 14.933333-32 32v42.666666H170.666667c-40.533333 0-74.666667 34.133333-74.666667 74.666667v618.666667C96 883.2 130.133333 917.333333 170.666667 917.333333h682.666666c40.533333 0 74.666667-34.133333 74.666667-74.666666v-618.666667C928 183.466667 893.866667 149.333333 853.333333 149.333333zM170.666667 213.333333h138.666666v64c0 17.066667 14.933333 32 32 32s32-14.933333 32-32v-64h277.333334v64c0 17.066667 14.933333 32 32 32s32-14.933333 32-32v-64H853.333333c6.4 0 10.666667 4.266667 10.666667 10.666667v194.133333c-4.266667-2.133333-6.4-2.133333-10.666667-2.133333H170.666667c-4.266667 0-6.4 0-10.666667 2.133333v-194.133333c0-6.4 4.266667-10.666667 10.666667-10.666667z m682.666666 640H170.666667c-6.4 0-10.666667-4.266667-10.666667-10.666666V477.866667c4.266667 2.133333 6.4 2.133333 10.666667 2.133333h682.666666c4.266667 0 6.4 0 10.666667-2.133333v364.8c0 6.4-4.266667 10.666667-10.666667 10.666666z"/><path d="M384 608h-85.333333c-17.066667 0-32 14.933333-32 32s14.933333 32 32 32h85.333333c17.066667 0 32-14.933333 32-32s-14.933333-32-32-32zM725.333333 608h-192c-17.066667 0-32 14.933333-32 32s14.933333 32 32 32h192c17.066667 0 32-14.933333 32-32s-14.933333-32-32-32z"/></svg>
-              {{ selectedDateStr }} {{ isOnlyServiceEnd ? '到期明细' : '扣费明细' }}
-            </span>
-            <span class="details-count">
-              共 {{ selectedDayEvents.length }} 笔
-              <template v-if="selectedDayTotalFormatted"> (合计 {{ selectedDayTotalFormatted }})</template>
-            </span>
+          <div class="details-head">
+            <div class="details-date">
+              <span class="details-date-label">
+                <svg class="detail-cal-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.8" />
+                  <path d="M8 3v4M16 3v4M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                </svg>
+                {{ selectedDateStr }} {{ isOnlyServiceEnd ? '到期明细' : '扣费明细' }}
+              </span>
+              <span class="details-count">
+                共 {{ selectedDayEvents.length }} 笔
+                <template v-if="selectedDayTotalFormatted"> (合计 {{ selectedDayTotalFormatted }})</template>
+              </span>
+            </div>
+            <button
+              type="button"
+              class="details-close"
+              title="关闭扣费明细"
+              aria-label="关闭扣费明细"
+              @click="closeDetails"
+            >
+              <svg class="detail-close-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              </svg>
+            </button>
           </div>
-          <button
-            type="button"
-            class="details-close"
-            title="关闭扣费明细"
-            aria-label="关闭扣费明细"
-            @click="closeDetails"
-          ><svg class="detail-close-icon" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M556.8 512L832 236.8c12.8-12.8 12.8-32 0-44.8-12.8-12.8-32-12.8-44.8 0L512 467.2l-275.2-277.333333c-12.8-12.8-32-12.8-44.8 0-12.8 12.8-12.8 32 0 44.8l275.2 277.333333-277.333333 275.2c-12.8 12.8-12.8 32 0 44.8 6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333L512 556.8 787.2 832c6.4 6.4 14.933333 8.533333 23.466667 8.533333s17.066667-2.133333 23.466666-8.533333c12.8-12.8 12.8-32 0-44.8L556.8 512z"/></svg></button>
-        </div>
-        <div class="details-list">
-          <div v-for="(e, idx) in selectedDayEvents" :key="idx" class="detail-item">
-            <div class="detail-left">
-              <span class="detail-avatar">{{ initialOf(e.name) }}</span>
-              <div class="detail-info">
-                <div class="detail-title-row">
-                  <span class="detail-name">{{ e.name }}</span>
-                  <span
-                    class="detail-type-tag"
-                    :class="getEventMeta(e).tagClass"
-                  >{{ getEventMeta(e).label }}</span>
+          <div class="details-list">
+            <div v-for="(e, idx) in selectedDayEvents" :key="idx" class="detail-item">
+              <div class="detail-left">
+                <span class="detail-avatar">{{ initialOf(e.name) }}</span>
+                <div class="detail-info">
+                  <div class="detail-title-row">
+                    <span class="detail-name">{{ e.name }}</span>
+                    <span class="detail-type-tag" :class="getEventMeta(e).tagClass">{{ getEventMeta(e).label }}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div class="detail-right">
-              <span class="detail-amount">{{ e.amount_formatted }}</span>
+              <div class="detail-right">
+                <span class="detail-amount">{{ e.amount_formatted }}</span>
+              </div>
             </div>
           </div>
-        </div>
         </div>
       </div>
     </div>
 
-    <!-- 窄屏时明细位于日历下方，用浮动按钮提示并快捷跳转 -->
+    <!-- 窄屏明细底部抽屉（Headless UI Dialog + Transition） -->
+    <TransitionRoot :show="sheetOpen" as="template">
+      <Dialog as="div" class="cal-sheet-root" @close="closeSheet">
+        <TransitionChild
+          as="template"
+          enter="cal-sheet-backdrop-enter"
+          enter-from="cal-sheet-backdrop-from"
+          enter-to="cal-sheet-backdrop-to"
+          leave="cal-sheet-backdrop-leave"
+          leave-from="cal-sheet-backdrop-to"
+          leave-to="cal-sheet-backdrop-from"
+        >
+          <div class="cal-sheet-backdrop" aria-hidden="true" />
+        </TransitionChild>
+
+        <div class="cal-sheet-container">
+          <TransitionChild
+            as="template"
+            enter="cal-sheet-panel-enter"
+            enter-from="cal-sheet-panel-from"
+            enter-to="cal-sheet-panel-to"
+            leave="cal-sheet-panel-leave"
+            leave-from="cal-sheet-panel-to"
+            leave-to="cal-sheet-panel-from"
+          >
+            <DialogPanel class="cal-sheet-panel">
+              <div class="cal-sheet-grabber" aria-hidden="true" />
+              <div class="details-head">
+                <DialogTitle as="h3" class="details-date-label">
+                  <svg class="detail-cal-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="3" y="5" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.8" />
+                    <path d="M8 3v4M16 3v4M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  </svg>
+                  {{ selectedDateStr }} {{ isOnlyServiceEnd ? '到期明细' : '扣费明细' }}
+                </DialogTitle>
+                <button
+                  type="button"
+                  class="details-close"
+                  title="关闭"
+                  aria-label="关闭扣费明细"
+                  @click="closeSheet"
+                >
+                  <svg class="detail-close-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  </svg>
+                </button>
+              </div>
+              <p class="cal-sheet-sub">
+                共 {{ selectedDayEvents.length }} 笔<template v-if="selectedDayTotalFormatted"> · 合计 {{ selectedDayTotalFormatted }}</template>
+              </p>
+              <div :key="selectedDateStr" class="details-body">
+                <div class="details-list">
+                  <div v-for="(e, idx) in selectedDayEvents" :key="idx" class="detail-item">
+                    <div class="detail-left">
+                      <span class="detail-avatar">{{ initialOf(e.name) }}</span>
+                      <div class="detail-info">
+                        <div class="detail-title-row">
+                          <span class="detail-name">{{ e.name }}</span>
+                          <span class="detail-type-tag" :class="getEventMeta(e).tagClass">{{ getEventMeta(e).label }}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="detail-right">
+                      <span class="detail-amount">{{ e.amount_formatted }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </DialogPanel>
+          </TransitionChild>
+        </div>
+      </Dialog>
+    </TransitionRoot>
+
+    <!-- 窄屏：明细位于抽屉中，用浮动按钮提示并唤起 -->
     <button
-      v-if="selectedDateStr && selectedDayEvents.length && detailsVisibilityReady && !detailsVisible"
+      v-if="selectedDateStr && selectedDayEvents.length"
       class="details-jump"
       type="button"
-      aria-label="跳转到扣费明细"
-      aria-controls="day-details"
-      @click="scrollToDetails"
+      aria-label="查看扣费明细"
+      @click="openSheet"
     >
       <span>查看扣费明细</span>
-      <span class="details-jump-arrow" aria-hidden="true">↓</span>
+      <span class="details-jump-count">{{ selectedDayEvents.length }}</span>
     </button>
   </div>
 </template>
 
 <style scoped>
+/* =====================================================================
+ * 日历页 · iOS 风格
+ * 毛玻璃卡片 / SF 排版 / 圆形日期 / 彩色事件胶囊 / 底部抽屉
+ * ===================================================================== */
+
+/* iOS 系统色板
+ * 注意：令牌必须挂在组件根元素 .cal-page 上，不能写进 scoped 的 `:root`。
+ * scoped 会把 `:root` 编译成 `[data-v-xxx]:root`，而 <html> 拿不到 data-v 属性，
+ * 整个变量块会失效（卡片背景、边框、日期圆形全部变透明）。 */
 .cal-page {
+  --ios-blue: #007aff;
+  --ios-blue-soft: rgba(0, 122, 255, 0.12);
+  --ios-green: #34c759;
+  --ios-orange: #ff9500;
+  --ios-orange-soft: rgba(255, 149, 0, 0.14);
+  --ios-red: #ff3b30;
+  --ios-red-soft: rgba(255, 59, 48, 0.12);
+  --ios-gray: #8e8e93;
+  --ios-fill: rgba(120, 120, 128, 0.08);
+  --ios-separator: rgba(60, 60, 67, 0.12);
+  --ios-card-bg: rgba(255, 255, 255, 0.72);
+  --ios-card-border: rgba(255, 255, 255, 0.5);
+
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
 }
 
-/* 顶部导航与图例 */
+:root[data-theme="dark"] .cal-page {
+  --ios-fill: rgba(120, 120, 128, 0.24);
+  --ios-separator: rgba(255, 255, 255, 0.1);
+  --ios-card-bg: rgba(28, 28, 30, 0.72);
+  --ios-card-border: rgba(255, 255, 255, 0.08);
+}
+
+/* ---------------- 顶部导航与图例 ---------------- */
 .cal-head {
   display: flex;
   align-items: center;
@@ -465,25 +590,71 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   gap: 8px;
   min-width: 0;
 }
+.cal-nav-btn {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--ios-fill);
+  color: var(--ios-blue);
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.18s ease, transform 0.18s ease;
+}
+.cal-nav-btn:hover {
+  background: var(--ios-separator);
+}
+.cal-nav-btn:active {
+  transform: scale(0.92);
+}
+.cal-nav-btn:focus-visible {
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
+}
+.cal-nav-btn svg {
+  width: 16px;
+  height: 16px;
+}
 .cal-title-wrap {
   position: relative;
   display: inline-flex;
   align-items: center;
-  min-width: 140px;
+  min-width: 150px;
 }
 .cal-title-wrap :deep(.custom-date-picker-trigger) {
-  height: 32px;
-  padding: 0 10px;
+  height: 34px;
+  padding: 0 12px;
   font-weight: 600;
   font-size: var(--fs-md);
-  background: var(--card);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 .cal-title-wrap :deep(.custom-date-picker-trigger:hover) {
-  background: var(--bg-2);
+  background: var(--ios-fill);
 }
-.today-btn {
-  font-size: var(--fs-xs);
-  padding: 4px 10px;
+.cal-today-btn {
+  height: 32px;
+  padding: 0 14px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--ios-blue-soft);
+  color: var(--ios-blue);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+.cal-today-btn:hover {
+  background: rgba(0, 122, 255, 0.2);
+}
+.cal-today-btn:active {
+  transform: scale(0.95);
 }
 
 .cal-legend {
@@ -491,91 +662,158 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   align-items: center;
   gap: 14px;
   font-size: var(--fs-xs);
-  color: var(--muted);
+  color: var(--ios-gray);
 }
 .legend-item {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   display: inline-block;
+  flex-shrink: 0;
 }
-.dot-new { background: var(--primary); }
-.dot-due { background: var(--amber); }
-.dot-end { background: var(--red); }
+.dot-new { background: var(--ios-blue); }
+.dot-due { background: var(--ios-orange); }
+.dot-end { background: var(--ios-red); }
 
-/* 日历卡片与网格 */
-.cal-content {
-  /* 单列（堆叠）为基座：日历在上、明细在下（≤1024px）。
-     桌面端（≥1025px）在下方 @media 中切换为 flex row 并排：日历在左、明细在右。 */
+/* 窄屏图例 Popover（桌面端隐藏，直接显示内联图例） */
+.cal-legend-popover {
+  display: none;
+  position: relative;
+}
+/* 注意：Headless UI 的 PopoverButton 根节点是 Fragment（button + focus guard），
+   父组件的 scoped data-v 不会继承到它渲染的 <button> 上，
+   因此必须用 :global() 才能命中（与 Sidebar.vue 处理 Dialog 类名同理）。 */
+:global(.cal-legend-btn) {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--ios-fill);
+  color: var(--ios-gray);
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+:global(.cal-legend-btn:hover) {
+  background: var(--ios-separator);
+  color: var(--text);
+}
+:global(.cal-legend-btn:active) {
+  transform: scale(0.92);
+}
+:global(.cal-legend-btn:focus-visible) {
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
+}
+:global(.cal-legend-btn svg) {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+.cal-legend-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--ios-card-border);
+  border-radius: 14px;
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.18);
+  color: var(--ios-gray);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+/* ---------------- 卡片与网格 ---------------- */
+.cal-content {
+  /* 基座：单列堆叠（日历在上、明细在抽屉中）。≥1025px 切换为并排。 */
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   min-width: 0;
 }
 .cal-content > .card {
-  /* .card 默认带下边距，栅格间距统一交给 cal-content 的 gap */
   margin-bottom: 0;
 }
-.cal-card {
-  padding: 12px;
-}
+.cal-card,
 .day-details-card {
-  min-width: 0;
-  scroll-margin-top: 12px;
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--ios-card-border);
+  border-radius: 16px;
+}
+.cal-card {
+  padding: 14px;
 }
 .cal-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
+  gap: 4px;
   width: 100%;
 }
 .cal-dow {
   text-align: center;
-  color: var(--muted);
-  font-size: var(--fs-xs);
+  color: var(--ios-gray);
+  font-size: 11px;
   font-weight: 600;
-  padding: 4px 0 8px;
+  letter-spacing: 0.04em;
+  padding: 2px 0 8px;
 }
 
-/* 单元格严格等宽等高 */
+/* 单元格：无边框，靠圆角底色区分状态 */
 .cal-day {
   min-width: 0;
-  height: 96px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  height: 98px;
   padding: 6px;
-  background: var(--bg-2);
+  border-radius: 12px;
+  background: transparent;
+  border: 1px solid transparent;
   display: flex;
   flex-direction: column;
   gap: 4px;
   box-sizing: border-box;
   overflow: hidden;
-  transition: border-color 0.15s ease, background 0.15s ease;
   cursor: pointer;
+  outline: none;
+  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 .cal-day:hover {
-  border-color: rgba(var(--primary-rgb), 0.4);
+  background: var(--ios-fill);
+}
+.cal-day:active {
+  transform: scale(0.985);
+}
+.cal-day:focus-visible {
+  box-shadow: 0 0 0 2px var(--ios-blue);
 }
 .cal-day.other {
-  opacity: 0.35;
-  background: transparent;
-  cursor: pointer;
+  opacity: 0.32;
 }
 .cal-day.other:hover {
-  opacity: 0.7;
+  opacity: 0.6;
 }
 .cal-day.today {
-  border-color: var(--primary);
-  background: rgba(var(--primary-rgb), 0.05);
+  background: var(--ios-red-soft);
 }
 .cal-day.selected {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 1px var(--primary);
+  background: var(--ios-blue-soft);
+  box-shadow: inset 0 0 0 1.5px var(--ios-blue);
 }
 
 /* 月切换时格子按行错峰浮现：格子以 dateStr 为 key，切月即重建触发动画 */
@@ -594,32 +832,40 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   animation-delay: var(--d, 0ms);
 }
 
-/* 日期表头 */
+/* 日期数字：iOS 圆形 */
 .cal-day-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   line-height: 1;
 }
-.cal-day .num {
+.cal-day-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 12px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  transition: background 0.18s ease, color 0.18s ease;
 }
-.cal-day.today .num {
-  color: var(--primary);
+.cal-day.today .cal-day-num {
+  color: var(--ios-red);
   font-weight: 700;
 }
-.today-tag {
-  font-size: 10px;
-  background: var(--primary);
+.cal-day.selected .cal-day-num {
+  background: var(--ios-blue);
   color: #fff;
-  padding: 1px 4px;
-  border-radius: 3px;
-  line-height: 1.1;
+}
+.cal-day.selected.today .cal-day-num {
+  background: var(--ios-red);
+  color: #fff;
 }
 
-/* 事件文字条 */
+/* 事件胶囊 */
 .events-wrap {
   display: flex;
   flex-direction: column;
@@ -629,115 +875,99 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
 }
 .cal-event {
   font-size: 11px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 2px 5px;
+  border-radius: 7px;
+  padding: 3px 6px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   min-width: 0;
-  line-height: 1.2;
-}
-.cal-event.new {
-  border-left: 3px solid var(--primary);
-  background: rgba(59, 130, 246, 0.05);
-}
-.cal-event.due {
-  border-left: 3px solid var(--amber);
-}
-.cal-event.end {
-  border-left: 3px solid var(--red);
-  background: rgba(239, 68, 68, 0.05);
-}
-.event-avatar {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
-  background: var(--card-2);
+  line-height: 1.25;
+  background: var(--ios-fill);
   color: var(--text);
+}
+.cal-event.new { background: var(--ios-blue-soft); }
+.cal-event.due { background: var(--ios-orange-soft); }
+.cal-event.end { background: var(--ios-red-soft); }
+.event-avatar {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.6);
   font-size: 9px;
-  font-weight: 600;
+  font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   line-height: 1;
 }
+:root[data-theme="dark"] .event-avatar {
+  background: rgba(255, 255, 255, 0.14);
+}
+.cal-event.new .event-avatar { color: var(--ios-blue); }
+.cal-event.due .event-avatar { color: var(--ios-orange); }
+.cal-event.end .event-avatar { color: var(--ios-red); }
 .event-name {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1 1 0%;
   min-width: 0;
-  font-weight: 500;
+  font-weight: 600;
 }
 .event-type-pill {
   font-size: 9px;
   line-height: 1;
-  padding: 1px 3px;
-  border-radius: 3px;
-  font-weight: 500;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-weight: 600;
   flex-shrink: 0;
 }
 .cal-event.new .event-type-pill {
-  color: var(--primary);
-  background: rgba(59, 130, 246, 0.12);
+  color: var(--ios-blue);
+  background: rgba(0, 122, 255, 0.16);
 }
 .cal-event.due .event-type-pill {
-  color: var(--amber);
-  background: rgba(245, 158, 11, 0.12);
+  color: var(--ios-orange);
+  background: rgba(255, 149, 0, 0.18);
 }
 .cal-event.end .event-type-pill {
-  color: var(--red);
-  background: rgba(239, 68, 68, 0.12);
+  color: var(--ios-red);
+  background: rgba(255, 59, 48, 0.16);
 }
 .event-amt {
   flex-shrink: 0;
-  color: var(--muted);
+  color: var(--ios-gray);
   font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 .more-badge {
-  color: var(--muted);
-  font-size: 10px;
   justify-content: center;
+  color: var(--ios-gray);
+  font-size: 10px;
   background: transparent;
-  border: 1px dashed var(--border);
-  padding: 1px 0;
+  border: 1px dashed var(--ios-separator);
 }
 
-/* 移动端圆点显示 */
+/* 移动端圆点（≤768px 才显示） */
 .mobile-dots {
   display: none;
 }
 
-/* 日期明细面板 */
+/* ---------------- 明细（桌面侧栏 / 窄屏抽屉共用） ---------------- */
 .day-details-card {
-  padding: 12px 16px;
-  background: var(--card-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
-/* 收起态基座：≤1024px 堆叠布局下收起即不占位（无动画） */
-.day-details-card.details-collapsed {
+  /* 窄屏不用内联卡片，改用底部抽屉 */
   display: none;
+  min-width: 0;
+  padding: 14px 16px;
+  scroll-margin-top: 12px;
 }
-
-/* 切换日期时明细内容淡入（容器以日期为 key 重建触发） */
 .details-body {
   animation: details-body-in 0.18s ease;
 }
 @keyframes details-body-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
 }
 .details-head {
   display: flex;
@@ -745,39 +975,8 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 10px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
-}
-.details-close {
-  flex-shrink: 0;
-  width: 26px;
-  height: 26px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.15s ease, background 0.15s ease;
-}
-.detail-close-icon {
-  width: 14px;
-  height: 14px;
-}
-.detail-cal-icon {
-  width: 14px;
-  height: 14px;
-  margin-right: 4px;
-  vertical-align: -2px;
-  flex-shrink: 0;
-}
-.details-close:hover {
-  color: var(--text);
-  background: var(--bg-2);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--ios-separator);
 }
 .details-date {
   font-size: var(--fs-sm);
@@ -788,18 +987,51 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   gap: 8px;
   min-width: 0;
 }
-.details-date > span:first-child {
+.details-date-label {
+  display: inline-flex;
+  align-items: center;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin: 0;
+  font: inherit;
+  font-weight: 600;
+}
+.detail-cal-icon {
+  width: 15px;
+  height: 15px;
+  margin-right: 5px;
+  flex-shrink: 0;
 }
 .details-count {
   font-size: var(--fs-xs);
-  color: var(--muted);
+  color: var(--ios-gray);
   font-weight: normal;
   flex-shrink: 0;
   white-space: nowrap;
+}
+.details-close {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: var(--ios-fill);
+  color: var(--ios-gray);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.detail-close-icon {
+  width: 14px;
+  height: 14px;
+}
+.details-close:hover {
+  color: var(--text);
+  background: var(--ios-separator);
 }
 .details-list {
   display: flex;
@@ -810,26 +1042,25 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  background: var(--ios-fill);
+  border-radius: 12px;
 }
 .detail-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex: 1 1 auto;
   min-width: 0;
 }
 .detail-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  background: var(--card-2);
-  color: var(--text);
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--ios-card-bg);
+  color: var(--ios-blue);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -858,31 +1089,113 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
 .detail-type-tag {
   font-size: 10px;
   padding: 2px 6px;
-  background: var(--bg-2);
-  color: var(--muted);
-  border-radius: 4px;
+  background: var(--ios-fill);
+  color: var(--ios-gray);
+  border-radius: 5px;
   flex-shrink: 0;
-  font-weight: 500;
+  font-weight: 600;
 }
 .detail-type-tag.tag-new {
-  background: rgba(59, 130, 246, 0.12);
-  color: var(--primary);
+  background: rgba(0, 122, 255, 0.16);
+  color: var(--ios-blue);
 }
 .detail-type-tag.tag-due {
-  background: rgba(245, 158, 11, 0.12);
-  color: var(--amber);
+  background: rgba(255, 149, 0, 0.18);
+  color: var(--ios-orange);
 }
 .detail-type-tag.tag-end {
-  background: rgba(239, 68, 68, 0.12);
-  color: var(--red);
+  background: rgba(255, 59, 48, 0.16);
+  color: var(--ios-red);
 }
 .detail-amount {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
-/* 窄屏快捷跳转按钮：宽屏隐藏，避免影响桌面端右侧明细布局 */
+/* ---------------- 窄屏底部抽屉（Headless UI Dialog） ---------------- */
+.cal-sheet-root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  overflow: hidden;
+}
+.cal-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+.cal-sheet-container {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 12px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+.cal-sheet-panel {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 560px;
+  max-height: 78vh;
+  overflow-y: auto;
+  padding: 8px 16px 18px;
+  border: 1px solid var(--ios-card-border);
+  border-radius: 20px;
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28);
+  scrollbar-width: thin;
+}
+.cal-sheet-grabber {
+  width: 36px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--ios-separator);
+  margin: 4px auto 12px;
+}
+.cal-sheet-sub {
+  margin: 0 0 10px;
+  font-size: var(--fs-xs);
+  color: var(--ios-gray);
+}
+.cal-sheet-panel::-webkit-scrollbar {
+  width: 6px;
+}
+.cal-sheet-panel::-webkit-scrollbar-thumb {
+  border-radius: 99px;
+  background: var(--ios-separator);
+}
+
+/* Headless UI 过渡动画类 */
+.cal-sheet-backdrop-enter { transition: opacity 0.22s ease-out; }
+.cal-sheet-backdrop-from { opacity: 0; }
+.cal-sheet-backdrop-to { opacity: 1; }
+.cal-sheet-backdrop-leave { transition: opacity 0.18s ease-in; }
+
+.cal-sheet-panel-enter {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+}
+.cal-sheet-panel-from { transform: translateY(100%); opacity: 0.6; }
+.cal-sheet-panel-to { transform: translateY(0); opacity: 1; }
+.cal-sheet-panel-leave {
+  transition: transform 0.22s cubic-bezier(0.4, 0, 1, 1), opacity 0.18s ease;
+}
+
+.legend-panel-enter {
+  transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.legend-panel-from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+.legend-panel-to { opacity: 1; transform: none; }
+.legend-panel-leave { transition: opacity 0.14s ease-in; }
+
+/* ---------------- 窄屏浮动唤起按钮 ---------------- */
 .details-jump {
   display: none;
   position: fixed;
@@ -890,44 +1203,40 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   bottom: 24px;
   z-index: 10;
   align-items: center;
-  gap: 6px;
-  border: 1px solid var(--primary);
+  gap: 8px;
+  border: none;
   border-radius: 999px;
-  padding: 8px 12px;
-  background: var(--primary);
+  padding: 10px 16px;
+  background: var(--ios-blue);
   color: #fff;
-  box-shadow: 0 6px 18px rgba(var(--primary-rgb), 0.28);
+  box-shadow: 0 8px 24px rgba(0, 122, 255, 0.36);
   cursor: pointer;
   font: inherit;
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   font-weight: 600;
   white-space: nowrap;
-  animation: details-jump-float 1.8s ease-in-out infinite;
+  animation: details-jump-float 2.4s ease-in-out infinite;
 }
-.details-jump:hover {
-  background: var(--primary-2);
+.details-jump:active {
+  transform: scale(0.96);
 }
-.details-jump-arrow {
+.details-jump-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.24);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-  line-height: 1;
-  animation: details-jump-arrow 1.1s ease-in-out infinite;
+  font-size: 12px;
 }
 @keyframes details-jump-float {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
-}
-@keyframes details-jump-arrow {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(3px); }
+  50% { transform: translateY(-4px); }
 }
 
-/* ---------- 桌面端：视口内一次展示全部 42 格（6 行 × 7 列） ---------- */
-/* 桌面端（≥1025px）：flex row 并排 —— 日历在左、明细在右。
-   Grid 轨道不可过渡，故用 flex + width 动画：明细栏 0↔340px 平滑展开/收起，
-   日历随之连续重排，打开明细时格子不会瞬时变窄。 */
+/* ---------- 桌面端（≥1025px）：日历在左、明细侧栏在右 ---------- */
 @media (min-width: 1025px) {
   .cal-page {
     flex: 1 1 auto;
@@ -954,16 +1263,16 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   .cal-grid {
     flex: 1 1 auto;
     min-height: 0;
-    /* 首行周标题 auto，其余 5 行等分剩余高度，整体撑满卡片 */
-    grid-template-rows: auto repeat(5, minmax(0, 1fr));
+    /* 首行周标题 auto，其余 5/6 行等分剩余高度（行数由 --cal-rows 决定） */
+    grid-template-rows: auto repeat(var(--cal-rows, 5), minmax(0, 1fr));
     align-content: stretch;
   }
   .cal-day {
     height: auto;
     min-height: 0;
-    /* 随视口拉伸，同时保留内部文字条的可用高度 */
   }
   .day-details-card {
+    display: block;
     flex: 0 0 auto;
     width: 340px;
     min-width: 0;
@@ -978,7 +1287,6 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
       opacity 0.2s ease;
   }
   .day-details-card.details-collapsed {
-    display: block;
     width: 0;
     padding-inline: 0;
     margin-left: 0;
@@ -990,17 +1298,27 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   .day-details-card::-webkit-scrollbar {
     width: 6px;
   }
+  .day-details-card::-webkit-scrollbar-thumb {
+    border-radius: 99px;
+    background: var(--ios-separator);
+  }
+  /* 桌面端不使用底部抽屉与浮动按钮 */
+  .cal-sheet-root {
+    display: none !important;
+  }
+  .details-jump {
+    display: none;
+  }
 }
 
-/* ---------- 窄屏适配：空间不足时把明细移到日历下方（≤1024px 单列堆叠） ---------- */
+/* ---------- 窄屏（≤1024px）：单列，明细走底部抽屉 ---------- */
 @media (max-width: 1024px) {
   .cal-page {
     width: 100%;
     max-width: 760px;
     margin-inline: auto;
   }
-  .cal-card,
-  .day-details-card {
+  .cal-card {
     width: 100%;
   }
   .details-jump {
@@ -1008,7 +1326,7 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   }
 }
 
-/* ---------- 移动端：页面居中、控件不溢出 ---------- */
+/* ---------- 平板/手机 ---------- */
 @media (max-width: 860px) {
   .cal-page {
     max-width: 640px;
@@ -1024,28 +1342,19 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
 
 @media (max-width: 768px) {
   .cal-card {
-    padding: 8px;
+    padding: 10px;
   }
   .cal-grid {
-    gap: 3px;
+    gap: 2px;
   }
   .cal-day {
-    height: 54px;
+    height: 56px;
     padding: 4px;
-    align-items: center;
-    justify-content: space-between;
   }
-  .cal-day-header {
-    width: 100%;
-    justify-content: center;
-    position: relative;
-  }
-  .today-tag {
-    position: absolute;
-    right: 0;
-    top: -2px;
-    font-size: 8px;
-    padding: 0 2px;
+  .cal-day-num {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
   }
   .desktop-events {
     display: none !important;
@@ -1055,7 +1364,6 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
     align-items: center;
     justify-content: center;
     gap: 3px;
-    margin-top: 2px;
     width: 100%;
     overflow: hidden;
   }
@@ -1065,20 +1373,20 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
     border-radius: 50%;
     flex-shrink: 0;
   }
-  .mob-dot.dot-new { background: var(--primary); }
-  .mob-dot.dot-due { background: var(--amber); }
-  .mob-dot.dot-end { background: var(--red); }
+  .mob-dot.dot-new { background: var(--ios-blue); }
+  .mob-dot.dot-due { background: var(--ios-orange); }
+  .mob-dot.dot-end { background: var(--ios-red); }
   .mob-dot-more {
     font-size: 9px;
-    color: var(--muted);
+    color: var(--ios-gray);
     line-height: 1;
   }
-  .cal-title {
-    font-size: 15px;
-    min-width: 100px;
-  }
+  /* 图例改用 Popover */
   .cal-legend {
     display: none;
+  }
+  .cal-legend-popover {
+    display: inline-flex;
   }
 }
 
@@ -1090,48 +1398,40 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
     width: 100%;
     gap: 6px;
   }
-  .cal-nav > .btn-sm:not(.today-btn) {
-    flex: 0 0 40px;
-  }
-  .cal-title {
+  .cal-title-wrap {
     flex: 1 1 auto;
     min-width: 0;
-    margin-inline: 0;
-    white-space: nowrap;
   }
-  .today-btn {
-    flex: 0 0 auto;
-    white-space: nowrap;
-  }
-  .cal-card {
-    padding: 8px;
-  }
-  .cal-grid {
-    gap: 3px;
+  .cal-today-btn {
+    padding: 0 12px;
   }
   .cal-day {
     height: auto;
     min-height: 48px;
-    aspect-ratio: 0.9 / 1;
-    padding: 4px;
+    aspect-ratio: 0.92 / 1;
+    padding: 3px;
   }
-  .day-details-card {
-    padding: 12px;
+  .cal-day-num {
+    width: 22px;
+    height: 22px;
+    font-size: 11px;
   }
-  .details-date {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
+  .details-jump {
+    right: 12px;
+    bottom: 18px;
   }
-  .details-date > span:first-child {
-    max-width: 100%;
+  .cal-sheet-container {
+    padding: 0;
+    padding-bottom: env(safe-area-inset-bottom);
   }
-  .details-count {
-    align-self: flex-start;
+  .cal-sheet-panel {
+    max-width: none;
+    border-radius: 20px 20px 0 0;
+    padding: 8px 14px calc(16px + env(safe-area-inset-bottom));
   }
   .detail-item {
     gap: 6px;
-    padding: 8px;
+    padding: 9px 10px;
   }
 }
 
@@ -1139,33 +1439,24 @@ onBeforeUnmount(() => detailsObserver?.disconnect());
   .cal-nav {
     gap: 4px;
   }
-  .cal-title {
-    font-size: 14px;
-  }
-  .today-btn {
-    padding-inline: 8px;
-  }
-  .day-details-card {
+  .cal-today-btn {
     padding-inline: 10px;
-  }
-  .detail-item {
-    padding-inline: 6px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .details-jump,
-  .details-jump-arrow {
+  .details-jump {
     animation: none;
   }
-  /* 明细开合动画在减少动效模式下禁播 */
-  .day-details-card,
-  .details-body {
-    transition: none !important;
-    animation: none;
-  }
-  /* 格子入场动画在减少动效模式下禁用 */
   .cal-day {
+    animation: none;
+  }
+  .day-details-card,
+  .details-body,
+  .cal-sheet-backdrop,
+  .cal-sheet-panel,
+  .cal-legend-panel {
+    transition: none !important;
     animation: none;
   }
 }

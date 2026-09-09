@@ -21,6 +21,21 @@
   --red: #ef4444;
   --blue: #3b82f6;
 
+  /* iOS 系统色板（iOS 风格组件共用：日期/时间选择器、日历、统计页） */
+  --ios-blue: #007aff;
+  --ios-blue-soft: rgba(0, 122, 255, 0.12);
+  --ios-green: #34c759;
+  --ios-orange: #ff9500;
+  --ios-orange-soft: rgba(255, 149, 0, 0.14);
+  --ios-red: #ff3b30;
+  --ios-red-soft: rgba(255, 59, 48, 0.12);
+  --ios-gray: #8e8e93;
+  --ios-fill: rgba(120, 120, 128, 0.24);
+  --ios-separator: rgba(255, 255, 255, 0.1);
+  --ios-card-bg: rgba(28, 28, 30, 0.82);
+  --ios-card-border: rgba(255, 255, 255, 0.1);
+  --ios-shadow-panel: 0 16px 48px rgba(0, 0, 0, 0.45);
+
   /* 间距刻度 */
   --space-1: 4px;
   --space-2: 8px;
@@ -73,6 +88,13 @@
   --amber: #d97706;
   --red: #dc2626;
   --blue: #2563eb;
+
+  /* iOS 系统色板（浅色） */
+  --ios-fill: rgba(120, 120, 128, 0.12);
+  --ios-separator: rgba(60, 60, 67, 0.12);
+  --ios-card-bg: rgba(255, 255, 255, 0.86);
+  --ios-card-border: rgba(255, 255, 255, 0.7);
+  --ios-shadow-panel: 0 16px 48px rgba(0, 0, 0, 0.16);
 
   /* 阴影（浅色模式更柔和） */
   --shadow-modal: 0 8px 24px rgba(0, 0, 0, 0.08);

@@ -173,8 +173,9 @@ function isMonthSelected(m) {
 function updatePosition() {
   if (!pickerContainerRef.value) return;
   const rect = pickerContainerRef.value.getBoundingClientRect();
-  const panelWidth = 280;
-  const panelHeight = 310;
+  // 用实测尺寸：iOS 样式改版后面板宽高已变，写死常量会让翻转/贴边判断失准
+  const panelWidth = dropdownRef.value?.offsetWidth || 296;
+  const panelHeight = dropdownRef.value?.offsetHeight || 340;
   const gap = 4;
   const padding = 12;
 
@@ -414,7 +415,7 @@ onBeforeUnmount(() => {
 
     <!-- Teleport 到 body，彻底脱离父级 overflow 裁剪 -->
     <Teleport to="body">
-      <transition name="dropdown-fade">
+      <transition name="cdp-fade">
         <div
           v-if="isOpen"
           ref="dropdownRef"
@@ -547,6 +548,13 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
+/* =====================================================================
+ * HeadlessDatePicker · iOS 风格
+ * - 触发器沿用 .custom-date-picker-* 类名（父组件通过 :deep() 覆盖高度/字号）
+ * - 面板内部类名统一收拢在 .custom-date-picker-dropdown 之下，避免全局泄漏
+ * - 面板 Teleport 到 body，因此本样式块必须保持非 scoped
+ * ===================================================================== */
+
 .custom-date-picker {
   position: relative;
   display: block;
@@ -556,14 +564,15 @@ onBeforeUnmount(() => {
   font-size: var(--fs-sm);
 }
 
+/* ---------------- 触发器 ---------------- */
 .custom-date-picker-trigger {
   width: 100%;
   height: 38px;
   box-sizing: border-box;
-  padding: 0 8px 0 12px;
-  background: var(--card-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  padding: 0 10px 0 12px;
+  background: var(--ios-fill);
+  border: 1px solid transparent;
+  border-radius: 10px;
   color: var(--text);
   font-size: var(--fs-sm);
   display: flex;
@@ -572,14 +581,23 @@ onBeforeUnmount(() => {
   gap: 6px;
   cursor: pointer;
   outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
   text-align: left;
+}
+
+.custom-date-picker-trigger:hover {
+  background: var(--ios-separator);
 }
 
 .custom-date-picker-trigger:focus-visible,
 .custom-date-picker.is-open .custom-date-picker-trigger {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.2);
+  border-color: var(--ios-blue);
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
+}
+
+.custom-date-picker-trigger.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .custom-date-picker-label {
@@ -590,7 +608,7 @@ onBeforeUnmount(() => {
 }
 
 .custom-date-picker-label.is-placeholder {
-  color: var(--muted);
+  color: var(--ios-gray);
 }
 
 .custom-date-picker-actions {
@@ -607,269 +625,280 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 20px;
   height: 20px;
-  color: var(--muted);
-  cursor: pointer;
-  transition: color 0.15s ease;
+  color: var(--ios-gray);
+  transition: color 0.18s ease;
 }
 
 .custom-date-picker.is-open .custom-date-picker-icon {
-  color: var(--primary);
+  color: var(--ios-blue);
 }
 
 .custom-date-picker-clear-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: none;
-  background: transparent;
   border-radius: 50%;
-  color: var(--muted);
+  background: var(--ios-separator);
+  color: var(--ios-gray);
   cursor: pointer;
-  transition: color 0.15s ease, background-color 0.15s ease;
   outline: none;
+  transition: color 0.18s ease, background-color 0.18s ease;
 }
 
 .custom-date-picker-clear-btn:hover {
   color: var(--text);
-  background-color: var(--card);
+  background: var(--ios-fill);
 }
 
-.custom-date-picker-trigger.is-disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* 下拉浮层面板 */
+/* ---------------- 浮层面板 ---------------- */
 .custom-date-picker-dropdown {
-  width: 280px;
-  max-width: min(280px, calc(100vw - 24px));
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-modal);
+  width: 296px;
+  max-width: min(296px, calc(100vw - 24px));
   box-sizing: border-box;
-  padding: 12px;
+  padding: 14px;
+  border: 1px solid var(--ios-card-border);
+  border-radius: 18px;
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  box-shadow: var(--ios-shadow-panel);
   user-select: none;
   outline: none;
+  overflow: hidden;
 }
 
-/* 日历头部 */
-.calendar-header {
+/* ---------------- 头部导航 ---------------- */
+.custom-date-picker-dropdown .calendar-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
-.nav-btn-group {
+.custom-date-picker-dropdown .nav-btn-group {
   display: flex;
-  gap: 2px;
+  gap: 4px;
 }
 
-.nav-btn {
+.custom-date-picker-dropdown .nav-btn {
+  width: 26px;
+  height: 26px;
   border: none;
+  border-radius: 50%;
   background: transparent;
-  color: var(--muted);
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
+  color: var(--ios-blue);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease, color 0.15s ease;
   outline: none;
+  transition: background-color 0.18s ease, transform 0.18s ease;
 }
 
-.nav-btn:hover {
-  background-color: var(--card-2);
-  color: var(--text);
+.custom-date-picker-dropdown .nav-btn:hover {
+  background: var(--ios-fill);
 }
 
-.current-period-btn {
+.custom-date-picker-dropdown .nav-btn:active {
+  transform: scale(0.9);
+}
+
+.custom-date-picker-dropdown .current-period-btn {
   border: none;
   background: transparent;
+  padding: 4px 10px;
+  border-radius: 999px;
   font-weight: 600;
   font-size: var(--fs-sm);
   color: var(--text);
   cursor: pointer;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  transition: background-color 0.15s ease, color 0.15s ease;
   outline: none;
+  transition: background-color 0.18s ease, color 0.18s ease;
 }
 
-.current-period-btn:hover {
-  background-color: var(--card-2);
-  color: var(--primary);
+.custom-date-picker-dropdown .current-period-btn:hover {
+  background: var(--ios-fill);
+  color: var(--ios-blue);
 }
 
-.year-label {
+.custom-date-picker-dropdown .year-label {
   font-weight: 600;
   font-size: var(--fs-sm);
   color: var(--text);
+  padding: 0 6px;
 }
 
-/* 星期表头 */
-.weekdays-grid {
+/* ---------------- 星期表头 ---------------- */
+.custom-date-picker-dropdown .weekdays-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   margin-bottom: 4px;
 }
 
-.weekday-cell {
+.custom-date-picker-dropdown .weekday-cell {
   text-align: center;
-  font-size: var(--fs-xs);
-  color: var(--muted);
-  padding: 4px 0;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ios-gray);
+  padding: 4px 0 6px;
 }
 
-/* 日期矩阵 */
-.days-grid {
+/* ---------------- 日期矩阵：圆形日期 ---------------- */
+.custom-date-picker-dropdown .days-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 2px;
 }
 
-.day-cell {
+.custom-date-picker-dropdown .day-cell {
   aspect-ratio: 1;
   border: none;
   background: transparent;
   color: var(--text);
   font-size: var(--fs-sm);
-  border-radius: var(--radius-sm);
+  font-variant-numeric: tabular-nums;
+  border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.12s ease, color 0.12s ease;
-  outline: none;
   padding: 0;
+  outline: none;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 
-.day-cell:hover {
-  background-color: var(--card-2);
-  color: var(--primary);
+.custom-date-picker-dropdown .day-cell:hover {
+  background: var(--ios-fill);
 }
 
-.day-cell.other-month {
-  color: var(--muted);
-  opacity: 0.45;
+.custom-date-picker-dropdown .day-cell:active {
+  transform: scale(0.92);
 }
 
-.day-cell.is-today {
+.custom-date-picker-dropdown .day-cell:focus-visible {
+  box-shadow: 0 0 0 2px var(--ios-blue);
+}
+
+.custom-date-picker-dropdown .day-cell.other-month {
+  color: var(--ios-gray);
+  opacity: 0.5;
+}
+
+.custom-date-picker-dropdown .day-cell.is-today {
+  color: var(--ios-red);
   font-weight: 700;
-  color: var(--primary);
-  position: relative;
 }
 
-.day-cell.is-today::after {
-  content: "";
-  position: absolute;
-  bottom: 2px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background-color: var(--primary);
-}
-
-.day-cell.is-selected {
-  background: linear-gradient(135deg, var(--grad-a), var(--grad-b));
+.custom-date-picker-dropdown .day-cell.is-selected {
+  background: var(--ios-blue);
   color: #fff !important;
   font-weight: 600;
 }
 
-.day-cell.is-selected::after {
-  background-color: #fff;
+.custom-date-picker-dropdown .day-cell.is-selected.is-today {
+  background: var(--ios-red);
 }
 
-/* 月份矩阵 */
-.months-grid {
+/* ---------------- 月份矩阵 ---------------- */
+.custom-date-picker-dropdown .months-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-  padding: 8px 0;
+  gap: 8px;
+  padding: 6px 0;
 }
 
-.month-cell {
-  height: 40px;
+.custom-date-picker-dropdown .month-cell {
+  height: 44px;
   border: none;
-  background: transparent;
+  background: var(--ios-fill);
   color: var(--text);
   font-size: var(--fs-sm);
-  border-radius: var(--radius-sm);
+  font-weight: 500;
+  border-radius: 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease, color 0.15s ease;
   outline: none;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 
-.month-cell:hover {
-  background-color: var(--card-2);
-  color: var(--primary);
+.custom-date-picker-dropdown .month-cell:hover {
+  background: var(--ios-separator);
 }
 
-.month-cell.this-month {
-  color: var(--primary);
-  font-weight: 600;
+.custom-date-picker-dropdown .month-cell:active {
+  transform: scale(0.96);
 }
 
-.month-cell.is-selected {
-  background: linear-gradient(135deg, var(--grad-a), var(--grad-b));
+.custom-date-picker-dropdown .month-cell.this-month {
+  color: var(--ios-red);
+  font-weight: 700;
+}
+
+.custom-date-picker-dropdown .month-cell.is-selected {
+  background: var(--ios-blue);
   color: #fff !important;
   font-weight: 600;
 }
 
-/* 底部操作栏 */
-.calendar-footer {
+/* ---------------- 底部快捷栏 ---------------- */
+.custom-date-picker-dropdown .calendar-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ios-separator);
 }
 
-.quick-btn {
+.custom-date-picker-dropdown .quick-btn {
   border: none;
   background: transparent;
-  font-size: var(--fs-xs);
-  color: var(--primary);
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ios-blue);
   cursor: pointer;
-  padding: 4px 6px;
-  border-radius: var(--radius-sm);
-  transition: background-color 0.15s ease, color 0.15s ease;
   outline: none;
+  transition: background-color 0.18s ease, color 0.18s ease;
 }
 
-.quick-btn:hover {
-  background-color: var(--card-2);
-  color: var(--grad-a);
+.custom-date-picker-dropdown .quick-btn:hover {
+  background: var(--ios-fill);
 }
 
-.quick-btn.clear {
-  color: var(--muted);
+.custom-date-picker-dropdown .quick-btn.clear {
+  color: var(--ios-red);
 }
 
-.quick-btn.clear:hover {
-  color: var(--red);
+.custom-date-picker-dropdown .quick-btn.clear:hover {
+  background: var(--ios-red-soft);
 }
 
-/* 动画效果 */
-.dropdown-fade-enter-active,
-.dropdown-fade-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+/* ---------------- 浮层动效 ---------------- */
+.cdp-fade-enter-active,
+.cdp-fade-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.dropdown-fade-enter-from,
-.dropdown-fade-leave-to {
+.cdp-fade-enter-from,
+.cdp-fade-leave-to {
   opacity: 0;
-  transform: translateY(-4px);
+  transform: translateY(-6px) scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cdp-fade-enter-active,
+  .cdp-fade-leave-active {
+    transition: none;
+  }
 }
 </style>

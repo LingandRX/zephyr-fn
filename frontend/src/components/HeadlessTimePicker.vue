@@ -322,7 +322,7 @@ onBeforeUnmount(() => {
 
     <!-- Teleport 到 body，彻底脱离父级 overflow 裁剪与层叠上下文限制 -->
     <Teleport to="body">
-      <transition name="dropdown-fade">
+      <transition name="ctp-fade">
         <div
           v-if="isOpen"
           ref="dropdownRef"
@@ -403,7 +403,13 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
-/* iOS 风格时间选择器 */
+/* =====================================================================
+ * HeadlessTimePicker · iOS 风格（滚轮）
+ * - 触发器沿用 .custom-time-picker-* 类名（父组件通过 :deep() 覆盖布局）
+ * - 面板内部类名统一收拢在 .custom-time-picker-dropdown 之下，避免全局泄漏
+ * - 面板 Teleport 到 body，因此本样式块必须保持非 scoped
+ * ===================================================================== */
+
 .custom-time-picker {
   position: relative;
   display: block;
@@ -413,14 +419,15 @@ onBeforeUnmount(() => {
   font-size: var(--fs-sm);
 }
 
+/* ---------------- 触发器 ---------------- */
 .custom-time-picker-trigger {
   width: 100%;
   height: 44px;
   box-sizing: border-box;
-  padding: 0 12px;
-  background: var(--card-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  padding: 0 10px 0 12px;
+  background: var(--ios-fill);
+  border: 1px solid transparent;
+  border-radius: 10px;
   color: var(--text);
   font-size: 16px;
   font-weight: 500;
@@ -430,19 +437,23 @@ onBeforeUnmount(() => {
   gap: 8px;
   cursor: pointer;
   outline: none;
-  transition: all 0.2s ease;
   text-align: left;
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .custom-time-picker-trigger:hover {
-  border-color: var(--primary);
-  background: var(--card);
+  background: var(--ios-separator);
 }
 
 .custom-time-picker-trigger:focus-visible,
 .custom-time-picker.is-open .custom-time-picker-trigger {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.15);
+  border-color: var(--ios-blue);
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
+}
+
+.custom-time-picker-trigger.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .custom-time-picker-label {
@@ -454,7 +465,7 @@ onBeforeUnmount(() => {
 }
 
 .custom-time-picker-label.is-placeholder {
-  color: var(--muted);
+  color: var(--ios-gray);
   font-weight: 400;
 }
 
@@ -472,235 +483,231 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 22px;
   height: 22px;
-  color: var(--muted);
-  cursor: pointer;
-  transition: color 0.2s ease;
+  color: var(--ios-gray);
+  transition: color 0.18s ease;
 }
 
 .custom-time-picker.is-open .custom-time-picker-icon {
-  color: var(--primary);
+  color: var(--ios-blue);
 }
 
 .custom-time-picker-clear-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: none;
-  background: var(--card);
   border-radius: 50%;
-  color: var(--muted);
+  background: var(--ios-separator);
+  color: var(--ios-gray);
   cursor: pointer;
-  transition: all 0.2s ease;
   outline: none;
+  transition: color 0.18s ease, background-color 0.18s ease;
 }
 
 .custom-time-picker-clear-btn:hover {
   color: var(--text);
-  background: var(--border);
-  transform: scale(1.05);
+  background: var(--ios-fill);
 }
 
-.custom-time-picker-trigger.is-disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  background: var(--card-2);
-}
-
-/* iOS 风格下拉面板 */
+/* ---------------- 浮层面板 ---------------- */
 .custom-time-picker-dropdown {
   width: 280px;
   max-width: min(280px, calc(100vw - 24px));
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
   box-sizing: border-box;
-  padding: 16px;
+  padding: 14px;
+  border: 1px solid var(--ios-card-border);
+  border-radius: 18px;
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  box-shadow: var(--ios-shadow-panel);
   user-select: none;
   outline: none;
   overflow: hidden;
 }
 
-/* iOS 风格头部 */
-.time-header {
+/* ---------------- 列标题 ---------------- */
+.custom-time-picker-dropdown .time-header {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 20px;
-  padding-bottom: 12px;
-  margin-bottom: 8px;
+  padding-bottom: 10px;
 }
 
-.time-col-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  min-width: 40px;
+.custom-time-picker-dropdown .time-col-title {
+  min-width: 44px;
   text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ios-gray);
 }
 
-/* iOS 风格滚轮容器 */
-.time-body {
-  display: flex;
-  gap: 12px;
-  height: 200px;
-  background: var(--bg-2);
-  border-radius: 12px;
-  padding: 8px;
+/* ---------------- 滚轮：中间选中带 + 上下渐隐 ---------------- */
+.custom-time-picker-dropdown .time-body {
   position: relative;
+  display: flex;
+  gap: 10px;
+  height: 208px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--ios-fill);
 }
 
-/* iOS 风格滚轮列 */
-.time-column {
+/* 中间选中带（iOS 滚轮的高亮条） */
+.custom-time-picker-dropdown .time-body::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 40px;
+  border-radius: 10px;
+  background: var(--ios-card-bg);
+  border: 1px solid var(--ios-card-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  pointer-events: none;
+}
+
+.custom-time-picker-dropdown .time-column {
+  position: relative;
+  z-index: 1;
   flex: 1;
+  /* 上下各留 80px（容器 200px 的一半减半格），保证首尾项也能滚到正中 */
+  padding: 80px 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 4px;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
   scroll-snap-type: y mandatory;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 22%,
+    #000 78%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 22%,
+    #000 78%,
+    transparent 100%
+  );
 }
 
-.time-column::-webkit-scrollbar {
+.custom-time-picker-dropdown .time-column::-webkit-scrollbar {
   display: none;
 }
 
-/* iOS 风格滚轮单元格 */
-.time-cell {
+.custom-time-picker-dropdown .time-cell {
   height: 40px;
   flex-shrink: 0;
   border: none;
   background: transparent;
-  color: var(--text);
-  font-size: 18px;
+  color: var(--ios-gray);
+  font-size: 17px;
   font-weight: 500;
   border-radius: 10px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   padding: 0;
   outline: none;
   scroll-snap-align: center;
   letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.18s ease, font-size 0.18s ease;
 }
 
-.time-cell:hover {
-  background-color: rgba(var(--primary-rgb), 0.1);
-  color: var(--primary);
-  transform: scale(1.02);
+.custom-time-picker-dropdown .time-cell:hover {
+  color: var(--text);
 }
 
-.time-cell.is-selected {
-  background: var(--primary);
-  color: #fff;
-  font-weight: 600;
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.3);
+.custom-time-picker-dropdown .time-cell.is-selected {
+  color: var(--text);
+  font-weight: 700;
+  font-size: 19px;
 }
 
-/* iOS 风格底部 */
-.time-footer {
+/* ---------------- 底部操作栏 ---------------- */
+.custom-time-picker-dropdown .time-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  border-top: 1px solid var(--ios-separator);
 }
 
-.footer-actions {
+.custom-time-picker-dropdown .footer-actions {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-.quick-btn {
+.custom-time-picker-dropdown .quick-btn {
   border: none;
   background: transparent;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--muted);
-  cursor: pointer;
-  padding: 8px 12px;
+  padding: 7px 12px;
   border-radius: 10px;
-  transition: all 0.2s ease;
-  outline: none;
-  min-width: 48px;
-  text-align: center;
-}
-
-.quick-btn:hover {
-  background-color: var(--card-2);
-  color: var(--text);
-  transform: translateY(-1px);
-}
-
-.quick-btn:active {
-  transform: translateY(0);
-}
-
-.quick-btn.confirm {
-  color: #fff;
-  background: var(--primary);
+  font-size: var(--fs-sm);
   font-weight: 600;
+  color: var(--ios-blue);
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
 
-.quick-btn.confirm:hover {
-  background: var(--primary-2);
-  box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.3);
+.custom-time-picker-dropdown .quick-btn:hover {
+  background: var(--ios-fill);
 }
 
-.quick-btn.clear {
-  color: var(--red);
+.custom-time-picker-dropdown .quick-btn:active {
+  transform: scale(0.96);
 }
 
-.quick-btn.clear:hover {
-  background: rgba(239, 68, 68, 0.1);
+.custom-time-picker-dropdown .quick-btn.confirm {
+  background: var(--ios-blue);
+  color: #fff;
 }
 
-/* 动效 */
-.dropdown-fade-enter-active,
-.dropdown-fade-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+.custom-time-picker-dropdown .quick-btn.confirm:hover {
+  background: #0069d9;
 }
 
-.dropdown-fade-enter-from,
-.dropdown-fade-leave-to {
+.custom-time-picker-dropdown .quick-btn.clear {
+  color: var(--ios-red);
+}
+
+.custom-time-picker-dropdown .quick-btn.clear:hover {
+  background: var(--ios-red-soft);
+}
+
+/* ---------------- 浮层动效 ---------------- */
+.ctp-fade-enter-active,
+.ctp-fade-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ctp-fade-enter-from,
+.ctp-fade-leave-to {
   opacity: 0;
-  transform: translateY(-4px);
+  transform: translateY(-6px) scale(0.98);
 }
 
-/* iOS 风格滚动指示器 */
-.time-body::before,
-.time-body::after {
-  content: "";
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  height: 40px;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.time-body::before {
-  top: 8px;
-  background: linear-gradient(to bottom, var(--bg-2), transparent);
-  border-radius: 12px 12px 0 0;
-}
-
-.time-body::after {
-  bottom: 8px;
-  background: linear-gradient(to top, var(--bg-2), transparent);
-  border-radius: 0 0 12px 12px;
+@media (prefers-reduced-motion: reduce) {
+  .ctp-fade-enter-active,
+  .ctp-fade-leave-active {
+    transition: none;
+  }
 }
 </style>
