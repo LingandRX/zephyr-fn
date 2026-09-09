@@ -21,6 +21,28 @@ const emit = defineEmits(["update:modelValue", "select"]);
 
 const searchQuery = ref("");
 const activeCategory = ref("all");
+const chipsRef = ref(null);
+const chipsScrollLeft = ref(0);
+const chipsMaxScroll = ref(0);
+
+function onChipsWheel(e) {
+  // 桌面端：将垂直滚轮转换为横向平滑滚动
+  if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+    e.preventDefault();
+    const el = chipsRef.value;
+    if (el) el.scrollBy({ left: e.deltaY * 1.5, behavior: "smooth" });
+  }
+}
+
+function updateChipsScrollState() {
+  const el = chipsRef.value;
+  if (!el) return;
+  chipsScrollLeft.value = el.scrollLeft;
+  chipsMaxScroll.value = el.scrollWidth - el.clientWidth;
+}
+
+const chipsShowLeftFade = computed(() => chipsScrollLeft.value > 4);
+const chipsShowRightFade = computed(() => chipsScrollLeft.value < chipsMaxScroll.value - 4);
 
 const categories = computed(() => getAllCategories());
 
@@ -182,34 +204,44 @@ function close() {
           </button>
         </div>
 
-        <!-- 分类胶囊（横向滚动） -->
-        <div class="sheet-chips">
-          <button
-            type="button"
-            class="chip"
-            :class="{ 'is-active': activeCategory === 'all' }"
-            @click="activeCategory = 'all'"
+        <!-- 分类胶囊（横向滚动，桌面端鼠标滚轮也能横向滑动） -->
+        <div
+          ref="chipsRef"
+          class="sheet-chips-wrap"
+          :class="{ 'has-left-fade': chipsShowLeftFade, 'has-right-fade': chipsShowRightFade }"
+          @scroll="updateChipsScrollState"
+        >
+          <div
+            class="sheet-chips"
+            @wheel.prevent="onChipsWheel"
           >
-            全部
-          </button>
-          <button
-            type="button"
-            class="chip"
-            :class="{ 'is-active': activeCategory === 'popular' }"
-            @click="activeCategory = 'popular'"
-          >
-            🔥 热门
-          </button>
-          <button
-            v-for="cat in categories"
-            :key="cat.id"
-            type="button"
-            class="chip"
-            :class="{ 'is-active': activeCategory === cat.id }"
-            @click="activeCategory = cat.id"
-          >
-            {{ cat.icon }} {{ cat.label }}
-          </button>
+            <button
+              type="button"
+              class="chip"
+              :class="{ 'is-active': activeCategory === 'all' }"
+              @click="activeCategory = 'all'"
+            >
+              全部
+            </button>
+            <button
+              type="button"
+              class="chip"
+              :class="{ 'is-active': activeCategory === 'popular' }"
+              @click="activeCategory = 'popular'"
+            >
+              🔥 热门
+            </button>
+            <button
+              v-for="cat in categories"
+              :key="cat.id"
+              type="button"
+              class="chip"
+              :class="{ 'is-active': activeCategory === cat.id }"
+              @click="activeCategory = cat.id"
+            >
+              {{ cat.icon }} {{ cat.label }}
+            </button>
+          </div>
         </div>
 
         <!-- 分组列表 -->
@@ -220,13 +252,6 @@ function close() {
             :key="group.key"
             class="ios-section"
           >
-            <h3 class="ios-section-title">
-              <span v-if="group.icon">{{ group.icon }}</span>
-              <template v-if="group.label === '搜索结果'">
-                “{{ searchQuery }}” 的结果
-              </template>
-              <template v-else>{{ group.label }}</template>
-            </h3>
 
             <ul class="ios-list">
               <li
@@ -330,9 +355,10 @@ function close() {
   --ts-accent: #0a84ff;
 
   pointer-events: auto;
-  width: 100%;
-  max-width: 520px;
-  max-height: 82vh;
+  width: 440px;
+  max-width: 100%;
+  height: 580px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   background: var(--ts-sheet);
@@ -372,7 +398,7 @@ function close() {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: var(--space-2);
-  padding: 14px 16px 10px;
+  padding: 14px 0 10px;
 }
 
 .sheet-title {
@@ -412,7 +438,7 @@ function close() {
   align-items: center;
   gap: 6px;
   height: 36px;
-  margin: 0 16px;
+  margin: 0;
   padding: 0 8px 0 10px;
   border-radius: 10px;
   background: var(--ts-fill);
@@ -472,20 +498,96 @@ function close() {
   height: 18px;
 }
 
-/* ---------------- 分类胶囊 ---------------- */
-.sheet-chips {
+/* ---------------- 分类胶囊（外层滚动容器） ---------------- */
+.sheet-chips-wrap {
   flex: none;
-  display: flex;
-  gap: 8px;
-  padding: 12px 16px 10px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   border-bottom: 1px solid var(--ts-sep);
+  scroll-behavior: smooth;
+  /* 两侧渐变遮罩，提示还有更多内容 */
+  --fade-width: 32px;
+  mask-image: none;
+  -webkit-mask-image: none;
 }
 
-.sheet-chips::-webkit-scrollbar {
+/* 左侧可滚动时显示渐变 */
+.sheet-chips-wrap.has-left-fade {
+  mask-image: linear-gradient(
+    to right,
+    transparent 0px,
+    black var(--fade-width)
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0px,
+    black var(--fade-width)
+  );
+}
+
+/* 右侧可滚动时显示渐变 */
+.sheet-chips-wrap.has-right-fade {
+  mask-image: linear-gradient(
+    to left,
+    transparent 0px,
+    black var(--fade-width)
+  );
+  -webkit-mask-image: linear-gradient(
+    to left,
+    transparent 0px,
+    black var(--fade-width)
+  );
+}
+
+/* 两侧都有渐变 */
+.sheet-chips-wrap.has-left-fade.has-right-fade {
+  mask-image: linear-gradient(
+    to right,
+    transparent 0px,
+    black var(--fade-width),
+    black calc(100% - var(--fade-width)),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0px,
+    black var(--fade-width),
+    black calc(100% - var(--fade-width)),
+    transparent 100%
+  );
+}
+
+.sheet-chips-wrap::-webkit-scrollbar {
   display: none;
+}
+
+/* 桌面端：鼠标悬停时显示极细滚动条，提示可滚动 */
+@media (hover: hover) and (pointer: fine) {
+  .sheet-chips-wrap::-webkit-scrollbar {
+    display: block;
+    height: 3px;
+  }
+  .sheet-chips-wrap::-webkit-scrollbar-thumb {
+    background: var(--ts-fill-strong);
+    border-radius: 99px;
+  }
+  .sheet-chips-wrap::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .sheet-chips-wrap:hover::-webkit-scrollbar-thumb {
+    background: var(--ts-accent);
+  }
+}
+
+/* ---------------- 分类胶囊（内容行） ---------------- */
+.sheet-chips {
+  display: flex;
+  gap: 8px;
+  padding: 12px 0 10px;
+  /* 禁止文本选中，提升滚轮/拖拽体验 */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .chip {
@@ -535,22 +637,10 @@ function close() {
   margin-bottom: 20px;
 }
 
-.ios-section-title {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  margin: 0;
-  padding: 6px 28px 8px;
-  background: var(--ts-sheet);
-  color: var(--ts-muted);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
 
 .ios-list {
   list-style: none;
-  margin: 0 16px;
+  margin: 0;
   padding: 0;
   border-radius: var(--radius-md);
   background: var(--ts-row);
@@ -715,9 +805,11 @@ function close() {
   }
 
   .template-sheet {
+    width: 100%;
     max-width: 100%;
-    max-height: 92vh;
-    max-height: 92dvh;
+    height: auto;
+    max-height: 90vh;
+    max-height: 90dvh;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     animation: ts-sheet-up 0.4s cubic-bezier(0.32, 0.72, 0, 1);
   }
