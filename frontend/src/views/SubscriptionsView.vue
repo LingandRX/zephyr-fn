@@ -511,64 +511,9 @@ onMounted(loadAll);
 .mobile-only { display: none !important; }
 
 /* ---------------- 顶部统计卡片 ---------------- */
+/* 尺寸与配色统一由 styles/main.css 的 .stats-grid / .stat-card 提供，这里只保留本页间距 */
 .stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
   margin-bottom: 18px;
-}
-
-.stat-card {
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  padding: 16px 18px;
-  background: var(--ios-card-bg);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  backdrop-filter: saturate(180%) blur(20px);
-  border: 1px solid var(--ios-card-border);
-  border-radius: 16px;
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
-}
-
-/* 顶部装饰渐变条 */
-.stat-card::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 3px;
-  opacity: 0.85;
-}
-.stat-card:nth-child(1)::before { background: linear-gradient(90deg, var(--ios-green), #30d158); }
-.stat-card:nth-child(2)::before { background: linear-gradient(90deg, var(--ios-blue), #5ac8fa); }
-.stat-card:nth-child(3)::before { background: linear-gradient(90deg, var(--ios-orange), #ffb340); }
-.stat-card:nth-child(4)::before { background: linear-gradient(90deg, #af52de, #da7cfc); }
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-}
-
-.stat-card .label {
-  color: var(--ios-gray);
-  font-size: 13px;
-  font-weight: 500;
-}
-.stat-card .value {
-  margin: 8px 0 4px;
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.stat-card .sub {
-  color: var(--ios-gray);
-  font-size: 12px;
 }
 
 /* ---------------- 筛选栏 ---------------- */
@@ -1135,17 +1080,7 @@ onMounted(loadAll);
   .page { padding-bottom: 92px; }
 
   .stats-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
     margin-bottom: 14px;
-  }
-  .stat-card {
-    padding: 12px 14px;
-    border-radius: 14px;
-  }
-  .stat-card .value {
-    font-size: 20px;
-    margin: 6px 0 3px;
   }
 
   /* 移动端筛选栏：搜索独占一行，两个下拉并排 */

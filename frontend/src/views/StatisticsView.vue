@@ -295,79 +295,7 @@ onActivated(() => {
 }
 
 /* ---------------- 顶部 KPI 卡片 ---------------- */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-}
-
-.stat-card {
-  background: var(--ios-card-bg);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  backdrop-filter: saturate(180%) blur(20px);
-  border: 1px solid var(--ios-card-border);
-  border-radius: 16px;
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
-              box-shadow 0.25s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-/* 卡片顶部装饰渐变条 */
-.stat-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--grad-a), var(--grad-b));
-  border-radius: 16px 16px 0 0;
-  opacity: 0.8;
-}
-
-.stat-card:nth-child(1)::before { background: linear-gradient(90deg, #34c759, #30d158); }
-.stat-card:nth-child(2)::before { background: linear-gradient(90deg, #007aff, #5ac8fa); }
-.stat-card:nth-child(3)::before { background: linear-gradient(90deg, #ff9500, #ffb340); }
-.stat-card:nth-child(4)::before { background: linear-gradient(90deg, #af52de, #da7cfc); }
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-}
-
-:root[data-theme="dark"] .stat-card:hover {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
-}
-
-.stat-card .label {
-  color: var(--ios-gray);
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-}
-
-.stat-card .value {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--text);
-  margin: 10px 0 6px;
-  letter-spacing: -0.6px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-variant-numeric: tabular-nums;
-}
-
-.stat-card .sub {
-  color: var(--ios-gray);
-  font-size: 12px;
-  font-weight: 400;
-}
+/* 尺寸与配色统一由 styles/main.css 的 .stats-grid / .stat-card 提供 */
 
 /* ---------------- 栅格布局 ---------------- */
 .grid-2 {
@@ -796,37 +724,11 @@ onActivated(() => {
   .grid-2 {
     grid-template-columns: minmax(0, 1fr);
   }
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 @media (max-width: 600px) {
   .stats-view {
     gap: 14px;
-  }
-
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 10px;
-  }
-
-  .stat-card {
-    padding: 14px 16px;
-    border-radius: 14px;
-  }
-
-  .stat-card .value {
-    font-size: 22px;
-    margin: 6px 0 4px;
-  }
-
-  .stat-card .label {
-    font-size: 12px;
-  }
-
-  .stat-card .sub {
-    font-size: 11px;
   }
 
   .card {
