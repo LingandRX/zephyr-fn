@@ -1,9 +1,8 @@
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, watch, nextTick, onBeforeUnmount } from "vue";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/vue";
 import {
   subscriptionTemplates,
-  TEMPLATE_CATEGORIES,
   getPopularTemplates,
   getTemplatesByCategory,
   searchTemplates,
@@ -22,11 +21,16 @@ const emit = defineEmits(["update:modelValue", "select"]);
 const searchQuery = ref("");
 const activeCategory = ref("all");
 const chipsRef = ref(null);
+const listRef = ref(null);
 const chipsScrollLeft = ref(0);
 const chipsMaxScroll = ref(0);
+// 弹窗打开时把焦点交给面板本身，避免首焦点落在「取消」上出现焦点框
+const sheetRef = ref(null);
 
 function onChipsWheel(e) {
-  // 桌面端：将垂直滚轮转换为横向平滑滚动
+  // 桌面端：将垂直滚轮转换为横向平滑滚动。
+  // 注意：不能在模板上写 @wheel.prevent——那会无条件吞掉横向 delta，
+  // 导致触控板双指横滑 / Shift+滚轮无法原生滚动。只拦纵向。
   if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
     e.preventDefault();
     const el = chipsRef.value;
@@ -39,6 +43,46 @@ function updateChipsScrollState() {
   if (!el) return;
   chipsScrollLeft.value = el.scrollLeft;
   chipsMaxScroll.value = el.scrollWidth - el.clientWidth;
+}
+
+/** 把当前选中的分类胶囊滚进可见区域（居中，且不影响页面纵向滚动） */
+function scrollActiveChipIntoView() {
+  chipsRef.value
+    ?.querySelector(".chip.is-active")
+    ?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+}
+
+// 内容/容器尺寸变化时重算左右渐隐状态（首次打开时 maxScroll 也能立即算对）
+let chipsRO = null;
+watch(chipsRef, (el) => {
+  chipsRO?.disconnect();
+  chipsRO = null;
+  if (!el || typeof ResizeObserver === "undefined") return;
+  chipsRO = new ResizeObserver(updateChipsScrollState);
+  chipsRO.observe(el);
+  updateChipsScrollState();
+});
+onBeforeUnmount(() => chipsRO?.disconnect());
+
+// 每次打开：重算渐隐 + 让选中分类回到视野
+watch(
+  () => props.modelValue,
+  async (open) => {
+    if (!open) return;
+    await nextTick();
+    updateChipsScrollState();
+    scrollActiveChipIntoView();
+  },
+);
+
+// 切换分类/搜索时，列表回到顶部（否则会停在上一个分类的滚动位置）
+watch([activeCategory, searchQuery], () => {
+  if (listRef.value) listRef.value.scrollTop = 0;
+});
+
+function selectCategory(id) {
+  activeCategory.value = id;
+  nextTick(scrollActiveChipIntoView);
 }
 
 const chipsShowLeftFade = computed(() => chipsScrollLeft.value > 4);
@@ -61,58 +105,11 @@ const filteredTemplates = computed(() => {
 
 const isEmpty = computed(() => filteredTemplates.value.length === 0);
 
-const groupedTemplates = computed(() => {
-  const templates = filteredTemplates.value;
-  if (activeCategory.value === "popular" || searchQuery.value) {
-    return [
-      {
-        key: "result",
-        label: searchQuery.value ? "搜索结果" : "热门推荐",
-        icon: searchQuery.value ? "" : "🔥",
-        templates,
-      },
-    ];
-  }
 
-  const groups = {};
-  templates.forEach((t) => {
-    if (!groups[t.category]) {
-      const cat = TEMPLATE_CATEGORIES[t.category];
-      groups[t.category] = {
-        key: t.category,
-        label: cat ? cat.label : "其他",
-        icon: cat ? cat.icon : "📱",
-        templates: [],
-      };
-    }
-    groups[t.category].templates.push(t);
-  });
-
-  return Object.values(groups);
-});
-
-/** iOS 系统色：用于列表行的图标底色 */
-const CATEGORY_TINTS = {
-  video: "#ff3b30",
-  music: "#ff2d55",
-  cloud: "#0a84ff",
-  reading: "#ff9500",
-  shopping: "#ffcc00",
-  social: "#34c759",
-  tools: "#5856d6",
-  gaming: "#af52de",
-  education: "#007aff",
-  other: "#8e8e93",
-};
-
-function iconOf(category) {
-  const cat = TEMPLATE_CATEGORIES[category];
-  return cat ? cat.icon : "📱";
-}
-
-function tintOf(category) {
-  const base = CATEGORY_TINTS[category] || CATEGORY_TINTS.other;
-  return `${base}26`; // 约 15% 透明度
+/** 列表行图标：统一用名称首字符，与订阅列表头像保持一致 */
+function initialOf(name) {
+  const t = String(name ?? "").trim();
+  return t ? [...t][0].toUpperCase() : "?";
 }
 
 function formatAmount(template) {
@@ -143,11 +140,16 @@ function close() {
 </script>
 
 <template>
-  <Dialog :open="modelValue" @close="close" class="template-dialog-root">
+  <Dialog
+    :open="modelValue"
+    :initial-focus="sheetRef"
+    @close="close"
+    class="template-dialog-root"
+  >
     <div class="template-dialog-backdrop" aria-hidden="true" />
 
     <div class="template-dialog-container">
-      <DialogPanel class="template-sheet">
+      <DialogPanel ref="sheetRef" class="template-sheet">
         <!-- 移动端抓手 -->
         <div class="sheet-grabber" aria-hidden="true" />
 
@@ -213,13 +215,13 @@ function close() {
         >
           <div
             class="sheet-chips"
-            @wheel.prevent="onChipsWheel"
+            @wheel="onChipsWheel"
           >
             <button
               type="button"
               class="chip"
               :class="{ 'is-active': activeCategory === 'all' }"
-              @click="activeCategory = 'all'"
+              @click="selectCategory('all')"
             >
               全部
             </button>
@@ -227,9 +229,9 @@ function close() {
               type="button"
               class="chip"
               :class="{ 'is-active': activeCategory === 'popular' }"
-              @click="activeCategory = 'popular'"
+              @click="selectCategory('popular')"
             >
-              🔥 热门
+              热门
             </button>
             <button
               v-for="cat in categories"
@@ -237,67 +239,64 @@ function close() {
               type="button"
               class="chip"
               :class="{ 'is-active': activeCategory === cat.id }"
-              @click="activeCategory = cat.id"
+              @click="selectCategory(cat.id)"
             >
-              {{ cat.icon }} {{ cat.label }}
+              {{ cat.label }}
             </button>
           </div>
         </div>
 
-        <!-- 分组列表 -->
-        <div class="sheet-list">
-          <section
-            v-for="group in groupedTemplates"
-            v-show="group.templates.length"
-            :key="group.key"
-            class="ios-section"
-          >
+        <!-- 列表：拍平成单一连续列表（按数据顺序），避免多段圆角分组显得零碎 -->
+        <div ref="listRef" class="sheet-list">
+          <ul v-if="!isEmpty" class="ios-list">
+            <li
+              v-for="template in filteredTemplates"
+              :key="template.id"
+              class="ios-row-item"
+            >
+              <button type="button" class="ios-row" @click="selectTemplate(template)">
+                <span class="ios-row-icon">{{ initialOf(template.name) }}</span>
 
-            <ul class="ios-list">
-              <li
-                v-for="template in group.templates"
-                :key="template.id"
-                class="ios-row-item"
-              >
-                <button type="button" class="ios-row" @click="selectTemplate(template)">
-                  <span
-                    class="ios-row-icon"
-                    :style="{ backgroundColor: tintOf(template.category) }"
-                  >
-                    {{ iconOf(template.category) }}
+                <span class="ios-row-body">
+                  <span class="ios-row-title">
+                    {{ template.name }}
+                    <span v-if="template.popular" class="ios-badge">热门</span>
                   </span>
+                  <span v-if="template.notes" class="ios-row-sub">
+                    {{ template.notes }}
+                  </span>
+                </span>
 
-                  <span class="ios-row-body">
-                    <span class="ios-row-title">
-                      {{ template.name }}
-                      <span v-if="template.popular" class="ios-badge">热门</span>
-                    </span>
-                    <span v-if="template.notes" class="ios-row-sub">
-                      {{ template.notes }}
-                    </span>
-                  </span>
-
-                  <span class="ios-row-trailing">
-                    <span class="ios-row-price">{{ formatAmount(template) }}</span>
-                    <svg class="ios-chevron" viewBox="0 0 24 24" aria-hidden="true">
-                      <path
-                        d="M9 6l6 6-6 6"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2.2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
-                  </span>
-                </button>
-              </li>
-            </ul>
-          </section>
+                <span class="ios-row-trailing">
+                  <span class="ios-row-price">{{ formatAmount(template) }}</span>
+                  <svg class="ios-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      d="M9 6l6 6-6 6"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+              </button>
+            </li>
+          </ul>
 
           <!-- 空状态 -->
-          <div v-if="isEmpty" class="sheet-empty">
-            <span class="sheet-empty-icon">🔍</span>
+          <div v-else class="sheet-empty">
+            <svg
+              class="sheet-empty-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.6-3.6" stroke-linecap="round" />
+            </svg>
             <p class="sheet-empty-title">未找到匹配的模板</p>
             <p class="sheet-empty-hint">换个关键词试试</p>
           </div>
@@ -310,8 +309,8 @@ function close() {
 <style scoped>
 /* =====================================================================
  * 订阅模板选择器 · iOS 分组列表风格
- * 结构：圆角 Sheet（移动端底部弹出） + 搜索框 + 分类胶囊 + 分组列表
- * 颜色沿用项目令牌，形状/间距/层级仿 iOS
+ * 配色收敛：图标统一用名称首字符（与订阅列表头像一致），分类胶囊去 emoji，
+ * 列表拍平为单一连续列表；iOS 令牌来自 styles/tokens.css（--ios-*）
  * ===================================================================== */
 
 :global(.template-dialog-root) {
@@ -323,6 +322,8 @@ function close() {
 :global(.template-dialog-backdrop) {
   position: fixed;
   inset: 0;
+  /* Dialog 根节点是 Fragment，根类拿不到本组件的 scoped data-v，规则不生效；z-index 必须写在自己的元素上 */
+  z-index: 9999;
   background: rgba(0, 0, 0, 0.4);
   -webkit-backdrop-filter: blur(3px);
   backdrop-filter: blur(3px);
@@ -342,18 +343,6 @@ function close() {
 
 /* ---------------- Sheet 容器 ---------------- */
 .template-sheet {
-  /* 局部主题变量：默认暗色，浅色在下方覆盖 */
-  --ts-sheet: var(--card);
-  --ts-row: var(--card-2);
-  --ts-sep: rgba(255, 255, 255, 0.08);
-  --ts-fill: rgba(120, 120, 128, 0.24);
-  --ts-fill-strong: rgba(120, 120, 128, 0.42);
-  --ts-label: var(--text);
-  --ts-muted: var(--muted);
-  --ts-chevron: #636366;
-  /* iOS 系统蓝（暗色外观） */
-  --ts-accent: #0a84ff;
-
   pointer-events: auto;
   width: 440px;
   max-width: 100%;
@@ -361,23 +350,14 @@ function close() {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  background: var(--ts-sheet);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.36);
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  border: 1px solid var(--ios-card-border);
+  border-radius: 18px;
+  box-shadow: var(--ios-shadow-panel);
   overflow: hidden;
   animation: ts-pop-in 0.34s cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-:global(:root[data-theme="light"]) .template-sheet {
-  --ts-sheet: var(--card-2);
-  --ts-row: var(--card);
-  --ts-sep: rgba(60, 60, 67, 0.16);
-  --ts-fill: rgba(118, 118, 128, 0.12);
-  --ts-fill-strong: rgba(118, 118, 128, 0.26);
-  --ts-chevron: #c7c7cc;
-  /* iOS 系统蓝（浅色外观） */
-  --ts-accent: #007aff;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.16);
 }
 
 /* 移动端抓手（桌面隐藏） */
@@ -388,7 +368,7 @@ function close() {
   height: 5px;
   margin: 8px auto 0;
   border-radius: var(--radius-full);
-  background: var(--ts-fill-strong);
+  background: var(--ios-separator);
 }
 
 /* ---------------- 顶部导航 ---------------- */
@@ -406,7 +386,7 @@ function close() {
   font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.2px;
-  color: var(--ts-label);
+  color: var(--text);
   text-align: center;
   white-space: nowrap;
 }
@@ -416,7 +396,7 @@ function close() {
   padding: 0;
   border: none;
   background: none;
-  color: var(--ts-accent);
+  color: var(--ios-blue);
   font-family: inherit;
   font-size: 17px;
   cursor: pointer;
@@ -425,6 +405,16 @@ function close() {
 
 .sheet-cancel:active {
   opacity: 0.5;
+}
+
+.sheet-cancel:focus {
+  outline: none;
+}
+
+.sheet-cancel:focus-visible {
+  outline: none;
+  border-radius: 8px;
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
 }
 
 .sheet-header-spacer {
@@ -441,8 +431,13 @@ function close() {
   margin: 0;
   padding: 0 8px 0 10px;
   border-radius: 10px;
-  background: var(--ts-fill);
-  color: var(--ts-muted);
+  background: var(--ios-fill);
+  color: var(--ios-gray);
+  transition: box-shadow 0.18s ease;
+}
+
+.sheet-search:focus-within {
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
 }
 
 .search-icon {
@@ -459,7 +454,7 @@ function close() {
   border: none;
   border-radius: 0;
   background: transparent;
-  color: var(--ts-label);
+  color: var(--text);
   font-family: inherit;
   font-size: 16px; /* 16px 避免 iOS Safari 聚焦缩放 */
   -webkit-appearance: none;
@@ -472,7 +467,7 @@ function close() {
 }
 
 .search-field::placeholder {
-  color: var(--ts-muted);
+  color: var(--ios-gray);
 }
 
 .search-field::-webkit-search-cancel-button {
@@ -489,7 +484,7 @@ function close() {
   padding: 0;
   border: none;
   background: none;
-  color: var(--ts-muted);
+  color: var(--ios-gray);
   cursor: pointer;
 }
 
@@ -504,40 +499,21 @@ function close() {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  border-bottom: 1px solid var(--ts-sep);
+  border-bottom: 1px solid var(--ios-separator);
   scroll-behavior: smooth;
-  /* 两侧渐变遮罩，提示还有更多内容 */
   --fade-width: 32px;
-  mask-image: none;
-  -webkit-mask-image: none;
 }
 
 /* 左侧可滚动时显示渐变 */
 .sheet-chips-wrap.has-left-fade {
-  mask-image: linear-gradient(
-    to right,
-    transparent 0px,
-    black var(--fade-width)
-  );
-  -webkit-mask-image: linear-gradient(
-    to right,
-    transparent 0px,
-    black var(--fade-width)
-  );
+  mask-image: linear-gradient(to right, transparent 0px, black var(--fade-width));
+  -webkit-mask-image: linear-gradient(to right, transparent 0px, black var(--fade-width));
 }
 
 /* 右侧可滚动时显示渐变 */
 .sheet-chips-wrap.has-right-fade {
-  mask-image: linear-gradient(
-    to left,
-    transparent 0px,
-    black var(--fade-width)
-  );
-  -webkit-mask-image: linear-gradient(
-    to left,
-    transparent 0px,
-    black var(--fade-width)
-  );
+  mask-image: linear-gradient(to left, transparent 0px, black var(--fade-width));
+  -webkit-mask-image: linear-gradient(to left, transparent 0px, black var(--fade-width));
 }
 
 /* 两侧都有渐变 */
@@ -569,14 +545,11 @@ function close() {
     height: 3px;
   }
   .sheet-chips-wrap::-webkit-scrollbar-thumb {
-    background: var(--ts-fill-strong);
+    background: var(--ios-separator);
     border-radius: 99px;
   }
   .sheet-chips-wrap::-webkit-scrollbar-track {
     background: transparent;
-  }
-  .sheet-chips-wrap:hover::-webkit-scrollbar-thumb {
-    background: var(--ts-accent);
   }
 }
 
@@ -585,7 +558,6 @@ function close() {
   display: flex;
   gap: 8px;
   padding: 12px 0 10px;
-  /* 禁止文本选中，提升滚轮/拖拽体验 */
   user-select: none;
   -webkit-user-select: none;
 }
@@ -594,19 +566,18 @@ function close() {
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
   height: 32px;
   padding: 0 14px;
   border: none;
   border-radius: var(--radius-full);
-  background: var(--ts-fill);
-  color: var(--ts-label);
+  background: var(--ios-fill);
+  color: var(--text);
   font-family: inherit;
   font-size: 14px;
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.18s ease, color 0.18s ease, transform 0.12s ease;
+  transition: background-color 0.18s ease, color 0.18s ease, transform 0.12s ease;
 }
 
 .chip:active {
@@ -614,7 +585,7 @@ function close() {
 }
 
 .chip.is-active {
-  background: var(--ts-accent);
+  background: var(--ios-blue);
   color: #fff;
   font-weight: 600;
 }
@@ -633,18 +604,10 @@ function close() {
   display: none;
 }
 
-.ios-section {
-  margin-bottom: 20px;
-}
-
-
 .ios-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  border-radius: var(--radius-md);
-  background: var(--ts-row);
-  overflow: hidden;
 }
 
 .ios-row-item {
@@ -659,7 +622,7 @@ function close() {
   left: 62px;
   right: 0;
   height: 1px;
-  background: var(--ts-sep);
+  background: var(--ios-separator);
 }
 
 .ios-row {
@@ -670,18 +633,20 @@ function close() {
   min-height: 58px;
   padding: 10px 14px;
   border: none;
+  border-radius: 12px;
   background: none;
-  color: var(--ts-label);
+  color: var(--text);
   font-family: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 
 .ios-row:active {
-  background: var(--ts-fill);
+  background: var(--ios-fill);
 }
 
+/* 图标统一为「名称首字符」圆角块，与订阅列表头像同一套视觉 */
 .ios-row-icon {
   flex: 0 0 36px;
   width: 36px;
@@ -689,8 +654,11 @@ function close() {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-sm);
-  font-size: 19px;
+  border-radius: 10px;
+  background: var(--ios-blue-soft);
+  color: var(--ios-blue);
+  font-size: 15px;
+  font-weight: 700;
   line-height: 1;
 }
 
@@ -709,16 +677,17 @@ function close() {
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.1px;
-  color: var(--ts-label);
+  color: var(--text);
   line-height: 1.3;
 }
 
+/* 「热门」标签：中性浅灰，不再抢视觉 */
 .ios-badge {
   flex: none;
   padding: 1px 6px;
   border-radius: 5px;
-  background: rgba(255, 149, 0, 0.16);
-  color: #ff9500;
+  background: var(--ios-fill);
+  color: var(--ios-gray);
   font-size: 11px;
   font-weight: 600;
   line-height: 1.5;
@@ -726,7 +695,7 @@ function close() {
 
 .ios-row-sub {
   overflow: hidden;
-  color: var(--ts-muted);
+  color: var(--ios-gray);
   font-size: 13px;
   line-height: 1.4;
   white-space: nowrap;
@@ -741,7 +710,7 @@ function close() {
 }
 
 .ios-row-price {
-  color: var(--ts-accent);
+  color: var(--ios-blue);
   font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -750,7 +719,8 @@ function close() {
 .ios-chevron {
   width: 16px;
   height: 16px;
-  color: var(--ts-chevron);
+  color: var(--ios-gray);
+  opacity: 0.6;
 }
 
 /* ---------------- 空状态 ---------------- */
@@ -761,17 +731,19 @@ function close() {
   justify-content: center;
   gap: 6px;
   padding: 64px 24px;
-  color: var(--ts-muted);
+  color: var(--ios-gray);
 }
 
 .sheet-empty-icon {
-  font-size: 40px;
-  line-height: 1;
+  width: 40px;
+  height: 40px;
+  color: var(--ios-gray);
+  opacity: 0.5;
 }
 
 .sheet-empty-title {
   margin: 8px 0 0;
-  color: var(--ts-label);
+  color: var(--text);
   font-size: 15px;
   font-weight: 600;
 }
@@ -810,7 +782,7 @@ function close() {
     height: auto;
     max-height: 90vh;
     max-height: 90dvh;
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-radius: 18px 18px 0 0;
     animation: ts-sheet-up 0.4s cubic-bezier(0.32, 0.72, 0, 1);
   }
 
@@ -820,10 +792,6 @@ function close() {
 
   .sheet-header {
     padding-top: 10px;
-  }
-
-  .ios-row-item + .ios-row-item::before {
-    left: 62px;
   }
 }
 

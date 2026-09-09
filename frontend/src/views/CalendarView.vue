@@ -2,7 +2,7 @@
 // 日历视图：按月渲染扣费 / 服务到期事件
 // 视觉：iOS 风格（毛玻璃卡片 / 圆形日期 / 彩色事件胶囊）
 // 交互：Headless UI Dialog 承载窄屏「扣费明细」底部抽屉，Popover 承载窄屏图例
-import { ref, computed, onMounted, onActivated } from "vue";
+import { ref, computed, watch, onMounted, onActivated } from "vue";
 import {
   Dialog,
   DialogPanel,
@@ -209,13 +209,11 @@ const selectedDayEvents = computed(() => {
   return target ? target.events : [];
 });
 
-const selectedDayTotalFormatted = computed(() => {
-  const events = selectedDayEvents.value;
+/** 按币种汇总扣费金额（服务到期不计入） */
+function computeTotal(events) {
   if (!events.length) return "";
-  // 按币种分别求和扣费类金额
   const map = {};
   for (const e of events) {
-    // 服务到期不计入扣款总计
     if (e.event_type === "service_end") continue;
     const cur = e.currency || "CNY";
     map[cur] = (map[cur] || 0) + (e.amount || 0);
@@ -223,7 +221,9 @@ const selectedDayTotalFormatted = computed(() => {
   const entries = Object.entries(map);
   if (!entries.length) return "";
   return entries.map(([cur, sum]) => fmtCents(sum, cur)).join(" + ");
-});
+}
+
+const selectedDayTotalFormatted = computed(() => computeTotal(selectedDayEvents.value));
 
 const isOnlyServiceEnd = computed(() => {
   const events = selectedDayEvents.value;
@@ -233,6 +233,20 @@ const isOnlyServiceEnd = computed(() => {
 // 明细展开态：选中且有事件的日期（供 details-collapsed 类驱动桌面侧栏开合）
 const detailsOpen = computed(() => !!selectedDateStr.value && selectedDayEvents.value.length > 0);
 
+// 桌面侧栏的渲染快照：关闭时不清空，供 0.28s 收起动画期间继续渲染原内容，
+// 避免收起过程中出现「null / 空列表」一闪。
+const detailsSnapshot = ref({ date: null, events: [], onlyServiceEnd: false, totalFormatted: "" });
+
+watch([selectedDateStr, selectedDayEvents], ([date, events]) => {
+  if (!date || !events.length) return;
+  detailsSnapshot.value = {
+    date,
+    events,
+    onlyServiceEnd: events.every((e) => e.event_type === "service_end"),
+    totalFormatted: computeTotal(events),
+  };
+});
+
 function openSheet() {
   sheetOpen.value = true;
 }
@@ -241,7 +255,7 @@ function closeSheet() {
   sheetOpen.value = false;
 }
 
-// 关闭扣费明细（桌面侧栏）：清空选中日期即可
+// 关闭扣费明细（桌面侧栏）：清空选中日期即可（detailsSnapshot 保留，供收起动画渲染）
 function closeDetails() {
   selectedDateStr.value = null;
   sheetOpen.value = false;
@@ -402,7 +416,7 @@ onActivated(loadMonth);
         class="card day-details-card"
         :class="{ 'details-collapsed': !detailsOpen }"
       >
-        <div :key="selectedDateStr" class="details-body">
+        <div :key="detailsSnapshot.date" class="details-body">
           <div class="details-head">
             <div class="details-date">
               <span class="details-date-label">
@@ -410,11 +424,11 @@ onActivated(loadMonth);
                   <rect x="3" y="5" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.8" />
                   <path d="M8 3v4M16 3v4M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
                 </svg>
-                {{ selectedDateStr }} {{ isOnlyServiceEnd ? '到期明细' : '扣费明细' }}
+                {{ detailsSnapshot.date }} {{ detailsSnapshot.onlyServiceEnd ? '到期明细' : '扣费明细' }}
               </span>
               <span class="details-count">
-                共 {{ selectedDayEvents.length }} 笔
-                <template v-if="selectedDayTotalFormatted"> (合计 {{ selectedDayTotalFormatted }})</template>
+                共 {{ detailsSnapshot.events.length }} 笔
+                <template v-if="detailsSnapshot.totalFormatted"> (合计 {{ detailsSnapshot.totalFormatted }})</template>
               </span>
             </div>
             <button
@@ -430,7 +444,7 @@ onActivated(loadMonth);
             </button>
           </div>
           <div class="details-list">
-            <div v-for="(e, idx) in selectedDayEvents" :key="idx" class="detail-item">
+            <div v-for="(e, idx) in detailsSnapshot.events" :key="idx" class="detail-item">
               <div class="detail-left">
                 <span class="detail-avatar">{{ initialOf(e.name) }}</span>
                 <div class="detail-info">
@@ -1033,6 +1047,12 @@ onActivated(loadMonth);
   color: var(--text);
   background: var(--ios-separator);
 }
+.details-close:focus {
+  outline: none;
+}
+.details-close:focus-visible {
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
+}
 .details-list {
   display: flex;
   flex-direction: column;
@@ -1124,6 +1144,8 @@ onActivated(loadMonth);
 .cal-sheet-backdrop {
   position: fixed;
   inset: 0;
+  /* Dialog 根节点是 Fragment，根类拿不到本组件的 scoped data-v，规则不生效；z-index 必须写在自己的元素上 */
+  z-index: var(--z-modal);
   background: rgba(0, 0, 0, 0.4);
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
@@ -1131,6 +1153,7 @@ onActivated(loadMonth);
 .cal-sheet-container {
   position: fixed;
   inset: 0;
+  z-index: var(--z-modal);
   display: flex;
   align-items: flex-end;
   justify-content: center;

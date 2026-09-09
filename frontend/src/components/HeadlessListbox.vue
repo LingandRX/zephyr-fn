@@ -201,6 +201,11 @@ function handleClear(e) {
 </template>
 
 <style scoped>
+/* =====================================================================
+ * HeadlessListbox · iOS 风格（分组列表下拉）
+ * iOS 令牌来自 styles/tokens.css（--ios-*，已全局可用）
+ * ===================================================================== */
+
 .custom-select {
   position: relative;
   display: block;
@@ -220,14 +225,15 @@ function handleClear(e) {
   z-index: 50;
 }
 
+/* ---------------- 触发器（iOS 表单字段） ---------------- */
 .custom-select-trigger {
   width: 100%;
   height: 38px;
   box-sizing: border-box;
   padding: 0 8px 0 12px;
-  background: var(--card-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  background: var(--ios-fill);
+  border: 1px solid transparent;
+  border-radius: 10px;
   color: var(--text);
   font-size: var(--fs-sm);
   font-family: inherit;
@@ -237,15 +243,20 @@ function handleClear(e) {
   gap: 6px;
   cursor: pointer;
   outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
   text-align: left;
+}
+
+.custom-select-trigger:hover {
+  background: var(--ios-separator);
 }
 
 .custom-select-trigger:focus-visible,
 .custom-select:has([data-headlessui-state*="open"]) .custom-select-trigger,
 .listbox-wrapper[data-headlessui-state*="open"] .custom-select-trigger {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.2);
+  background: var(--ios-card-bg);
+  border-color: var(--ios-blue);
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
 }
 
 .custom-select-label {
@@ -256,7 +267,7 @@ function handleClear(e) {
 }
 
 .custom-select-label.is-placeholder {
-  color: var(--muted);
+  color: var(--ios-gray);
 }
 
 .custom-select-actions {
@@ -273,103 +284,99 @@ function handleClear(e) {
   justify-content: center;
   width: 20px;
   height: 20px;
-  color: var(--muted);
-  transition: transform 0.2s ease, opacity 0.15s ease, color 0.15s ease;
+  color: var(--ios-gray);
+  transition: transform 0.2s ease, color 0.18s ease;
   cursor: pointer;
 }
 
 .custom-select:has([data-headlessui-state*="open"]) .custom-select-arrow,
 .listbox-wrapper[data-headlessui-state*="open"] .custom-select-arrow {
   transform: rotate(180deg);
-  color: var(--primary);
+  color: var(--ios-blue);
 }
 
 .custom-select-clear-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: none;
-  background: transparent;
   border-radius: 50%;
-  color: var(--muted);
+  background: var(--ios-separator);
+  color: var(--ios-gray);
   cursor: pointer;
-  transition: color 0.15s ease, background-color 0.15s ease;
   outline: none;
+  transition: color 0.18s ease, background-color 0.18s ease;
 }
 
 .custom-select-clear-btn:hover {
   color: var(--text);
-  background-color: var(--card);
+  background: var(--ios-fill);
 }
 
 .custom-select-trigger.is-disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
+/* ---------------- 下拉面板（iOS 分组列表） ---------------- */
 .custom-select-dropdown {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + 6px);
   left: 0;
   width: 100%;
   min-width: 100%;
-  max-height: 240px;
+  max-height: 264px;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-modal);
-  z-index: var(--z-notice);
+  scrollbar-color: var(--ios-separator) transparent;
   box-sizing: border-box;
-  padding: 4px;
-  list-style: none;
   margin: 0;
+  padding: 6px;
+  list-style: none;
   outline: none;
-  /* 动画 */
-  animation: dropdown-fade-in 0.15s ease;
+  z-index: var(--z-notice);
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  border: 1px solid var(--ios-card-border);
+  border-radius: 14px;
+  box-shadow: var(--ios-shadow-panel);
+  animation: csl-dropdown-in 0.16s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes dropdown-fade-in {
+@keyframes csl-dropdown-in {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translateY(-6px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
-/* 细长自定义滚动条 (WebKit) */
+/* 细滚动条 */
 .custom-select-dropdown::-webkit-scrollbar {
   width: 4px;
 }
-
 .custom-select-dropdown::-webkit-scrollbar-track {
   background: transparent;
 }
-
 .custom-select-dropdown::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--ios-separator);
   border-radius: 4px;
-  transition: background-color 0.15s ease;
-}
-
-.custom-select-dropdown::-webkit-scrollbar-thumb:hover {
-  background: var(--muted);
 }
 
 .custom-select-option {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
-  border-radius: 4px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 10px;
   color: var(--text);
   font-size: var(--fs-sm);
   cursor: pointer;
@@ -377,21 +384,24 @@ function handleClear(e) {
 }
 
 .custom-select-option.is-active {
-  background-color: var(--card-2);
+  background: var(--ios-fill);
 }
 
 .custom-select-option.is-selected {
-  color: var(--primary);
+  color: var(--ios-blue);
   font-weight: 600;
-  background-color: rgba(var(--primary-rgb), 0.1);
+}
+
+.custom-select-option.is-selected.is-active {
+  background: var(--ios-blue-soft);
 }
 
 .custom-select-empty {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px 10px;
-  color: var(--muted);
+  padding: 18px 10px;
+  color: var(--ios-gray);
   font-size: var(--fs-xs);
   user-select: none;
   cursor: default;
@@ -407,7 +417,13 @@ function handleClear(e) {
   display: inline-flex;
   align-items: center;
   margin-left: 6px;
-  color: var(--primary);
+  color: var(--ios-blue);
   flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .custom-select-dropdown {
+    animation: none;
+  }
 }
 </style>

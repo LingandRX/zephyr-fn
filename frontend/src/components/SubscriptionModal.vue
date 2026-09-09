@@ -292,7 +292,13 @@ function handleTemplateSelect(template) {
                   class="template-btn"
                   title="从模板选择"
                 >
-                  📋 模板
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="7" rx="2" />
+                    <rect x="14" y="3" width="7" height="7" rx="2" />
+                    <rect x="3" y="14" width="7" height="7" rx="2" />
+                    <rect x="14" y="14" width="7" height="7" rx="2" />
+                  </svg>
+                  模板
                 </HeadlessButton>
               </div>
             </div>
@@ -404,6 +410,12 @@ function handleTemplateSelect(template) {
 </template>
 
 <style scoped>
+/* =====================================================================
+ * 新增/编辑订阅弹窗 · iOS 风格
+ * 毛玻璃卡片 / iOS 表单控件 / iOS 文字按钮
+ * iOS 令牌来自 styles/tokens.css（--ios-*，已全局可用）
+ * ===================================================================== */
+
 :global(.modal-dialog-root) {
   position: fixed;
   inset: 0;
@@ -413,7 +425,11 @@ function handleTemplateSelect(template) {
 :global(.modal-dialog-backdrop) {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  /* Dialog 根节点是 Fragment，根类拿不到本组件的 scoped data-v，规则不生效；z-index 必须写在自己的元素上 */
+  z-index: var(--z-modal);
+  background: rgba(0, 0, 0, 0.4);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
   animation: modal-fade-in 0.18s ease-out;
 }
 
@@ -428,8 +444,17 @@ function handleTemplateSelect(template) {
   pointer-events: none;
 }
 
+/* ---------------- 弹窗卡片 ---------------- */
 .modal-dialog-container .modal-card {
   pointer-events: auto;
+  width: 560px;
+  max-width: 100%;
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  border: 1px solid var(--ios-card-border);
+  border-radius: 18px;
+  box-shadow: var(--ios-shadow-panel);
   animation: modal-zoom-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -443,6 +468,120 @@ function handleTemplateSelect(template) {
   to { opacity: 1; transform: scale(1); }
 }
 
+/* ---------------- 头部 ---------------- */
+.modal-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 0;
+  margin-bottom: 14px;
+}
+
+.modal-head h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: var(--text);
+}
+
+.modal-close {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--ios-fill);
+  color: var(--ios-gray);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.modal-close:hover {
+  background: var(--ios-separator);
+  color: var(--text);
+}
+
+.modal-close:focus {
+  outline: none;
+}
+
+.modal-close:focus-visible {
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
+}
+
+/* ---------------- 表单控件 ---------------- */
+.modal-form .form-grid {
+  gap: 14px 16px;
+}
+
+.modal-form .field {
+  gap: 6px;
+}
+
+/* 字段标签（排除 .inline 容器与备注计数器） */
+.modal-form .field > span:not(.inline):not(.notes-counter) {
+  color: var(--ios-gray);
+  font-size: 13px;
+}
+
+.modal-form input:not([type="checkbox"]):not([type="radio"]),
+.modal-form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  background: var(--ios-fill);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.modal-form input:not([type="checkbox"]):not([type="radio"]) {
+  height: 38px;
+  padding: 0 12px;
+}
+
+.modal-form textarea {
+  padding: 10px 12px;
+  min-height: 84px;
+  line-height: 1.5;
+}
+
+.modal-form input:focus,
+.modal-form textarea:focus {
+  outline: none;
+  background: var(--ios-card-bg);
+  border-color: var(--ios-blue);
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
+}
+
+.modal-form input::placeholder,
+.modal-form textarea::placeholder {
+  color: var(--ios-gray);
+}
+
+/* 自动续费开关：iOS 绿 */
+.modal-form :deep(.switch-on) {
+  background-color: var(--ios-green);
+}
+
+.modal-form :deep(.switch-button:focus-visible) {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
+}
+
+.modal-form :deep(.switch-label) {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* 备注 */
 .notes-field {
   position: relative;
 }
@@ -452,16 +591,17 @@ function handleTemplateSelect(template) {
 }
 
 .notes-counter {
-  margin-top: 4px;
+  margin-top: 2px;
   text-align: right;
   font-size: var(--fs-xs);
-  color: var(--muted);
+  color: var(--ios-gray);
 }
 
 .notes-counter.is-limit {
-  color: var(--amber);
+  color: var(--ios-red);
 }
 
+/* 名称 + 模板按钮 */
 .name-input-group {
   display: flex;
   gap: var(--space-2);
@@ -474,51 +614,98 @@ function handleTemplateSelect(template) {
 }
 
 .template-btn {
-  /* iOS 系统蓝强调色 */
-  --ios-accent: #0a84ff;
   flex: none;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  height: 38px;
   padding: 0 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--card-2);
-  color: var(--text);
+  border: none;
+  border-radius: 10px;
+  background: var(--ios-blue-soft);
+  color: var(--ios-blue);
   font-family: inherit;
   font-size: var(--fs-sm);
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+  transition: background-color 0.18s ease, transform 0.12s ease;
 }
 
 .template-btn:hover {
-  border-color: var(--ios-accent);
-  color: var(--ios-accent);
-}
-
-:global(:root[data-theme="light"]) .template-btn {
-  --ios-accent: #007aff;
+  background: rgba(0, 122, 255, 0.2);
 }
 
 .template-btn:active {
   transform: scale(0.97);
 }
 
+.template-btn:focus {
+  outline: none;
+}
+
+.template-btn:focus-visible {
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
+}
+
+.template-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ---------------- 底部操作栏 ---------------- */
 .modal-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-2);
+  padding: 14px 20px 18px;
 }
 
 .modal-foot-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 4px;
 }
 
-/* ---------------- 弹窗移动端适配 (<=860px) ---------------- */
+/* 文字按钮：取消/保存蓝色，重置灰色 */
+.modal-foot :deep(.headless-btn) {
+  height: 38px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ios-blue);
+  font-weight: 500;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.modal-foot :deep(.headless-btn:hover:not(:disabled)) {
+  background: var(--ios-fill);
+  border-color: transparent;
+}
+
+.modal-foot > :deep(.headless-btn) {
+  color: var(--ios-gray);
+}
+
+.modal-foot :deep(.headless-btn.btn-primary) {
+  background: var(--ios-blue);
+  color: #fff;
+  font-weight: 600;
+}
+
+.modal-foot :deep(.headless-btn.btn-primary:hover:not(:disabled)) {
+  background: #0069d9;
+}
+
+.modal-foot :deep(.headless-btn:focus-visible) {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
+}
+
+/* ---------------- 移动端适配 (<=860px) ---------------- */
 @media (max-width: 860px) {
   :global(.modal-dialog-container) {
     align-items: center;
@@ -528,7 +715,7 @@ function handleTemplateSelect(template) {
   .modal-card {
     width: 100%;
     max-width: 100%;
-    border-radius: var(--radius-lg);
+    border-radius: 18px;
     max-height: 90vh;
     max-height: 90dvh;
     overflow: hidden;
@@ -540,33 +727,50 @@ function handleTemplateSelect(template) {
 
   .form-grid {
     grid-template-columns: 1fr;
+    gap: 12px;
   }
 
   .span-2 {
     grid-column: span 1;
   }
 
-  .form-grid input:not([type="checkbox"]),
-  .form-grid select,
-  .form-grid :deep(.custom-select-trigger),
-  .form-grid :deep(.custom-date-picker-trigger) {
+  /* 触控目标放大到 44px，字号 16px 防止 iOS 聚焦自动缩放 */
+  .modal-form input:not([type="checkbox"]):not([type="radio"]),
+  .modal-form select,
+  .modal-form :deep(.custom-select-trigger),
+  .modal-form :deep(.custom-date-picker-trigger),
+  .template-btn {
     height: 44px;
     font-size: 16px;
   }
 
-  .form-grid textarea {
-    min-height: 80px;
+  .modal-form textarea {
+    min-height: 88px;
     font-size: 16px;
   }
 
+  /* 底部按钮吸底，内容滚动时始终可见 */
   .modal-foot {
     position: sticky;
     bottom: 0;
     z-index: 1;
-    background: var(--card);
     margin: var(--space-3) -20px 0;
-    padding: 12px 20px 6px;
-    border-top: 1px solid var(--border);
+    padding: 12px 20px calc(10px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--ios-separator);
+    background: var(--ios-card-bg);
+    -webkit-backdrop-filter: saturate(180%) blur(24px);
+    backdrop-filter: saturate(180%) blur(24px);
+  }
+
+  .modal-foot :deep(.headless-btn) {
+    height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(.modal-dialog-backdrop),
+  .modal-dialog-container .modal-card {
+    animation: none;
   }
 }
 </style>

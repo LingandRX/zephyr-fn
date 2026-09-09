@@ -4,6 +4,8 @@
 import { ref, reactive, computed, watch, nextTick, onMounted } from "vue";
 import {
   TabGroup, TabList, Tab, TabPanels, TabPanel,
+  Dialog, DialogPanel, DialogTitle,
+  TransitionRoot, TransitionChild,
 } from "@headlessui/vue";
 import {
   getSettings, saveSettings, getCategories, createCategory, deleteCategory,
@@ -442,14 +444,37 @@ async function addCategory() {
   }
 }
 
-async function removeCategory(id, name) {
-  if (!confirm(`确定删除分类「${name}」？（关联订阅将保留为未分类）`)) return;
+// ---------- 删除分类确认（Headless UI Dialog · iOS 弹窗） ----------
+const delCatOpen = ref(false);
+const delCatTarget = ref(null);
+const delCatBusy = ref(false);
+
+function askDelCat(cat) {
+  delCatTarget.value = cat;
+  delCatOpen.value = true;
+}
+
+function closeDelCat() {
+  if (delCatBusy.value) return;
+  // 不在这里清空 delCatTarget：离场动画期间面板仍在渲染，
+  // 立即置 null 会让标题/内容闪一下空白；下次 askDelCat 会覆盖。
+  delCatOpen.value = false;
+}
+
+async function confirmDelCat() {
+  const cat = delCatTarget.value;
+  if (!cat) return;
+  delCatBusy.value = true;
   try {
-    await deleteCategory(id);
+    await deleteCategory(cat.id);
     toast("已删除");
     cats.value = await getCategories();
+    // 保留 delCatTarget 供离场动画渲染
+    delCatOpen.value = false;
   } catch (err) {
     toast(err.message, "err");
+  } finally {
+    delCatBusy.value = false;
   }
 }
 
@@ -729,7 +754,7 @@ onMounted(loadAll);
         <div class="cat-list">
           <span v-for="c in cats" :key="c.id" class="cat-chip">
             <span class="chip-name">{{ c.name }}</span>
-            <button :title="`删除分类 ${c.name}`" @click="removeCategory(c.id, c.name)"><svg width="11" height="11" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M556.8 512L832 236.8c12.8-12.8 12.8-32 0-44.8-12.8-12.8-32-12.8-44.8 0L512 467.2l-275.2-277.333333c-12.8-12.8-32-12.8-44.8 0-12.8 12.8-12.8 32 0 44.8l275.2 277.333333-277.333333 275.2c-12.8 12.8-12.8 32 0 44.8 6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333L512 556.8 787.2 832c6.4 6.4 14.933333 8.533333 23.466667 8.533333s17.066667-2.133333 23.466666-8.533333c12.8-12.8 12.8-32 0-44.8L556.8 512z"/></svg></button>
+            <button :title="`删除分类 ${c.name}`" @click="askDelCat(c)"><svg width="11" height="11" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M556.8 512L832 236.8c12.8-12.8 12.8-32 0-44.8-12.8-12.8-32-12.8-44.8 0L512 467.2l-275.2-277.333333c-12.8-12.8-32-12.8-44.8 0-12.8 12.8-12.8 32 0 44.8l275.2 277.333333-277.333333 275.2c-12.8 12.8-12.8 32 0 44.8 6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333L512 556.8 787.2 832c6.4 6.4 14.933333 8.533333 23.466667 8.533333s17.066667-2.133333 23.466666-8.533333c12.8-12.8 12.8-32 0-44.8L556.8 512z"/></svg></button>
           </span>
           <span v-if="!cats.length" class="muted">暂无分类</span>
         </div>
@@ -759,7 +784,7 @@ onMounted(loadAll);
       <div class="card">
         <div class="section-header">
           <h3>运行日志</h3>
-          <HeadlessButton size="sm" :disabled="logLoading" @click="loadLogTail">
+          <HeadlessButton size="sm" class="log-refresh" :disabled="logLoading" @click="loadLogTail">
             {{ logLoading ? "加载中…" : "刷新" }}
           </HeadlessButton>
         </div>
@@ -775,96 +800,183 @@ onMounted(loadAll);
     </TabPanel>
       </TabPanels>
     </TabGroup>
+
+    <!-- 删除分类确认弹窗（Headless UI Dialog · iOS 弹窗样式） -->
+    <TransitionRoot :show="delCatOpen" as="template">
+      <Dialog as="div" class="set-dialog-root" @close="closeDelCat">
+        <TransitionChild
+          as="template"
+          enter="set-dialog-backdrop-enter"
+          enter-from="set-dialog-backdrop-from"
+          enter-to="set-dialog-backdrop-to"
+          leave="set-dialog-backdrop-leave"
+          leave-from="set-dialog-backdrop-to"
+          leave-to="set-dialog-backdrop-from"
+        >
+          <div class="set-dialog-backdrop" aria-hidden="true" />
+        </TransitionChild>
+
+        <div class="set-dialog-container">
+          <TransitionChild
+            as="template"
+            enter="set-dialog-panel-enter"
+            enter-from="set-dialog-panel-from"
+            enter-to="set-dialog-panel-to"
+            leave="set-dialog-panel-leave"
+            leave-from="set-dialog-panel-to"
+            leave-to="set-dialog-panel-from"
+          >
+            <DialogPanel class="set-dialog-panel">
+              <div class="set-dialog-body">
+                <DialogTitle as="h2" class="set-dialog-title">删除分类</DialogTitle>
+                <p class="set-dialog-text">
+                  确认删除「<strong>{{ delCatTarget?.name }}</strong>」？关联订阅将保留为未分类。
+                </p>
+              </div>
+              <div class="set-dialog-actions">
+                <button type="button" class="set-dialog-btn" :disabled="delCatBusy" @click="closeDelCat">取消</button>
+                <button type="button" class="set-dialog-btn is-destructive" :disabled="delCatBusy" @click="confirmDelCat">
+                  {{ delCatBusy ? "删除中…" : "删除" }}
+                </button>
+              </div>
+            </DialogPanel>
+          </TransitionChild>
+        </div>
+      </Dialog>
+    </TransitionRoot>
   </div>
 </template>
 
 <style scoped>
+/* =====================================================================
+ * 设置页 · iOS 风格
+ * iOS 分段控件 / 毛玻璃分组卡片 / iOS 表单控件与按钮
+ * iOS 令牌来自 styles/tokens.css（--ios-*，已全局可用）
+ * ===================================================================== */
+
 .settings-page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 14px;
 }
 
-/* 子页面切换选项卡导航 */
+/* ---------------- 顶部标签：iOS 分段控件 ---------------- */
 .settings-tabs-nav {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  padding: 4px;
-  border-radius: var(--radius-md);
-  margin-bottom: var(--space-2);
+  gap: 2px;
+  padding: 3px;
+  background: var(--ios-fill);
+  border: none;
+  border-radius: 11px;
+  margin-bottom: 2px;
   overflow-x: auto;
+  scrollbar-width: none;
 }
+
+.settings-tabs-nav::-webkit-scrollbar {
+  display: none;
+}
+
 .tab-btn {
   flex: 1 1 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-width: 100px;
-  padding: 8px 14px;
+  gap: 6px;
+  min-width: 96px;
+  padding: 7px 12px;
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  color: var(--muted);
+  border: none;
+  border-radius: 9px;
+  color: var(--ios-gray);
+  font-family: inherit;
   font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.15s ease;
+  transition: background-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
+
 .tab-btn:hover {
   color: var(--text);
-  background: var(--card);
 }
+
 .tab-btn.active {
-  background: var(--card);
+  background: var(--ios-card-bg);
   color: var(--text);
-  border-color: var(--border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
 }
+
+/* 选中态本身就是焦点指示（自动激活模式下焦点跟随选中），不再额外画焦点环 */
+.tab-btn:focus {
+  outline: none;
+}
+
 .tab-icon {
   font-size: 15px;
   line-height: 1;
 }
+
 .tab-item-icon {
   width: 15px;
   height: 15px;
   flex-shrink: 0;
 }
 
-/* 子页面内容容器 */
+/* ---------------- 分组卡片 ---------------- */
 .settings-section {
   display: flex;
   flex-direction: column;
 }
 
-/* 表单与布局 */
+.settings-section .card {
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--ios-card-border);
+  border-radius: 16px;
+  padding: 16px 18px;
+}
+
+.settings-section .card h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  color: var(--text);
+}
+
 .section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-3);
+  margin-bottom: 14px;
 }
+
 .section-header h3 {
   margin: 0;
 }
+
 .switch-box {
   margin-bottom: 0;
 }
 
+/* ---------------- 表单布局 ---------------- */
 .form-row {
   display: flex;
-  gap: var(--space-3);
+  gap: 14px;
 }
+
 .form-row .field {
   flex: 1;
 }
+
 .form-row .flex-2 {
   flex: 2;
 }
+
 .form-row .flex-1 {
   flex: 1;
 }
@@ -872,36 +984,125 @@ onMounted(loadAll);
 .fields-group {
   transition: opacity 0.2s ease;
 }
+
 .field {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  margin-bottom: var(--space-3);
+  gap: 6px;
+  margin-bottom: 14px;
 }
-.field span {
-  color: var(--muted);
-  font-size: var(--fs-xs);
+
+.field > span {
+  color: var(--ios-gray);
+  font-size: 13px;
 }
+
 .field.checkbox {
   flex-direction: row;
   align-items: center;
   gap: var(--space-2);
 }
+
 .field.checkbox span {
   color: var(--text);
   font-size: var(--fs-sm);
 }
+
+/* ---------------- iOS 表单控件 ---------------- */
+.settings-section input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.settings-section textarea {
+  box-sizing: border-box;
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  background: var(--ios-fill);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.settings-section input:focus,
+.settings-section textarea:focus {
+  outline: none;
+  background: var(--ios-card-bg);
+  border-color: var(--ios-blue);
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
+}
+
+.settings-section input::placeholder {
+  color: var(--ios-gray);
+}
+
+/* iOS 绿开关 */
+.settings-section :deep(.switch-on) {
+  background-color: var(--ios-green);
+}
+
+.settings-section :deep(.switch-button:focus-visible) {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
+}
+
+.settings-section :deep(.switch-label) {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* iOS 按钮：默认浅灰、主色蓝实心 */
+.settings-section :deep(.headless-btn) {
+  height: 38px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 10px;
+  background: var(--ios-fill);
+  color: var(--text);
+  font-weight: 500;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.settings-section :deep(.headless-btn:hover:not(:disabled)) {
+  background: var(--ios-separator);
+  border-color: transparent;
+}
+
+.settings-section :deep(.headless-btn.btn-primary) {
+  background: var(--ios-blue);
+  color: #fff;
+  font-weight: 600;
+}
+
+.settings-section :deep(.headless-btn.btn-primary:hover:not(:disabled)) {
+  background: #0069d9;
+}
+
+.settings-section :deep(.headless-btn:focus-visible) {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
+}
+
+.settings-section :deep(.btn-sm) {
+  height: 32px;
+  padding: 0 12px;
+  font-size: var(--fs-xs);
+}
+
+/* 免打扰时段 */
 .dnd-inputs {
   display: flex;
   gap: 8px;
   align-items: center;
 }
+
 .dnd-inputs :deep(.custom-time-picker) {
   flex: 1;
   min-width: 0;
 }
+
 .dnd-separator {
-  color: var(--muted);
+  color: var(--ios-gray);
   flex-shrink: 0;
   font-size: var(--fs-sm);
 }
@@ -910,158 +1111,156 @@ onMounted(loadAll);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: var(--space-2);
-}
-.sub-hint {
-  font-size: var(--fs-xs);
-}
-.save-status-badge {
-  font-size: var(--fs-xs);
-  color: var(--primary);
-  font-weight: 500;
-  transition: opacity 0.2s ease;
-}
-.save-status-badge.saving {
-  color: var(--muted);
+  margin-top: 8px;
 }
 
+.sub-hint {
+  font-size: var(--fs-xs);
+  color: var(--ios-gray);
+}
+
+.save-status-badge {
+  font-size: var(--fs-xs);
+  color: var(--ios-blue);
+  font-weight: 600;
+  transition: opacity 0.2s ease;
+}
+
+.save-status-badge.saving {
+  color: var(--ios-gray);
+}
+
+/* 测试按钮行 */
 .test-row {
   display: flex;
   align-items: flex-end;
-  gap: var(--space-3);
-  margin-top: var(--space-1);
+  gap: 14px;
+  margin-top: 4px;
 }
+
 .test-row.single-action {
   justify-content: flex-start;
 }
+
 .test-target-field {
   flex: 1;
   margin-bottom: 0;
 }
-.test-btn {
+
+.test-row :deep(.headless-btn) {
+  background: var(--ios-blue-soft);
+  color: var(--ios-blue);
+  font-weight: 600;
   white-space: nowrap;
-  height: 38px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
 }
+
+.test-row :deep(.headless-btn:hover:not(:disabled)) {
+  background: rgba(0, 122, 255, 0.2);
+}
+
 .test-btn-icon {
   width: 14px;
   height: 14px;
 }
 
-/* 分类管理 */
+/* ---------------- 分类管理 ---------------- */
 .field-err {
-  color: var(--red, #ef4444);
+  color: var(--ios-red);
   font-size: var(--fs-xs);
   margin-top: 6px;
 }
+
 .cat-editor {
   display: flex;
-  gap: var(--space-2);
+  gap: 8px;
   margin-top: 6px;
 }
+
 .cat-editor input[type="text"] {
   flex: 1;
 }
+
 .cat-list {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: 8px;
   margin-top: 4px;
 }
+
 .cat-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--card-2);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--fs-sm);
-}
-.cat-chip button {
-  background: none;
+  padding: 5px 12px;
+  background: var(--ios-fill);
   border: none;
-  color: var(--muted);
-  cursor: pointer;
-  padding: 0 0 0 var(--space-1);
-}
-.cat-chip button:hover {
-  color: var(--red);
+  border-radius: 999px;
+  font-size: var(--fs-sm);
+  color: var(--text);
 }
 
-/* 备份与数据 */
+.cat-chip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--ios-separator);
+  color: var(--ios-gray);
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.cat-chip button:hover {
+  color: var(--ios-red);
+  background: var(--ios-red-soft);
+}
+
+/* ---------------- 数据与备份 ---------------- */
 .backup-actions {
   display: flex;
-  gap: var(--space-2);
+  gap: 8px;
   flex-wrap: wrap;
-  margin: var(--space-3) 0 var(--space-2);
+  margin: 14px 0 8px;
 }
+
 .file-btn {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
-}
-.btn.btn-sm {
-  padding: 4px 10px;
-  font-size: var(--fs-xs);
-}
-.btn-danger {
-  background: var(--red);
-  border-color: var(--red);
-  color: #fff;
-}
-.btn-danger:hover:not(:disabled) { filter: brightness(0.92); }
-.btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
-.modal-confirm { width: 420px; }
-.confirm-body { padding: 4px 0 2px; }
-.confirm-text {
-  margin: 0;
-  font-size: var(--fs-sm);
-  line-height: 1.6;
+  height: 38px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 10px;
+  background: var(--ios-fill);
   color: var(--text);
-  word-break: break-all;
-}
-.confirm-text strong { color: var(--text); font-weight: 600; }
-
-@media (max-width: 640px) {
-  .form-row {
-    flex-direction: column;
-    gap: 0;
-  }
-  .cat-editor {
-    flex-direction: column;
-  }
-  .dnd-inputs {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
-  }
-  .dnd-separator {
-    display: none;
-  }
-}
-/* 通知渠道启用/关闭的内容折叠过渡 */
-.ch-collapse-enter-active,
-.ch-collapse-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
-}
-.ch-collapse-enter-from,
-.ch-collapse-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
-/* 运行日志展示区 */
+.file-btn:hover {
+  background: var(--ios-separator);
+}
+
+/* ---------------- 运行日志 ---------------- */
 .log-view {
   margin: 0;
-  padding: 12px;
+  padding: 12px 14px;
   max-height: 420px;
   overflow-y: auto;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  background: var(--ios-fill);
+  border: none;
+  border-radius: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
   line-height: 1.6;
@@ -1071,33 +1270,261 @@ onMounted(loadAll);
   scrollbar-width: thin;
 }
 
-/* PushPlus SMTP 配置折叠区域 */
+/* ---------------- PushPlus SMTP 折叠区 ---------------- */
 .smtp-details {
-  margin-top: var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  margin-top: 12px;
+  background: var(--ios-fill);
+  border: none;
+  border-radius: 12px;
   overflow: hidden;
 }
+
 .smtp-details summary {
-  padding: var(--space-2) var(--space-3);
-  background: var(--card-2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: transparent;
   cursor: pointer;
   font-size: var(--fs-sm);
-  color: var(--muted);
+  color: var(--ios-gray);
   user-select: none;
+  list-style: none;
 }
+
+.smtp-details summary::-webkit-details-marker {
+  display: none;
+}
+
+/* iOS 风格 chevron，展开时旋转 90° */
+.smtp-details summary::before {
+  content: "";
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.2s ease;
+}
+
+.smtp-details[open] summary::before {
+  transform: rotate(45deg);
+}
+
 .smtp-details summary:hover {
   color: var(--text);
 }
+
 .smtp-details[open] summary {
-  border-bottom: 1px solid var(--border);
-}
-.smtp-fields {
-  padding: var(--space-3);
-  background: var(--card);
-}
-.smtp-fields .sub-hint {
-  margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--ios-separator);
 }
 
+.smtp-fields {
+  padding: 12px;
+  background: transparent;
+}
+
+.smtp-fields .sub-hint {
+  margin-bottom: 8px;
+}
+
+/* ---------------- 通知渠道折叠过渡 ---------------- */
+.ch-collapse-enter-active,
+.ch-collapse-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.ch-collapse-enter-from,
+.ch-collapse-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+/* ---------------- 窄屏适配 ---------------- */
+@media (max-width: 640px) {
+  .settings-section .card {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  /* 触控目标放大到 44px，字号 16px 防止 iOS 聚焦自动缩放 */
+  .settings-section input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  .settings-section :deep(.custom-time-picker-trigger),
+  .settings-section :deep(.custom-select-trigger),
+  .settings-section :deep(.headless-btn),
+  .file-btn {
+    height: 44px;
+    font-size: 16px;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .cat-editor {
+    flex-direction: column;
+  }
+
+  .dnd-inputs {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .dnd-separator {
+    display: none;
+  }
+}
+
+/* 刷新按钮：文案在「刷新 / 加载中…」间切换，固定最小宽度避免抖动变形 */
+.section-header :deep(.log-refresh) {
+  min-width: 6.5em;
+  justify-content: center;
+}
+
+/* ---------------- 删除分类确认弹窗（iOS 弹窗） ---------------- */
+.set-dialog-root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  overflow: hidden;
+}
+
+.set-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  /* Dialog 根节点是 Fragment，根类拿不到本组件的 scoped data-v，规则不生效；z-index 必须写在自己的元素上 */
+  z-index: var(--z-modal);
+  background: rgba(0, 0, 0, 0.4);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+.set-dialog-container {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  pointer-events: none;
+}
+
+.set-dialog-panel {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 320px;
+  overflow: hidden;
+  border: 1px solid var(--ios-card-border);
+  border-radius: 20px;
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  box-shadow: var(--ios-shadow-panel);
+  text-align: center;
+}
+
+.set-dialog-body {
+  padding: 20px 20px 16px;
+}
+
+.set-dialog-title {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.set-dialog-text {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.set-dialog-text strong {
+  font-weight: 600;
+}
+
+.set-dialog-actions {
+  display: flex;
+  border-top: 1px solid var(--ios-separator);
+}
+
+.set-dialog-btn {
+  flex: 1 1 0;
+  padding: 14px 8px;
+  border: none;
+  background: transparent;
+  color: var(--ios-blue);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.set-dialog-btn:hover {
+  background: var(--ios-fill);
+}
+
+.set-dialog-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.set-dialog-btn:focus {
+  outline: none;
+}
+
+.set-dialog-btn:focus-visible {
+  box-shadow: inset 0 0 0 3px var(--ios-blue-soft);
+}
+
+.set-dialog-btn + .set-dialog-btn {
+  border-left: 1px solid var(--ios-separator);
+}
+
+.set-dialog-btn.is-destructive {
+  color: var(--ios-red);
+  font-weight: 600;
+}
+
+/* 过渡动画 */
+.set-dialog-backdrop-enter { transition: opacity 0.22s ease-out; }
+.set-dialog-backdrop-from { opacity: 0; }
+.set-dialog-backdrop-to { opacity: 1; }
+.set-dialog-backdrop-leave { transition: opacity 0.18s ease-in; }
+
+.set-dialog-panel-enter {
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.set-dialog-panel-from {
+  opacity: 0;
+  transform: scale(0.92);
+}
+.set-dialog-panel-to {
+  opacity: 1;
+  transform: none;
+}
+.set-dialog-panel-leave {
+  transition: opacity 0.15s ease-in, transform 0.15s ease-in;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-btn,
+  .cat-chip button {
+    transition: none;
+  }
+  .ch-collapse-enter-active,
+  .ch-collapse-leave-active {
+    transition: none;
+  }
+  .set-dialog-backdrop,
+  .set-dialog-panel {
+    transition: none !important;
+  }
+}
 </style>

@@ -7,10 +7,13 @@ import {
 import { fmtCents, daysLeft, PERIOD_LABEL, CUSTOM_UNIT_LABEL, yuanToCents, centsToYuan } from "../utils/format.js";
 import { ui, toast, openNewSub } from "../utils/ui.js";
 
+import {
+  Dialog, DialogPanel, DialogTitle,
+  TransitionRoot, TransitionChild,
+} from "@headlessui/vue";
+
 import HeadlessListbox from "../components/HeadlessListbox.vue";
-import HeadlessDatePicker from "../components/HeadlessDatePicker.vue";
 import SubscriptionModal from "../components/SubscriptionModal.vue";
-import HeadlessButton from "../components/HeadlessButton.vue";
 
 const subs = ref([]);
 const cats = ref([]);
@@ -160,8 +163,8 @@ function askDel(sub) {
 
 function closeDel() {
   if (delBusy.value) return;     // 删除进行中不允许关闭
+  // 不立即清空 delTarget：离场动画期间面板仍在渲染，置 null 会闪一下空内容
   delOpen.value = false;
-  delTarget.value = null;
 }
 
 async function confirmDel() {
@@ -171,8 +174,8 @@ async function confirmDel() {
   try {
     await deleteSubscription(sub.id);
     toast("已删除");
+    // 保留 delTarget 供离场动画渲染
     delOpen.value = false;
-    delTarget.value = null;
     await loadAll();
   } catch (err) {
     toast(err.message, "err");
@@ -193,8 +196,8 @@ function askRenew(sub) {
 
 function closeRenew() {
   if (renewBusy.value) return;
+  // 不立即清空 renewTarget：离场动画期间面板仍在渲染，置 null 会闪一下空内容
   renewOpen.value = false;
-  renewTarget.value = null;
 }
 
 async function confirmRenew() {
@@ -207,8 +210,8 @@ async function confirmRenew() {
     const idx = subs.value.findIndex((s) => s.id === updated.id);
     if (idx !== -1) Object.assign(subs.value[idx], updated);
     toast("已续费到下一期");
+    // 保留 renewTarget 供离场动画渲染
     renewOpen.value = false;
-    renewTarget.value = null;
     await loadAll();
   } catch (err) {
     toast(err.message, "err");
@@ -236,7 +239,12 @@ onMounted(loadAll);
     <!-- 筛选控制栏 -->
     <div class="filter-bar">
       <div class="search-wrap">
-        <span class="search-icon"><svg width="15" height="15" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M945.066667 898.133333l-189.866667-189.866666c55.466667-64 87.466667-149.333333 87.466667-241.066667 0-204.8-168.533333-373.333333-373.333334-373.333333S96 264.533333 96 469.333333 264.533333 842.666667 469.333333 842.666667c91.733333 0 174.933333-34.133333 241.066667-87.466667l189.866667 189.866667c6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333c8.533333-12.8 8.533333-34.133333-2.133333-46.933334zM469.333333 778.666667C298.666667 778.666667 160 640 160 469.333333S298.666667 160 469.333333 160 778.666667 298.666667 778.666667 469.333333 640 778.666667 469.333333 778.666667z"/></svg></span>
+        <span class="search-icon" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.6-3.6" />
+          </svg>
+        </span>
         <input v-model="search" type="search" placeholder="搜索订阅名称、备注..." />
       </div>
       <div class="filter-selects">
@@ -389,79 +397,189 @@ onMounted(loadAll);
       @saved="handleModalSave"
     />
 
-    <!-- 删除确认弹窗 -->
-    <div v-if="delOpen" class="modal" @click.self="closeDel">
-      <div class="modal-card modal-confirm">
-        <div class="modal-head">
-          <h2>删除订阅</h2>
-          <button class="modal-close" :disabled="delBusy" @click="closeDel"><svg width="16" height="16" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M556.8 512L832 236.8c12.8-12.8 12.8-32 0-44.8-12.8-12.8-32-12.8-44.8 0L512 467.2l-275.2-277.333333c-12.8-12.8-32-12.8-44.8 0-12.8 12.8-12.8 32 0 44.8l275.2 277.333333-277.333333 275.2c-12.8 12.8-12.8 32 0 44.8 6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333L512 556.8 787.2 832c6.4 6.4 14.933333 8.533333 23.466667 8.533333s17.066667-2.133333 23.466666-8.533333c12.8-12.8 12.8-32 0-44.8L556.8 512z"/></svg></button>
-        </div>
-        <div class="modal-scroll">
-        <div class="confirm-body">
-          <p class="confirm-text">
-            确认删除「<strong>{{ delTarget?.name }}</strong>」？此操作不可撤销。
-          </p>
-          <div v-if="delTarget" class="confirm-meta">
-            <span class="confirm-meta-item">{{ fmtCents(delTarget.amount, delTarget.currency) }}</span>
-            <span class="confirm-meta-item">{{ PERIOD_LABEL[delTarget.period_type] || delTarget.period_type }}</span>
-            <span class="confirm-meta-item">{{ delTarget.next_due_date || "无下次扣费" }}</span>
-          </div>
-        </div>
-        </div>
-        <div class="modal-foot">
-          <HeadlessButton :disabled="delBusy" @click="closeDel">取消</HeadlessButton>
-          <HeadlessButton variant="danger" :disabled="delBusy" @click="confirmDel">
-            {{ delBusy ? "删除中…" : "确认删除" }}
-          </HeadlessButton>
-        </div>
-      </div>
-    </div>
+    <!-- 删除确认弹窗（Headless UI Dialog · iOS 弹窗样式） -->
+    <TransitionRoot :show="delOpen" as="template">
+      <Dialog as="div" class="sub-dialog-root" @close="closeDel">
+        <TransitionChild
+          as="template"
+          enter="sub-dialog-backdrop-enter"
+          enter-from="sub-dialog-backdrop-from"
+          enter-to="sub-dialog-backdrop-to"
+          leave="sub-dialog-backdrop-leave"
+          leave-from="sub-dialog-backdrop-to"
+          leave-to="sub-dialog-backdrop-from"
+        >
+          <div class="sub-dialog-backdrop" aria-hidden="true" />
+        </TransitionChild>
 
-    <!-- 续费确认弹窗 -->
-    <div v-if="renewOpen" class="modal" @click.self="closeRenew">
-      <div class="modal-card modal-confirm">
-        <div class="modal-head">
-          <h2>续费确认</h2>
-          <button class="modal-close" :disabled="renewBusy" @click="closeRenew"><svg width="16" height="16" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M556.8 512L832 236.8c12.8-12.8 12.8-32 0-44.8-12.8-12.8-32-12.8-44.8 0L512 467.2l-275.2-277.333333c-12.8-12.8-32-12.8-44.8 0-12.8 12.8-12.8 32 0 44.8l275.2 277.333333-277.333333 275.2c-12.8 12.8-12.8 32 0 44.8 6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333L512 556.8 787.2 832c6.4 6.4 14.933333 8.533333 23.466667 8.533333s17.066667-2.133333 23.466666-8.533333c12.8-12.8 12.8-32 0-44.8L556.8 512z"/></svg></button>
+        <div class="sub-dialog-container">
+          <TransitionChild
+            as="template"
+            enter="sub-dialog-panel-enter"
+            enter-from="sub-dialog-panel-from"
+            enter-to="sub-dialog-panel-to"
+            leave="sub-dialog-panel-leave"
+            leave-from="sub-dialog-panel-to"
+            leave-to="sub-dialog-panel-from"
+          >
+            <DialogPanel class="sub-dialog-panel">
+              <div class="sub-dialog-body">
+                <DialogTitle as="h2" class="sub-dialog-title">删除订阅</DialogTitle>
+                <p class="sub-dialog-text">
+                  确认删除「<strong>{{ delTarget?.name }}</strong>」？此操作不可撤销。
+                </p>
+                <div v-if="delTarget" class="sub-dialog-meta">
+                  <span class="sub-dialog-meta-item">{{ fmtCents(delTarget.amount, delTarget.currency) }}</span>
+                  <span class="sub-dialog-meta-item">{{ PERIOD_LABEL[delTarget.period_type] || delTarget.period_type }}</span>
+                  <span class="sub-dialog-meta-item">{{ delTarget.next_due_date || "无下次扣费" }}</span>
+                </div>
+              </div>
+              <div class="sub-dialog-actions">
+                <button type="button" class="sub-dialog-btn" :disabled="delBusy" @click="closeDel">取消</button>
+                <button type="button" class="sub-dialog-btn is-destructive" :disabled="delBusy" @click="confirmDel">
+                  {{ delBusy ? "删除中…" : "删除" }}
+                </button>
+              </div>
+            </DialogPanel>
+          </TransitionChild>
         </div>
-        <div class="modal-scroll">
-        <div class="confirm-body">
-          <p class="confirm-text">
-            确认将「<strong>{{ renewTarget?.name }}</strong>」续费到下一期？
-          </p>
-          <div v-if="renewTarget" class="confirm-meta">
-            <span class="confirm-meta-item">{{ fmtCents(renewTarget.amount, renewTarget.currency) }}</span>
-            <span class="confirm-meta-item">{{ PERIOD_LABEL[renewTarget.period_type] || renewTarget.period_type }}</span>
-            <span class="confirm-meta-item">当前扣费日 {{ renewTarget.next_due_date || "—" }}</span>
-          </div>
+      </Dialog>
+    </TransitionRoot>
+
+    <!-- 续费确认弹窗（Headless UI Dialog · iOS 弹窗样式） -->
+    <TransitionRoot :show="renewOpen" as="template">
+      <Dialog as="div" class="sub-dialog-root" @close="closeRenew">
+        <TransitionChild
+          as="template"
+          enter="sub-dialog-backdrop-enter"
+          enter-from="sub-dialog-backdrop-from"
+          enter-to="sub-dialog-backdrop-to"
+          leave="sub-dialog-backdrop-leave"
+          leave-from="sub-dialog-backdrop-to"
+          leave-to="sub-dialog-backdrop-from"
+        >
+          <div class="sub-dialog-backdrop" aria-hidden="true" />
+        </TransitionChild>
+
+        <div class="sub-dialog-container">
+          <TransitionChild
+            as="template"
+            enter="sub-dialog-panel-enter"
+            enter-from="sub-dialog-panel-from"
+            enter-to="sub-dialog-panel-to"
+            leave="sub-dialog-panel-leave"
+            leave-from="sub-dialog-panel-to"
+            leave-to="sub-dialog-panel-from"
+          >
+            <DialogPanel class="sub-dialog-panel">
+              <div class="sub-dialog-body">
+                <DialogTitle as="h2" class="sub-dialog-title">续费确认</DialogTitle>
+                <p class="sub-dialog-text">
+                  确认将「<strong>{{ renewTarget?.name }}</strong>」续费到下一期？
+                </p>
+                <div v-if="renewTarget" class="sub-dialog-meta">
+                  <span class="sub-dialog-meta-item">{{ fmtCents(renewTarget.amount, renewTarget.currency) }}</span>
+                  <span class="sub-dialog-meta-item">{{ PERIOD_LABEL[renewTarget.period_type] || renewTarget.period_type }}</span>
+                  <span class="sub-dialog-meta-item">当前扣费日 {{ renewTarget.next_due_date || "—" }}</span>
+                </div>
+              </div>
+              <div class="sub-dialog-actions">
+                <button type="button" class="sub-dialog-btn" :disabled="renewBusy" @click="closeRenew">取消</button>
+                <button type="button" class="sub-dialog-btn is-primary" :disabled="renewBusy" @click="confirmRenew">
+                  {{ renewBusy ? "续费中…" : "确认续费" }}
+                </button>
+              </div>
+            </DialogPanel>
+          </TransitionChild>
         </div>
-        </div>
-        <div class="modal-foot">
-          <HeadlessButton :disabled="renewBusy" @click="closeRenew">取消</HeadlessButton>
-          <HeadlessButton variant="primary" :disabled="renewBusy" @click="confirmRenew">
-            {{ renewBusy ? "续费中…" : "确认续费" }}
-          </HeadlessButton>
-        </div>
-      </div>
-    </div>
+      </Dialog>
+    </TransitionRoot>
 
     <!-- 右下角浮动新增按钮已上移到 BaseLayout 公共壳（所有页可用），这里不再重复 -->
   </div>
 </template>
 
 <style scoped>
+/* =====================================================================
+ * 订阅列表 · iOS 风格
+ * 毛玻璃卡片 / SF 排版 / 分组列表 / iOS 弹窗
+ * iOS 色板令牌来自 styles/tokens.css（--ios-*，已全局可用）
+ * ===================================================================== */
+
 /* ---------- 响应式展示切换 ---------- */
 .desktop-only { display: block !important; }
 .mobile-only { display: none !important; }
 
-/* 筛选栏与搜索 */
+/* ---------------- 顶部统计卡片 ---------------- */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px;
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--ios-card-border);
+  border-radius: 16px;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+}
+
+/* 顶部装饰渐变条 */
+.stat-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  opacity: 0.85;
+}
+.stat-card:nth-child(1)::before { background: linear-gradient(90deg, var(--ios-green), #30d158); }
+.stat-card:nth-child(2)::before { background: linear-gradient(90deg, var(--ios-blue), #5ac8fa); }
+.stat-card:nth-child(3)::before { background: linear-gradient(90deg, var(--ios-orange), #ffb340); }
+.stat-card:nth-child(4)::before { background: linear-gradient(90deg, #af52de, #da7cfc); }
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.stat-card .label {
+  color: var(--ios-gray);
+  font-size: 13px;
+  font-weight: 500;
+}
+.stat-card .value {
+  margin: 8px 0 4px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat-card .sub {
+  color: var(--ios-gray);
+  font-size: 12px;
+}
+
+/* ---------------- 筛选栏 ---------------- */
 .filter-bar {
   display: flex;
-  gap: 10px;
-  margin-bottom: var(--space-3);
   align-items: center;
+  gap: 10px;
   width: 100%;
+  margin-bottom: 12px;
 }
+
 .search-wrap {
   position: relative;
   flex: 1 1 auto;
@@ -477,21 +595,35 @@ onMounted(loadAll);
   -webkit-appearance: none;
   appearance: none;
   font-size: var(--fs-sm);
-  border-radius: var(--radius-sm);
+  background: var(--ios-fill);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text);
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.search-wrap input:focus {
+  outline: none;
+  background: var(--ios-card-bg);
+  border-color: var(--ios-blue);
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
+}
+.search-wrap input::placeholder {
+  color: var(--ios-gray);
+}
+.search-wrap input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
 }
 .search-icon {
   position: absolute;
-  left: 10px;
+  left: 11px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 14px;
-  line-height: 1;
-  opacity: 0.6;
-  pointer-events: none;
   display: flex;
   align-items: center;
-  justify-content: center;
+  color: var(--ios-gray);
+  pointer-events: none;
 }
+
 .filter-selects {
   display: flex;
   gap: 10px;
@@ -501,50 +633,93 @@ onMounted(loadAll);
 .filter-selects :deep(.custom-select) {
   min-width: 130px;
 }
-.filter-selects select {
+/* HeadlessListbox 触发器对齐 iOS 搜索框 */
+.filter-selects :deep(.custom-select-trigger) {
   height: 38px;
-  box-sizing: border-box;
-  padding: 0 12px;
+  background: var(--ios-fill);
+  border: 1px solid transparent;
+  border-radius: 10px;
   font-size: var(--fs-sm);
-  border-radius: var(--radius-sm);
+}
+.filter-selects :deep(.custom-select-trigger:hover) {
+  background: var(--ios-separator);
 }
 
-/* 列表摘要统计 */
+/* ---------------- 列表摘要 ---------------- */
 .list-summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: var(--fs-xs);
-  color: var(--muted);
-  margin-bottom: var(--space-2);
+  margin-bottom: 8px;
   padding: 0 2px;
+  font-size: var(--fs-xs);
+  color: var(--ios-gray);
 }
 .clear-filters {
-  color: var(--primary);
+  color: var(--ios-blue);
+  font-weight: 500;
   cursor: pointer;
+}
+.clear-filters:hover {
   text-decoration: underline;
 }
 
+/* ---------------- 列表容器 ---------------- */
 .sub-content-card {
-  padding: var(--space-3);
+  padding: 4px 8px;
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--ios-card-border);
+  border-radius: 16px;
 }
 
-/* ---------- 桌面端表格优化 ---------- */
+/* ---------------- 桌面端表格（iOS 分组列表） ---------------- */
+.table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+}
+.table th,
+.table td {
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ios-separator);
+}
+.table th {
+  color: var(--ios-gray);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.table tbody tr {
+  transition: background-color 0.15s ease;
+}
+.table tbody tr:hover {
+  background: var(--ios-fill);
+}
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
 .sub-cell {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 .sub-avatar {
-  width: 36px;
-  height: 36px;
-  background: var(--card-2);
-  border-radius: var(--radius-sm);
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--ios-blue-soft);
+  color: var(--ios-blue);
+  font-size: 17px;
+  font-weight: 700;
 }
 .sub-info {
   display: flex;
@@ -567,21 +742,23 @@ onMounted(loadAll);
   font-size: var(--fs-xs);
 }
 .cat-badge {
-  background: var(--card-2);
-  border: 1px solid var(--border);
-  padding: 1px 6px;
-  border-radius: 4px;
-  color: var(--muted);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--ios-fill);
+  color: var(--ios-gray);
+  font-size: 11px;
 }
 .notes-text {
-  color: var(--muted);
   max-width: 140px;
+  color: var(--ios-gray);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.amount-cell, .period-cell, .due-cell {
+.amount-cell,
+.period-cell,
+.due-cell {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -589,49 +766,85 @@ onMounted(loadAll);
 .amount-main {
   font-weight: 600;
   color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.due-date {
+  font-variant-numeric: tabular-nums;
 }
 .due-countdown {
   font-size: 11px;
   font-weight: 500;
+  color: var(--ios-gray);
 }
-.due-countdown.days-soon { color: var(--amber); }
-.due-countdown.days-overdue { color: var(--red); }
+.due-countdown.days-soon { color: var(--ios-orange); }
+.due-countdown.days-overdue { color: var(--ios-red); }
 
 .badge {
-  border: 1px solid currentColor;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 500;
   display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
-.btn-action-renew {
-  border-color: var(--primary) !important;
-  color: var(--primary) !important;
+/* 行内操作：iOS 文字按钮 */
+.row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
 }
-.btn-action-renew:hover {
-  background: var(--primary) !important;
-  color: #fff !important;
+.row-actions button {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ios-blue);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.row-actions button:hover {
+  background: var(--ios-fill);
+}
+.row-actions button.btn-action-renew {
+  border: none !important;
+  color: var(--ios-blue) !important;
+  font-weight: 600;
+}
+.row-actions button.btn-action-renew:hover {
+  background: var(--ios-fill) !important;
+  color: var(--ios-blue) !important;
+}
+.row-actions button.danger {
+  color: var(--ios-red);
+}
+.row-actions button.danger:hover {
+  background: var(--ios-red-soft);
+  color: var(--ios-red);
 }
 
-/* ---------- 移动端卡片列表 ---------- */
+/* ---------------- 移动端卡片列表 ---------------- */
 .sub-cards-list {
   flex-direction: column;
   gap: 10px;
 }
 .sub-item-card {
-  background: var(--card-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  transition: transform 0.15s ease, border-color 0.15s ease;
+  gap: 12px;
+  padding: 14px;
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--ios-card-border);
+  border-radius: 16px;
+  transition: transform 0.15s ease;
 }
 .sub-item-card:active {
-  border-color: var(--primary);
+  transform: scale(0.99);
 }
 .item-header {
   display: flex;
@@ -646,15 +859,17 @@ onMounted(loadAll);
   min-width: 0;
 }
 .item-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  background: var(--card);
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--ios-blue-soft);
+  color: var(--ios-blue);
+  font-size: 17px;
+  font-weight: 700;
 }
 .item-title-wrap {
   min-width: 0;
@@ -664,65 +879,67 @@ onMounted(loadAll);
 }
 .item-name {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 15px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .item-cat-tag {
   font-size: 11px;
-  color: var(--muted);
+  color: var(--ios-gray);
 }
 .item-badge-wrap {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 3px;
+  gap: 4px;
   flex-shrink: 0;
 }
 .item-body {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  background: var(--card);
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(255, 255, 255, 0.03);
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--ios-fill);
 }
 .item-stat .stat-lbl {
   display: block;
   font-size: 11px;
-  color: var(--muted);
+  color: var(--ios-gray);
 }
 .item-stat .stat-val {
   font-size: 13px;
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 .item-amount {
   text-align: right;
 }
 .amt-val {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 .amt-cycle {
-  font-size: 12px;
-  color: var(--muted);
   margin-left: 2px;
+  font-size: 12px;
+  color: var(--ios-gray);
 }
 .item-notes {
-  font-size: 12px;
-  color: var(--muted);
-  background: var(--card);
-  padding: 6px 10px;
-  border-radius: 6px;
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--ios-fill);
+  font-size: 12px;
+  color: var(--ios-gray);
 }
 .notes-icon {
-  font-size: 11px;
+  display: inline-flex;
+  flex-shrink: 0;
   opacity: 0.8;
 }
 .notes-content {
@@ -733,186 +950,244 @@ onMounted(loadAll);
 .item-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  border-top: 1px solid var(--border);
-  padding-top: 8px;
-  margin-top: 2px;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ios-separator);
 }
 .btn-m {
-  padding: 5px 12px;
-  font-size: 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--card);
-  color: var(--text);
+  padding: 7px 12px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ios-blue);
+  font-size: var(--fs-sm);
+  font-weight: 500;
   cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.btn-m:active {
+  background: var(--ios-fill);
 }
 .btn-m-renew {
-  border-color: var(--primary);
-  color: var(--primary);
-  font-weight: 500;
+  font-weight: 600;
 }
 .btn-m-danger {
-  color: var(--red);
+  color: var(--ios-red);
+}
+.btn-m-danger:active {
+  background: var(--ios-red-soft);
 }
 
-/* 空状态 */
+/* ---------------- 空状态 ---------------- */
 .empty-wrap {
+  padding: 44px 16px;
   text-align: center;
-  padding: 36px 16px;
-  color: var(--muted);
+  color: var(--ios-gray);
 }
 .empty-icon {
-  font-size: 32px;
-  margin-bottom: 8px;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+  color: var(--ios-gray);
+  opacity: 0.5;
 }
 .empty-text {
   font-size: var(--fs-sm);
 }
 
-/* ---------- 响应式断点适配 ---------- */
+/* ---------------- 确认弹窗（Headless UI Dialog · iOS 弹窗） ---------------- */
+.sub-dialog-root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  overflow: hidden;
+}
+.sub-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  /* Dialog 根节点是 Fragment，根类拿不到本组件的 scoped data-v，规则不生效；z-index 必须写在自己的元素上 */
+  z-index: var(--z-modal);
+  background: rgba(0, 0, 0, 0.4);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+.sub-dialog-container {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  pointer-events: none;
+}
+.sub-dialog-panel {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 320px;
+  overflow: hidden;
+  border: 1px solid var(--ios-card-border);
+  border-radius: 20px;
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  box-shadow: var(--ios-shadow-panel);
+  text-align: center;
+}
+.sub-dialog-body {
+  padding: 20px 20px 16px;
+}
+.sub-dialog-title {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+}
+.sub-dialog-text {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text);
+}
+.sub-dialog-text strong {
+  font-weight: 600;
+}
+.sub-dialog-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+.sub-dialog-meta-item {
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--ios-fill);
+  font-size: var(--fs-xs);
+  color: var(--ios-gray);
+}
+.sub-dialog-actions {
+  display: flex;
+  border-top: 1px solid var(--ios-separator);
+}
+.sub-dialog-btn {
+  flex: 1 1 0;
+  padding: 14px 8px;
+  border: none;
+  background: transparent;
+  color: var(--ios-blue);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.sub-dialog-btn:hover {
+  background: var(--ios-fill);
+}
+.sub-dialog-btn:focus {
+  outline: none;
+}
+.sub-dialog-btn:focus-visible {
+  box-shadow: inset 0 0 0 3px var(--ios-blue-soft);
+}
+.sub-dialog-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.sub-dialog-btn + .sub-dialog-btn {
+  border-left: 1px solid var(--ios-separator);
+}
+.sub-dialog-btn.is-destructive {
+  color: var(--ios-red);
+  font-weight: 600;
+}
+.sub-dialog-btn.is-primary {
+  font-weight: 600;
+}
+
+/* Headless UI 过渡动画类 */
+.sub-dialog-backdrop-enter { transition: opacity 0.22s ease-out; }
+.sub-dialog-backdrop-from { opacity: 0; }
+.sub-dialog-backdrop-to { opacity: 1; }
+.sub-dialog-backdrop-leave { transition: opacity 0.18s ease-in; }
+
+.sub-dialog-panel-enter {
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sub-dialog-panel-from {
+  opacity: 0;
+  transform: scale(0.92);
+}
+.sub-dialog-panel-to {
+  opacity: 1;
+  transform: none;
+}
+.sub-dialog-panel-leave {
+  transition: opacity 0.15s ease-in, transform 0.15s ease-in;
+}
+
+/* ---------------- 响应式断点适配 ---------------- */
 @media (max-width: 860px) {
   .desktop-only { display: none !important; }
   .mobile-only { display: flex !important; }
 
+  /* 给右下角浮动「+」按钮留出空间：滚到底时列表末尾不被遮挡 */
+  .page { padding-bottom: 92px; }
+
   .stats-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
   }
   .stat-card {
-    padding: 10px 12px !important;
+    padding: 12px 14px;
+    border-radius: 14px;
   }
   .stat-card .value {
-    font-size: 17px !important;
+    font-size: 20px;
+    margin: 6px 0 3px;
   }
 
-  /* 移动端筛选栏：搜索独占一行，下拉并排 2 列 */
+  /* 移动端筛选栏：搜索独占一行，两个下拉并排 */
   .filter-bar {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 8px !important;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
   }
   .search-wrap {
-    width: 100% !important;
-    flex: 1 1 100% !important;
-    min-width: 0 !important;
+    width: 100%;
+    flex: 1 1 100%;
+    min-width: 0;
   }
   .filter-selects {
-    display: flex !important;
-    width: 100% !important;
-    gap: 8px !important;
-  }
-  .filter-selects select,
-  .filter-selects :deep(.custom-select) {
-    flex: 1 1 50% !important;
-    width: 50% !important;
-    min-width: 0 !important;
-  }
-
-  .sub-content-card {
-    padding: 0 !important;
-    background: transparent !important;
-    border: none !important;
-  }
-}
-
-/* ---------------- 删除确认弹窗 ---------------- */
-.modal-confirm { width: 420px; }
-.confirm-body { padding: 4px 0 2px; }
-.confirm-text {
-  margin: 0 0 14px;
-  font-size: var(--fs-sm);
-  line-height: 1.6;
-  color: var(--text);
-}
-.confirm-text strong { color: var(--text); font-weight: 600; }
-.confirm-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.confirm-meta-item {
-  background: var(--card-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 4px 10px;
-  font-size: var(--fs-xs);
-  color: var(--muted);
-}
-.btn-danger {
-  background: var(--red);
-  border-color: var(--red);
-  color: #fff;
-}
-.btn-danger:hover:not(:disabled) { filter: brightness(0.92); }
-.btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
-
-/* ---------------- 弹窗移动端适配 (<=860px) ---------------- */
-@media (max-width: 860px) {
-  /* 弹窗整体上下留足安全距离，避免被地址栏 / 键盘遮挡 */
-  .modal {
-    align-items: center;
-    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
-  }
-
-  /* 全宽弹窗：去掉固定宽度、加大圆角、内容可滚动 */
-  .modal-card,
-  .modal-confirm {
+    display: flex;
     width: 100%;
-    max-width: 100%;
-    border-radius: var(--radius-lg);
+    gap: 8px;
   }
-  .modal-card {
-    max-height: 90vh;
-    max-height: 90dvh;
-    overflow: hidden;
-  }
-  .modal-scroll {
-    -webkit-overflow-scrolling: touch;
+  .filter-selects :deep(.custom-select) {
+    flex: 1 1 50%;
+    width: 50%;
+    min-width: 0;
   }
 
-  /* 表单单列布局，跨列字段不再跨列 */
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-  .span-2 {
-    grid-column: span 1;
-  }
-
-  /* 放大触控目标，字号不小于 16px 防止 iOS 自动缩放 */
-  .form-grid input:not([type="checkbox"]),
-  .form-grid select,
-  .form-grid :deep(.custom-select-trigger),
-  .form-grid :deep(.custom-date-picker-trigger) {
-    height: 44px;
-    font-size: 16px;
-  }
-  .form-grid textarea {
-    min-height: 80px;
-    font-size: 16px;
-  }
-
-  /* 操作按钮固定在弹窗底部，内容滚动时始终可见 */
-  .modal-foot {
-    position: sticky;
-    bottom: 0;
-    z-index: 1;
-    background: var(--card);
-    margin: var(--space-3) -20px 0;
-    padding: 12px 20px 6px;
-    border-top: 1px solid var(--border);
+  /* 卡片列表直接浮在页面上，去掉外层容器 */
+  .sub-content-card {
+    padding: 0;
+    background: transparent;
+    border: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 
-.modal-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.modal-foot-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+@media (prefers-reduced-motion: reduce) {
+  .stat-card,
+  .sub-item-card {
+    transition: none;
+  }
+  .sub-dialog-backdrop,
+  .sub-dialog-panel {
+    transition: none !important;
+  }
 }
 </style>

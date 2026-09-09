@@ -317,6 +317,17 @@ onMounted(loadNotice);
   transform: scale(0.94);
 }
 
+/* 窄屏：内容会从浮动按钮下方滚过，稍微降低不透明度以免完全挡住卡片文字 */
+@media (max-width: 860px) {
+  .fab-add {
+    opacity: 0.88;
+  }
+  .fab-add:hover,
+  .fab-add:active {
+    opacity: 1;
+  }
+}
+
 /* 订阅列表侧边栏 SVG 图标 */
 .nav-item-icon {
   width: 20px;

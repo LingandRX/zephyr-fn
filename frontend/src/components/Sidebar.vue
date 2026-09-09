@@ -316,6 +316,115 @@ function closeMobile() {
   transform: scale(0.95);
 }
 
+/* =====================================================================
+ * iOS 风格侧边栏（桌面 aside + 移动抽屉共用导航样式）
+ * 覆盖 styles/main.css 里的全局 .sidebar/.nav-item 规则
+ * ===================================================================== */
+
+/* 外壳：iOS 分组底色 + 发丝分隔线 */
+.desktop-sidebar {
+  background: var(--card-2);
+  border-right: 1px solid var(--ios-separator);
+}
+
+/* 品牌区 */
+.brand-logo {
+  border-radius: 10px;
+}
+.brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+/* 导航行：iOS 列表行 */
+.nav {
+  gap: 2px;
+}
+.nav-item {
+  height: 42px;
+  padding: 0 12px;
+  gap: 12px;
+  border-radius: 10px;
+  color: var(--ios-gray);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.nav-item:hover {
+  background: var(--ios-fill);
+  color: var(--text);
+}
+.nav-item.active {
+  background: var(--ios-blue-soft);
+  color: var(--ios-blue);
+  font-weight: 600;
+}
+/* 去掉原左侧竖条指示器（非 iOS 习惯，选中态靠底色 + 蓝色文字） */
+.nav-item.active::before {
+  display: none;
+}
+.nav-icon {
+  width: 22px;
+}
+.nav-item-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* 底部折叠按钮 */
+.sidebar-footer {
+  border-top: 1px solid var(--ios-separator);
+  padding-top: 10px;
+}
+.sidebar-toggle {
+  height: 40px;
+  padding: 0 12px;
+  gap: 12px;
+  border: none;
+  border-radius: 10px;
+  color: var(--ios-gray);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+.sidebar-toggle:hover {
+  background: var(--ios-fill);
+  color: var(--text);
+}
+.sidebar-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
+}
+
+/* 折叠态：图标居中 */
+.desktop-sidebar.collapsed .nav-item,
+.desktop-sidebar.collapsed .sidebar-toggle {
+  padding: 0;
+}
+
+/* 移动抽屉：同一套底色 + 圆形关闭按钮 */
+:global(.mobile-sidebar) {
+  background: var(--card-2);
+  border-right: 1px solid var(--ios-separator);
+}
+.sidebar-mobile-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: var(--ios-fill);
+  color: var(--ios-gray);
+}
+.sidebar-mobile-close:hover {
+  background: var(--ios-separator);
+  color: var(--text);
+  border-color: transparent;
+}
+.sidebar-mobile-close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
+}
+
 /* ---------- Headless UI Dialog 移动端样式（Teleport 到 body） ---------- */
 :global(.sidebar-dialog-root) {
   position: fixed;
