@@ -16,7 +16,7 @@ from typing import Callable
 from flask import Flask
 
 from ..services import notifications
-from ..storage import repositories
+from .. import repositories
 from ..utils import channels
 from ..utils.channels.email import EMAIL_PATTERN
 

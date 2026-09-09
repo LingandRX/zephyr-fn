@@ -15,8 +15,8 @@ from collections.abc import Mapping
 from datetime import date
 from typing import Any, Callable
 
-from ..core import domain
-from ..core.exceptions import ValidationError
+from ..domain import domain
+from ..domain.exceptions import ValidationError
 from .base import MAX_NOTES_LENGTH, optional_text, reject_explicit_blank, require_mapping
 
 # 创建场景必填字段

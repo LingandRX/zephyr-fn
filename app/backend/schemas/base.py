@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from ..core.exceptions import ValidationError
+from ..domain.exceptions import ValidationError
 
 MAX_NOTES_LENGTH = 120
 

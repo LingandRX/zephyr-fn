@@ -15,8 +15,8 @@ from __future__ import annotations
 import math
 from datetime import date, timedelta
 
-from ..core import domain
-from ..storage import repositories
+from ..domain import domain
+from .. import repositories
 
 
 def _divide_round(amount: int, divisor: int) -> int:

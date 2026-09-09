@@ -20,7 +20,7 @@ export default defineConfig(({ command }) => ({
     // 真机则由网关注入前缀后转发，后端 _normalize_path 剥离前缀，两者等效）
     proxy: {
       "/api": {
-        target: `http://127.0.0.1:${process.env.BACKEND_PORT || 8000}`,
+        target: `http://127.0.0.1:${process.env.BACKEND_PORT || 5000}`,
         changeOrigin: true,
       },
     },

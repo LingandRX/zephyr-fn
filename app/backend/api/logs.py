@@ -7,7 +7,7 @@ import os
 from flask import Blueprint, request
 
 from .. import config
-from ..core.response import ok
+from ..http.response import ok
 
 bp = Blueprint("api_logs", __name__, url_prefix="/api")
 

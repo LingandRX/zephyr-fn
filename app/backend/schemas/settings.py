@@ -13,8 +13,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from ..core.exceptions import ValidationError
-from ..storage.repositories import SETTINGS_FIELDS, is_secret_placeholder
+from ..domain.exceptions import ValidationError
+from ..repositories import SETTINGS_FIELDS, is_secret_placeholder
 
 _SECRET_FIELDS = ("smtp_password", "pushplus_token", "pushplus_smtp_password")
 _INT_FIELDS = ("notification_days", "smtp_port", "pushplus_smtp_port")

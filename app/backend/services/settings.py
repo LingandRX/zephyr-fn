@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..schemas.settings import SettingsSchema
-from ..storage import repositories
+from .. import repositories
 
 _SECRET_SETTING_FIELDS = ("smtp_password", "pushplus_token", "pushplus_smtp_password")
 

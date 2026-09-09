@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from flask import Blueprint, g, request
 
-from ..core.exceptions import NotFoundError
-from ..core.response import ok
+from ..domain.exceptions import NotFoundError
+from ..http.response import ok
 from ..services import subscriptions
 
 bp = Blueprint("api_subscriptions", __name__, url_prefix="/api")

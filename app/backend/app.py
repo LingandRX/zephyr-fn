@@ -16,16 +16,16 @@ from flask_migrate import upgrade
 
 from . import config as app_config
 from .api import register_blueprints
-from .core import exceptions
-from .core.middleware import (
+from .domain import exceptions
+from .http.middleware import (
     GatewayPrefixMiddleware,
     check_admin_only,
     ensure_default_categories,
     parse_identity,
 )
-from .core.response import error as error_response
+from .http.response import error as error_response
 from .extensions import db, migrate
-from .storage import bootstrap
+from .repositories import bootstrap
 
 # Alembic 迁移脚本目录（与 app.py 同级的 migrations/）
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"

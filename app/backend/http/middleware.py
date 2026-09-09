@@ -14,8 +14,17 @@ from typing import Any
 from flask import current_app, g, request
 
 from .. import config
-from ..core.exceptions import ForbiddenError, UnauthorizedError, ValidationError
+from ..domain.exceptions import ForbiddenError, UnauthorizedError, ValidationError
 from ..services.categories import ensure_default_categories_for_user
+
+__all__ = [
+    "RequestIdentity",
+    "GatewayPrefixMiddleware",
+    "parse_identity",
+    "check_admin_only",
+    "ensure_default_categories",
+    "is_path_within",
+]
 
 
 @dataclass(frozen=True)

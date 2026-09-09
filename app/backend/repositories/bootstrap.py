@@ -21,7 +21,7 @@ from sqlalchemy import text
 
 from .. import config
 from ..extensions import db
-from .repositories import new_id, now_utc
+from . import new_id, now_utc
 
 logger = logging.getLogger("subscription.db")
 

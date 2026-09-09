@@ -10,10 +10,10 @@ from collections.abc import Mapping
 from datetime import date
 from typing import Any
 
-from ..core import domain
-from ..core.exceptions import ValidationError
+from ..domain import domain
+from ..domain.exceptions import ValidationError
 from ..schemas.subscription import SubscriptionSchema
-from ..storage import repositories
+from .. import repositories
 
 # 合并校验用的候选字段（更新场景：当前值 + 请求值）
 _CANDIDATE_FIELDS = (

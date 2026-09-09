@@ -10,7 +10,7 @@ import re
 import unicodedata
 from typing import Any
 
-from ..core.exceptions import ValidationError
+from ..domain.exceptions import ValidationError
 
 MAX_CATEGORY_NAME_LEN = 20
 MAX_CATEGORIES_PER_USER = 50

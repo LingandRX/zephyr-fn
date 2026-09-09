@@ -12,7 +12,7 @@ from helpers import AppTestCase
 from backend import config
 from backend.extensions import db
 from backend.services import subscriptions as sub_service
-from backend.storage import repositories
+from backend import repositories
 
 
 class FlaskApiSecurityTests(AppTestCase):

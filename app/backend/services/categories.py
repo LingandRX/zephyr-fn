@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from ..core.exceptions import ConflictError, ValidationError
+from ..domain.exceptions import ConflictError, ValidationError
 from ..extensions import db
 from ..schemas.category import (
     MAX_CATEGORIES_PER_USER,
@@ -13,8 +13,8 @@ from ..schemas.category import (
     normalize_icon,
     normalize_sort_order,
 )
-from ..storage import repositories
-from ..storage.bootstrap import DEFAULT_CATEGORY_TEMPLATES
+from .. import repositories
+from ..repositories.bootstrap import DEFAULT_CATEGORY_TEMPLATES
 
 # 进程内已播种用户缓存（按数据库文件隔离），避免每个 API 请求都查询 seeded_users。
 _seeded_cache: set[tuple[str, str]] = set()

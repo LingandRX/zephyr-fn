@@ -10,8 +10,8 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from ..core import domain
-from ..storage import repositories
+from ..domain import domain
+from .. import repositories
 
 # 兼容入口：调度器与外部调用方继续使用这些名字
 claim_notification = repositories.claim_notification

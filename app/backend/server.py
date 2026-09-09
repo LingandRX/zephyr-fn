@@ -37,7 +37,7 @@ from pathlib import Path
 
 # 兼容直接执行（python3 server.py，cmd/main / dev.sh / install_callback 均如此）：
 # 把 backend 包的父目录（app/）加入 sys.path，以包方式导入，
-# 保证各模块的相对导入（from ..core import ...）统一生效。
+# 保证各模块的相对导入（from ..domain import ...）统一生效。
 _BACKEND_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_BACKEND_DIR.parent))
 

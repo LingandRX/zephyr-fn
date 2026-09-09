@@ -5,7 +5,7 @@ from __future__ import annotations
 from flask import Blueprint, Response, jsonify, send_file
 
 from .. import config
-from ..core.middleware import is_path_within
+from ..http.middleware import is_path_within
 
 bp = Blueprint("api_web", __name__)
 

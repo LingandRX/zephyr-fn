@@ -15,7 +15,8 @@ from helpers import AppTestCase
 
 from backend.extensions import db
 from backend.services import notifications
-from backend.storage import bootstrap, repositories
+from backend.repositories import bootstrap
+from backend import repositories
 
 
 class NotificationDbTests(AppTestCase):

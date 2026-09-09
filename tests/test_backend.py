@@ -13,8 +13,8 @@ from pathlib import Path
 from helpers import AppTestCase
 
 from backend import config
-from backend.core import domain
-from backend.core.exceptions import ValidationError
+from backend.domain import domain
+from backend.domain.exceptions import ValidationError
 from backend.services import (
     calculate_statistics,
     get_calendar_events,
@@ -25,8 +25,8 @@ from backend.services import (
 from backend.services import (
     subscriptions as sub_service,
 )
-from backend.storage import repositories
-from backend.storage.bootstrap import DEFAULT_CATEGORY_TEMPLATES
+from backend import repositories
+from backend.repositories.bootstrap import DEFAULT_CATEGORY_TEMPLATES
 
 
 class DomainTests(unittest.TestCase):

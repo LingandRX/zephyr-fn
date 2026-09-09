@@ -1,9 +1,9 @@
 """数据持久化仓储层（SQLAlchemy 实现）。
 
-旧版 storage/db.py 的职责按四层架构拆解：
+四层架构拆解：
 - 查询与写入   → 本模块（仓储函数，会话自动提交）
 - 校验与归一化 → schemas/ 与 services/（业务层）
-- 旧库就地升级 → storage/bootstrap.py
+- 旧库就地升级 → repositories/bootstrap.py
 
 会话生命周期由 Flask-SQLAlchemy 绑定应用/请求上下文管理；
 后台线程（定时任务）通过 ``with app.app_context()`` 显式持有上下文。
@@ -355,7 +355,7 @@ def insert_category(user_id: str, name: str, icon: str | None, sort_order: int) 
     except IntegrityError as exc:
         db.session.rollback()
         if "idx_cat_user_name" in str(exc) or "UNIQUE" in str(exc):
-            from ..core.exceptions import ConflictError
+            from ..domain.exceptions import ConflictError
 
             raise ConflictError("分类已存在") from exc
         raise
@@ -375,7 +375,7 @@ def update_category(cat_id: str, user_id: str, updates: Mapping[str, Any]) -> di
     except IntegrityError as exc:
         db.session.rollback()
         if "idx_cat_user_name" in str(exc) or "UNIQUE" in str(exc):
-            from ..core.exceptions import ConflictError
+            from ..domain.exceptions import ConflictError
 
             raise ConflictError("分类已存在") from exc
         raise

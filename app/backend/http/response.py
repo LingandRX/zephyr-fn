@@ -10,6 +10,8 @@ from typing import Any
 
 from flask import Response, jsonify
 
+__all__ = ["ok", "error"]
+
 
 def ok(data: Any = None, message: str = "ok", code: int = 0) -> Response:
     """成功响应。"""
