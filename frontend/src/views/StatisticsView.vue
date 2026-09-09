@@ -37,13 +37,17 @@ const bigCards = computed(() => {
   ];
 });
 
+/** 本地时区的 YYYY-MM：toISOString() 走 UTC，UTC+8 每月 1 日 00:00-08:00 会错判成上一个月 */
+function localMonthKey(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 const trend = computed(() => {
   const s = stats.value;
   if (!s || !s.monthly_trend) return { unit: "", bars: [], maxAmount: 0 };
   const rawBars = s.monthly_trend;
   const max = Math.max(...rawBars.map((m) => m.amount), 1);
-  const nowMonth = new Date().toISOString().slice(0, 7);
-  const CHART_HEIGHT = 200;
+  const nowMonth = localMonthKey();
 
   return {
     unit: s.currency ? `(单位: ${s.currency})` : "",
@@ -57,7 +61,9 @@ const trend = computed(() => {
         shortMonth: `${parseInt(m.month.slice(5), 10)}月`,
         amount: m.amount,
         formattedAmount: fmtCents(m.amount, s.currency),
-        barHeight: isZero ? 4 : Math.max(8, pct * CHART_HEIGHT),
+        // 用百分比而不是写死 px：图表高度由 CSS 决定（桌面 200px / 移动端 160px），
+        // 写死 px 会算进月份标签的高度，导致最高柱溢出图表框。
+        barPct: isZero ? 2 : Math.max(6, pct * 100),
         isCurrentMonth,
         isZero,
       };
@@ -72,29 +78,46 @@ const catRows = computed(() => {
   // 按月支出金额从大到小降序排列
   return [...s.category_stats]
     .sort((a, b) => (b.amount || 0) - (a.amount || 0))
-    .map((c) => ({
-      ...c,
-      monthlyFmt: fmtCents(c.amount, cur),
-      yearlyFmt: fmtCents(c.yearly_amount, cur),
-      pct: Math.min(Math.max(Number(c.percentage) || 0, 0), 100),
-    }));
+    .map((c) => {
+      const pct = Math.min(Math.max(Number(c.percentage) || 0, 0), 100);
+      return {
+        ...c,
+        monthlyFmt: fmtCents(c.amount, cur),
+        yearlyFmt: fmtCents(c.yearly_amount, cur),
+        pct,
+        // 文案与进度条宽度共用同一个钳制后的值，避免出现「条 100% / 文字 137%」这类不一致
+        pctText: `${Number.isInteger(pct) ? pct : pct.toFixed(1)}%`,
+      };
+    });
 });
 
+let loadSeq = 0; // 请求序号：丢弃过期响应，避免慢请求覆盖新数据
+
 async function load() {
-  loading.value = true;
+  // 只有首屏（还没有任何数据）才显示骨架屏；keep-alive 切回时静默刷新，避免整页闪烁
+  const firstLoad = stats.value === null;
+  if (firstLoad) loading.value = true;
+  const seq = ++loadSeq;
   try {
-    stats.value = await getStatistics();
+    const data = await getStatistics();
+    if (seq === loadSeq) stats.value = data;
   } catch (err) {
-    toast(err.message, "err");
+    if (seq === loadSeq) toast(err.message, "err");
   } finally {
-    loading.value = false;
+    if (firstLoad && seq === loadSeq) loading.value = false;
   }
 }
 
 onMounted(load);
 // keep-alive 下切回本页不会重新 onMounted，需在 onActivated 重新拉取，
 // 否则在其他页面新增订阅后切回时统计仍显示旧数据。
-onActivated(load);
+// 注意：首挂载时 onMounted 与 onActivated 都会触发，跳过第一次以免重复请求。
+let activationCount = 0;
+onActivated(() => {
+  activationCount += 1;
+  if (activationCount === 1) return;
+  load();
+});
 </script>
 
 <template>
@@ -143,7 +166,7 @@ onActivated(load);
               <div class="trend-tooltip-anchor">
                 <div
                   class="trend-bar"
-                  :style="{ height: b.barHeight + 'px' }"
+                  :style="{ height: b.barPct + '%' }"
                   tabindex="0"
                 >
                   <div class="trend-tooltip">
@@ -197,7 +220,7 @@ onActivated(load);
                     <div class="pct-bar-bg">
                       <div class="pct-bar-fill" :style="{ width: c.pct + '%' }"></div>
                     </div>
-                    <span class="pct-text">{{ c.percentage }}%</span>
+                    <span class="pct-text">{{ c.pctText }}</span>
                   </div>
                 </td>
               </tr>
@@ -222,7 +245,7 @@ onActivated(load);
               <div class="pct-bar-bg">
                 <div class="pct-bar-fill" :style="{ width: c.pct + '%' }"></div>
               </div>
-              <span class="pct-text">{{ c.percentage }}%</span>
+              <span class="pct-text">{{ c.pctText }}</span>
             </div>
           </div>
         </div>
@@ -239,8 +262,11 @@ onActivated(load);
  * 圆角毛玻璃卡片 / SF 风格排版 / 柔和渐变柱状图 / 悬浮气泡
  * ===================================================================== */
 
-/* iOS 系统色板 */
-:root {
+/* iOS 系统色板
+ * 注意：令牌必须挂在组件根元素 .stats-view 上，不能写进 scoped 的 `:root`。
+ * scoped 会把 `:root` 编译成 `[data-v-xxx]:root`，而 <html> 拿不到 data-v 属性，
+ * 整个变量块会失效（卡片背景/边框、柱状图与占比条渐变全部变透明）。 */
+.stats-view {
   --ios-blue: #007aff;
   --ios-blue-soft: rgba(0, 122, 255, 0.12);
   --ios-green: #34c759;
@@ -256,7 +282,7 @@ onActivated(load);
   --ios-card-border: rgba(255, 255, 255, 0.5);
 }
 
-:root[data-theme="dark"] {
+:root[data-theme="dark"] .stats-view {
   --ios-separator: rgba(255, 255, 255, 0.08);
   --ios-card-bg: rgba(28, 28, 30, 0.72);
   --ios-card-border: rgba(255, 255, 255, 0.08);
@@ -423,6 +449,9 @@ onActivated(load);
   display: flex;
   justify-content: center;
   align-items: flex-end;
+  /* height:100% 让子元素百分比高度有确定的参照高度；
+   * flex-shrink 会自动扣除下方月份标签占用的高度，避免最高柱溢出图表框。 */
+  height: 100%;
   flex: 1 1 auto;
   min-height: 0;
 }
