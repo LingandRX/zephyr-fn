@@ -940,6 +940,11 @@ onMounted(loadAll);
   padding: 16px 18px;
 }
 
+.settings-section .card:has([data-headlessui-state*="open"]) {
+  position: relative;
+  z-index: 10;
+}
+
 .settings-section .card h3 {
   margin: 0 0 14px;
   font-size: 15px;
