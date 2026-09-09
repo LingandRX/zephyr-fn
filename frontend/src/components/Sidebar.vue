@@ -83,7 +83,9 @@ function readStoredCollapsed() {
 function writeStoredCollapsed(v) {
   try {
     localStorage.setItem(STORE_KEY, String(v));
-  } catch {}
+  } catch {
+    // 忽略存储失败（例如隐身模式或配额限制）
+  }
 }
 
 const internalCollapsed = ref(readStoredCollapsed());
