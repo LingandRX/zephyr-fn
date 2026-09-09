@@ -43,6 +43,7 @@ const trend = computed(() => {
   const rawBars = s.monthly_trend;
   const max = Math.max(...rawBars.map((m) => m.amount), 1);
   const nowMonth = new Date().toISOString().slice(0, 7);
+  const CHART_HEIGHT = 200;
 
   return {
     unit: s.currency ? `(单位: ${s.currency})` : "",
@@ -50,12 +51,13 @@ const trend = computed(() => {
     bars: rawBars.map((m) => {
       const isCurrentMonth = m.month === nowMonth;
       const isZero = !m.amount || m.amount === 0;
+      const pct = isZero ? 0 : m.amount / max;
       return {
         month: m.month,
         shortMonth: `${parseInt(m.month.slice(5), 10)}月`,
         amount: m.amount,
         formattedAmount: fmtCents(m.amount, s.currency),
-        height: isZero ? 2 : Math.max(6, (m.amount / max) * 100),
+        barHeight: isZero ? 4 : Math.max(8, pct * CHART_HEIGHT),
         isCurrentMonth,
         isZero,
       };
@@ -138,13 +140,12 @@ onActivated(load);
               class="trend-col"
               :class="{ 'is-current': b.isCurrentMonth, 'is-zero': b.isZero }"
             >
-              <div class="trend-bar-wrap">
+              <div class="trend-tooltip-anchor">
                 <div
                   class="trend-bar"
-                  :style="{ height: b.height + '%' }"
+                  :style="{ height: b.barHeight + 'px' }"
                   tabindex="0"
                 >
-                  <!-- 交互式浮动气泡 Tooltip -->
                   <div class="trend-tooltip">
                     <div class="tooltip-month">{{ b.month }}</div>
                     <div class="tooltip-val">{{ b.formattedAmount }}</div>
@@ -233,71 +234,130 @@ onActivated(load);
 </template>
 
 <style scoped>
+/* =====================================================================
+ * 统计页 · iOS 风格
+ * 圆角毛玻璃卡片 / SF 风格排版 / 柔和渐变柱状图 / 悬浮气泡
+ * ===================================================================== */
+
+/* iOS 系统色板 */
+:root {
+  --ios-blue: #007aff;
+  --ios-blue-soft: rgba(0, 122, 255, 0.12);
+  --ios-green: #34c759;
+  --ios-orange: #ff9500;
+  --ios-red: #ff3b30;
+  --ios-purple: #af52de;
+  --ios-teal: #5ac8fa;
+  --ios-pink: #ff2d55;
+  --ios-indigo: #5856d6;
+  --ios-gray: #8e8e93;
+  --ios-separator: rgba(60, 60, 67, 0.12);
+  --ios-card-bg: rgba(255, 255, 255, 0.72);
+  --ios-card-border: rgba(255, 255, 255, 0.5);
+}
+
+:root[data-theme="dark"] {
+  --ios-separator: rgba(255, 255, 255, 0.08);
+  --ios-card-bg: rgba(28, 28, 30, 0.72);
+  --ios-card-border: rgba(255, 255, 255, 0.08);
+}
+
 .stats-view {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 20px;
 }
 
 /* ---------------- 顶部 KPI 卡片 ---------------- */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-3);
-  margin-bottom: 0;
+  gap: 14px;
 }
 
 .stat-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 16px 18px;
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--ios-card-border);
+  border-radius: 16px;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  transition: transform 0.18s ease, border-color 0.18s ease;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.25s ease;
+  position: relative;
+  overflow: hidden;
 }
 
+/* 卡片顶部装饰渐变条 */
+.stat-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--grad-a), var(--grad-b));
+  border-radius: 16px 16px 0 0;
+  opacity: 0.8;
+}
+
+.stat-card:nth-child(1)::before { background: linear-gradient(90deg, #34c759, #30d158); }
+.stat-card:nth-child(2)::before { background: linear-gradient(90deg, #007aff, #5ac8fa); }
+.stat-card:nth-child(3)::before { background: linear-gradient(90deg, #ff9500, #ffb340); }
+.stat-card:nth-child(4)::before { background: linear-gradient(90deg, #af52de, #da7cfc); }
+
 .stat-card:hover {
-  border-color: rgba(var(--primary-rgb), 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="dark"] .stat-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
 }
 
 .stat-card .label {
-  color: var(--muted);
-  font-size: var(--fs-xs);
+  color: var(--ios-gray);
+  font-size: 13px;
   font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .stat-card .value {
-  font-size: 22px;
+  font-size: 28px;
   font-weight: 700;
   color: var(--text);
-  margin: 8px 0 4px;
-  letter-spacing: -0.5px;
+  margin: 10px 0 6px;
+  letter-spacing: -0.6px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-card .sub {
-  color: var(--muted);
-  font-size: 11px;
+  color: var(--ios-gray);
+  font-size: 12px;
+  font-weight: 400;
 }
 
 /* ---------------- 栅格布局 ---------------- */
 .grid-2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
+  gap: 20px;
   align-items: stretch;
 }
 
 .card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 18px 20px;
-  margin-bottom: 0;
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--ios-card-border);
+  border-radius: 16px;
+  padding: 20px 22px;
   display: flex;
   flex-direction: column;
 }
@@ -306,26 +366,29 @@ onActivated(load);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-3);
+  margin-bottom: 20px;
 }
 
 .card-head h3 {
   margin: 0;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.2px;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 8px;
 }
 
 .card-head .muted {
-  font-size: var(--fs-xs);
+  font-size: 12px;
   font-weight: 400;
+  color: var(--ios-gray);
 }
 
 /* ---------------- 趋势柱状图 ---------------- */
 .chart-card {
-  min-height: 280px;
+  min-height: 300px;
 }
 
 .trend-chart-container {
@@ -333,95 +396,100 @@ onActivated(load);
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding-top: 24px;
+  padding-top: 16px;
 }
 
 .trend-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  height: 180px;
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 6px;
+  height: 200px;
   width: 100%;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
-  padding-bottom: 2px;
-}
-
-:root[data-theme="light"] .trend-chart {
-  border-bottom-color: rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid var(--ios-separator);
+  position: relative;
 }
 
 .trend-col {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 0;
-  height: 100%;
   justify-content: flex-end;
+  height: 100%;
   position: relative;
 }
 
-.trend-bar-wrap {
+.trend-tooltip-anchor {
   width: 100%;
-  height: 100%;
   display: flex;
-  align-items: flex-end;
   justify-content: center;
-  position: relative;
+  align-items: flex-end;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .trend-bar {
   width: 100%;
   max-width: 28px;
-  background: linear-gradient(180deg, var(--grad-a), var(--grad-b));
-  border-radius: 4px 4px 0 0;
+  background: linear-gradient(180deg, var(--ios-teal), var(--ios-blue));
+  border-radius: 8px 8px 2px 2px;
   position: relative;
   cursor: pointer;
-  transition: height 0.35s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s ease, opacity 0.2s ease;
+  transition: background 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease;
   outline: none;
+  flex-shrink: 0;
 }
 
 .trend-bar:hover,
-.trend-bar:focus {
-  background: linear-gradient(180deg, var(--grad-a), var(--primary));
-  filter: brightness(1.1);
+.trend-bar:focus-visible {
+  background: linear-gradient(180deg, #5ac8fa, var(--ios-blue));
+  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.3);
+  transform: scaleY(1.05);
+  transform-origin: bottom;
 }
 
-/* 当月与零支出特殊样式 */
+/* 当月 */
 .trend-col.is-current .trend-bar {
-  background: linear-gradient(180deg, #38bdf8, #2563eb);
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+  background: linear-gradient(180deg, #5ac8fa, #007aff);
+  box-shadow: 0 4px 20px rgba(0, 122, 255, 0.35);
 }
 
+.trend-col.is-current .trend-bar:hover {
+  box-shadow: 0 6px 24px rgba(0, 122, 255, 0.45);
+}
+
+/* 零支出 */
 .trend-col.is-zero .trend-bar {
-  background: var(--border);
-  opacity: 0.6;
+  background: var(--ios-gray);
+  opacity: 0.25;
 }
 
-/* CSS 悬浮 Tooltip 气泡 */
+.trend-col.is-zero .trend-month {
+  opacity: 0.5;
+}
+
+/* iOS 毛玻璃 Tooltip 气泡 */
 .trend-tooltip {
   position: absolute;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 10px);
   left: 50%;
-  transform: translateX(-50%) translateY(4px);
-  background: #0b1120;
+  transform: translateX(-50%) translateY(6px) scale(0.92);
+  background: rgba(30, 30, 30, 0.88);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: var(--radius-sm);
-  padding: 5px 8px;
-  font-size: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 12px;
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), visibility 0.2s;
   z-index: 10;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
   text-align: center;
-}
-
-:root[data-theme="light"] .trend-tooltip {
-  background: #1e293b;
+  min-width: 80px;
 }
 
 .trend-tooltip::after {
@@ -430,74 +498,101 @@ onActivated(load);
   top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  border-width: 4px;
+  border-width: 5px;
   border-style: solid;
-  border-color: #0b1120 transparent transparent transparent;
-}
-
-:root[data-theme="light"] .trend-tooltip::after {
-  border-color: #1e293b transparent transparent transparent;
+  border-color: rgba(30, 30, 30, 0.88) transparent transparent transparent;
 }
 
 .trend-bar:hover .trend-tooltip,
-.trend-bar:focus .trend-tooltip {
+.trend-bar:focus-visible .trend-tooltip {
   opacity: 1;
   visibility: visible;
-  transform: translateX(-50%) translateY(0);
+  transform: translateX(-50%) translateY(0) scale(1);
 }
 
 .tooltip-month {
-  color: #94a3b8;
-  font-size: 10px;
-  margin-bottom: 2px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  margin-bottom: 3px;
+  font-weight: 500;
 }
 
 .tooltip-val {
   font-weight: 700;
-  color: #38bdf8;
+  color: #fff;
+  font-size: 15px;
+  letter-spacing: -0.3px;
 }
 
 .trend-month {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ios-gray);
+  margin-top: 8px;
   white-space: nowrap;
   text-align: center;
+  font-weight: 500;
+  transition: color 0.2s ease;
 }
 
 .trend-col.is-current .trend-month {
-  color: var(--text);
+  color: var(--ios-blue);
   font-weight: 600;
+}
+
+.trend-col:hover .trend-month {
+  color: var(--text);
 }
 
 /* ---------------- 分类统计 ---------------- */
 .cat-card {
-  min-height: 280px;
+  min-height: 300px;
 }
 
 .desktop-cat-table {
   width: 100%;
   overflow-x: auto;
-  /* 极窄窗口万一溢出时，用细杆自定义滚动条代替浏览器默认滚动条 */
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
+
 .desktop-cat-table::-webkit-scrollbar {
-  height: 6px;
+  height: 4px;
 }
 .desktop-cat-table::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: var(--border);
+  border-radius: 99px;
+  background: var(--ios-separator);
 }
 .desktop-cat-table::-webkit-scrollbar-track {
   background: transparent;
 }
-/* 分类表仅 4 列且各占 25%，去掉全局 .table 的 640px 最小宽，
-   避免列宽不足时被撑出横向滚动条（桌面端双列布局下每列通常 < 640px） */
+
 .desktop-cat-table .table {
   min-width: 0;
 }
-/* 长分类名省略号，防止 25% 列被内容撑开 */
+
+.desktop-cat-table .table thead th {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ios-gray);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ios-separator);
+}
+
+.desktop-cat-table .table tbody tr {
+  transition: background 0.15s ease;
+}
+
+.desktop-cat-table .table tbody tr:hover {
+  background: rgba(var(--primary-rgb, 0, 122, 255), 0.04);
+}
+
+.desktop-cat-table .table tbody td {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--ios-separator);
+}
+
 .cat-name {
   display: inline-block;
   max-width: 100%;
@@ -510,56 +605,60 @@ onActivated(load);
 .cat-name-cell {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   font-weight: 500;
 }
 
 .cat-dot {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: var(--primary);
+  background: var(--ios-blue);
   flex-shrink: 0;
+  box-shadow: 0 0 0 3px var(--ios-blue-soft);
 }
 
 .amount-cell {
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 14px;
 }
 
 .muted-cell {
-  color: var(--muted);
-  font-size: var(--fs-xs);
+  color: var(--ios-gray);
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .pct-bar-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
 }
 
 .pct-bar-bg {
   flex: 1;
-  height: 6px;
-  background: var(--bg-2);
-  border-radius: 3px;
+  height: 8px;
+  background: rgba(120, 120, 128, 0.1);
+  border-radius: 4px;
   overflow: hidden;
 }
 
 .pct-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--grad-a), var(--grad-b));
-  border-radius: 3px;
-  transition: width 0.4s ease;
+  background: linear-gradient(90deg, var(--ios-blue), var(--ios-teal));
+  border-radius: 4px;
+  transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .pct-text {
-  font-size: 11px;
-  color: var(--muted);
-  min-width: 32px;
+  font-size: 13px;
+  color: var(--ios-gray);
+  min-width: 40px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  font-weight: 500;
 }
 
 .mobile-cat-list {
@@ -569,26 +668,28 @@ onActivated(load);
 }
 
 .mobile-cat-item {
-  background: var(--card-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
+  background: var(--ios-card-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--ios-card-border);
+  border-radius: 14px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .mobile-cat-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: var(--fs-sm);
+  font-size: 15px;
 }
 
 .mobile-cat-name {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-weight: 600;
 }
 
@@ -604,41 +705,45 @@ onActivated(load);
 }
 
 .mobile-yearly {
-  font-size: 11px;
+  font-size: 12px;
+  color: var(--ios-gray);
 }
 
 /* ---------------- 骨架屏动画 ---------------- */
-@keyframes shimmer {
-  0% { opacity: 0.5; }
-  50% { opacity: 0.9; }
-  100% { opacity: 0.5; }
+@keyframes ios-shimmer {
+  0% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+  100% { opacity: 0.4; }
 }
 
 .skeleton-line {
   background: var(--card-2);
-  border-radius: 4px;
-  animation: shimmer 1.5s infinite ease-in-out;
+  border-radius: 8px;
+  animation: ios-shimmer 1.8s infinite ease-in-out;
 }
 
 .skeleton-line.sm { height: 12px; width: 50%; margin-bottom: 8px; }
 .skeleton-line.md { height: 16px; width: 70%; }
-.skeleton-line.lg { height: 24px; width: 80%; margin-bottom: 6px; }
+.skeleton-line.lg { height: 28px; width: 80%; margin-bottom: 6px; }
 .skeleton-line.xs { height: 10px; width: 40%; }
 
 .chart-skeleton {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  height: 180px;
-  padding-top: 24px;
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 6px;
+  height: 200px;
+  padding-top: 16px;
 }
 
 .skeleton-bar {
-  flex: 1;
+  width: 100%;
+  max-width: 28px;
+  justify-self: center;
+  align-self: end;
   background: var(--card-2);
-  border-radius: 4px 4px 0 0;
+  border-radius: 8px 8px 2px 2px;
   height: 60%;
-  animation: shimmer 1.5s infinite ease-in-out;
+  animation: ios-shimmer 1.8s infinite ease-in-out;
 }
 .skeleton-bar:nth-child(2n) { height: 85%; animation-delay: 0.2s; }
 .skeleton-bar:nth-child(3n) { height: 40%; animation-delay: 0.4s; }
@@ -646,7 +751,7 @@ onActivated(load);
 .cat-skeleton {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   padding-top: 10px;
 }
 
@@ -658,7 +763,6 @@ onActivated(load);
 
 /* ---------------- 响应式断点适配 ---------------- */
 
-/* 平板 / 小屏桌面 (<= 860px) */
 @media (max-width: 860px) {
   .grid-2 {
     grid-template-columns: minmax(0, 1fr);
@@ -668,56 +772,53 @@ onActivated(load);
   }
 }
 
-/* 手机端 (<= 600px) */
 @media (max-width: 600px) {
   .stats-view {
-    gap: var(--space-3);
+    gap: 14px;
   }
-  
-  /* 2x2 紧凑 KPI 网格，消除 4 单行占满屏幕问题 */
+
   .stats-grid {
     grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px;
+    gap: 10px;
   }
-  
+
   .stat-card {
-    padding: 12px;
-    border-radius: 10px;
+    padding: 14px 16px;
+    border-radius: 14px;
   }
 
   .stat-card .value {
-    font-size: 17px;
-    margin: 4px 0 2px;
+    font-size: 22px;
+    margin: 6px 0 4px;
   }
 
   .stat-card .label {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .stat-card .sub {
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .card {
-    padding: 14px;
-    border-radius: 10px;
+    padding: 16px;
+    border-radius: 14px;
+  }
+
+  .card-head h3 {
+    font-size: 16px;
   }
 
   .trend-chart {
     gap: 4px;
-    height: 150px;
+    height: 160px;
   }
 
   .trend-bar {
-    border-radius: 2px 2px 0 0;
+    max-width: 18px;
+    border-radius: 6px 6px 2px 2px;
   }
 
-  .trend-month {
-    font-size: 10px;
-    margin-top: 4px;
-  }
-
-  /* 隐藏桌面端宽表格，使用专为手机设计的卡片式列表 */
   .desktop-cat-table {
     display: none;
   }
