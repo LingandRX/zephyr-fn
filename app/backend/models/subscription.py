@@ -1,4 +1,5 @@
 """订阅实体。"""
+
 from __future__ import annotations
 
 from sqlalchemy import Column, Index, Integer, String

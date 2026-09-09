@@ -4,6 +4,7 @@
 - ``flask db upgrade``（工厂启动时自动执行）
 - ``flask db migrate``（开发期基于模型差异生成新迁移）
 """
+
 from __future__ import annotations
 
 import logging

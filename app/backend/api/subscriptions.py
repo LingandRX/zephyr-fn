@@ -1,4 +1,5 @@
 """订阅 API。"""
+
 from __future__ import annotations
 
 from flask import Blueprint, g, request
@@ -18,9 +19,7 @@ def list_subscriptions():
 
 @bp.route("/subscriptions", methods=["POST"])
 def create_subscription():
-    sub = subscriptions.create_subscription(
-        g.identity.user_id, request.get_json(force=True)
-    )
+    sub = subscriptions.create_subscription(g.identity.user_id, request.get_json(force=True))
     return ok(subscriptions.with_status(sub)), 201
 
 

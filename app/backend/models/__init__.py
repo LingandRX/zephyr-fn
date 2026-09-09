@@ -3,6 +3,7 @@
 金额以「分」(amount) 整数存储；时间戳为 RFC3339 UTC 字符串（String 列，
 与旧库格式保持一致，避免破坏存量数据）。
 """
+
 from __future__ import annotations
 
 from .app_settings import AppSettings

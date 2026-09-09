@@ -8,15 +8,17 @@
 会话生命周期由 Flask-SQLAlchemy 绑定应用/请求上下文管理；
 后台线程（定时任务）通过 ``with app.app_context()`` 显式持有上下文。
 """
+
 from __future__ import annotations
 
 import sqlite3
 import uuid
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
-from sqlalchemy import select, text, update
+from sqlalchemy import select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 
@@ -32,49 +34,115 @@ from ..models import (
 
 # 订阅全量列（写入顺序固定，供 raw 导入/替换使用）
 SUBSCRIPTION_COLUMNS = (
-    "id", "user_id", "name", "amount", "currency", "actual_amount",
-    "category_id", "notes", "period_type", "custom_period_value",
-    "custom_period_unit", "auto_renew", "sharing_role", "sharing_count",
-    "start_date", "first_payment_date", "next_due_date", "lifecycle",
-    "renewal_policy", "billing_status", "grace_period_ends_at",
-    "sync_version", "created_at", "updated_at",
+    "id",
+    "user_id",
+    "name",
+    "amount",
+    "currency",
+    "actual_amount",
+    "category_id",
+    "notes",
+    "period_type",
+    "custom_period_value",
+    "custom_period_unit",
+    "auto_renew",
+    "sharing_role",
+    "sharing_count",
+    "start_date",
+    "first_payment_date",
+    "next_due_date",
+    "lifecycle",
+    "renewal_policy",
+    "billing_status",
+    "grace_period_ends_at",
+    "sync_version",
+    "created_at",
+    "updated_at",
 )
 
 # 可更新的订阅字段白名单
 SUBSCRIPTION_FIELDS = (
-    "name", "amount", "currency", "actual_amount", "category_id", "notes",
-    "period_type", "custom_period_value", "custom_period_unit", "auto_renew",
-    "sharing_role", "sharing_count", "start_date", "first_payment_date",
-    "next_due_date", "lifecycle", "renewal_policy", "billing_status",
+    "name",
+    "amount",
+    "currency",
+    "actual_amount",
+    "category_id",
+    "notes",
+    "period_type",
+    "custom_period_value",
+    "custom_period_unit",
+    "auto_renew",
+    "sharing_role",
+    "sharing_count",
+    "start_date",
+    "first_payment_date",
+    "next_due_date",
+    "lifecycle",
+    "renewal_policy",
+    "billing_status",
     "grace_period_ends_at",
 )
 
 # 设置字段白名单
 SETTINGS_FIELDS = (
-    "dark_mode", "default_currency", "exchange_rate_usd", "exchange_rate_hkd",
-    "notification_days", "notification_time",
-    "do_not_disturb_start", "do_not_disturb_end",
-    "auto_start", "tray_mode", "email_enabled", "smtp_host", "smtp_port",
-    "smtp_username", "smtp_password", "smtp_from_address", "email_template",
-    "notification_enabled", "pushplus_enabled", "pushplus_token",
-    "pushplus_smtp_host", "pushplus_smtp_port", "pushplus_smtp_username",
-    "pushplus_smtp_password", "pushplus_smtp_from_address",
-    "last_check_date", "last_rate_update",
+    "dark_mode",
+    "default_currency",
+    "exchange_rate_usd",
+    "exchange_rate_hkd",
+    "notification_days",
+    "notification_time",
+    "do_not_disturb_start",
+    "do_not_disturb_end",
+    "auto_start",
+    "tray_mode",
+    "email_enabled",
+    "smtp_host",
+    "smtp_port",
+    "smtp_username",
+    "smtp_password",
+    "smtp_from_address",
+    "email_template",
+    "notification_enabled",
+    "pushplus_enabled",
+    "pushplus_token",
+    "pushplus_smtp_host",
+    "pushplus_smtp_port",
+    "pushplus_smtp_username",
+    "pushplus_smtp_password",
+    "pushplus_smtp_from_address",
+    "last_check_date",
+    "last_rate_update",
 )
 
-_SECRET_SETTING_FIELDS = frozenset({
-    "smtp_password", "pushplus_token", "pushplus_smtp_password",
-})
-_SECRET_MASK_EXACT = frozenset({
-    "***", "******", "********", "**********", "************",
-    "••••", "••••••", "••••••••", "[redacted]", "[已配置]",
-    "已配置", "configured",
-})
+_SECRET_SETTING_FIELDS = frozenset(
+    {
+        "smtp_password",
+        "pushplus_token",
+        "pushplus_smtp_password",
+    }
+)
+_SECRET_MASK_EXACT = frozenset(
+    {
+        "***",
+        "******",
+        "********",
+        "**********",
+        "************",
+        "••••",
+        "••••••",
+        "••••••••",
+        "[redacted]",
+        "[已配置]",
+        "已配置",
+        "configured",
+    }
+)
 
 
 # --------------------------------------------------------------------------- #
 # 通用工具
 # --------------------------------------------------------------------------- #
+
 
 def new_id() -> str:
     return uuid.uuid4().hex
@@ -110,6 +178,7 @@ def is_secret_placeholder(value: Any) -> bool:
 # --------------------------------------------------------------------------- #
 # 订阅仓储
 # --------------------------------------------------------------------------- #
+
 
 def get_all_subscriptions(user_id: str) -> list[dict]:
     rows = db.session.execute(
@@ -154,8 +223,7 @@ def update_subscription_fields(
 
 def delete_subscription(sub_id: str, user_id: str) -> bool:
     row = db.session.execute(
-        select(Subscription).where(Subscription.id == sub_id,
-                                   Subscription.user_id == user_id)
+        select(Subscription).where(Subscription.id == sub_id, Subscription.user_id == user_id)
     ).scalar_one_or_none()
     if row is None:
         return False
@@ -247,6 +315,7 @@ def export_db_copy(target_path: Path) -> None:
 # 分类仓储
 # --------------------------------------------------------------------------- #
 
+
 def get_all_categories(user_id: str) -> list[dict]:
     rows = db.session.execute(
         select(Category)
@@ -272,15 +341,14 @@ def get_category_by_id(cat_id: str, user_id: str) -> dict | None:
 
 def get_category_count(user_id: str) -> int:
     from sqlalchemy import func
+
     return db.session.execute(
         select(func.count()).select_from(Category).where(Category.user_id == user_id)
     ).scalar_one()
 
 
-def insert_category(user_id: str, name: str, icon: str | None,
-                    sort_order: int) -> dict:
-    row = Category(id=new_id(), user_id=user_id, name=name, icon=icon,
-                   sort_order=sort_order)
+def insert_category(user_id: str, name: str, icon: str | None, sort_order: int) -> dict:
+    row = Category(id=new_id(), user_id=user_id, name=name, icon=icon, sort_order=sort_order)
     db.session.add(row)
     try:
         db.session.commit()
@@ -288,6 +356,7 @@ def insert_category(user_id: str, name: str, icon: str | None,
         db.session.rollback()
         if "idx_cat_user_name" in str(exc) or "UNIQUE" in str(exc):
             from ..core.exceptions import ConflictError
+
             raise ConflictError("分类已存在") from exc
         raise
     return row.to_dict()
@@ -307,6 +376,7 @@ def update_category(cat_id: str, user_id: str, updates: Mapping[str, Any]) -> di
         db.session.rollback()
         if "idx_cat_user_name" in str(exc) or "UNIQUE" in str(exc):
             from ..core.exceptions import ConflictError
+
             raise ConflictError("分类已存在") from exc
         raise
     return row.to_dict()
@@ -323,9 +393,15 @@ def insert_category_raw(cat: Mapping[str, Any], user_id: str | None = None) -> b
     owner = str(user_id if user_id is not None else cat.get("user_id", "local") or "local")
     if db.session.get(Category, cat_id) is not None:
         return False
-    db.session.add(Category(id=cat_id, user_id=owner, name=name,
-                            icon=cat.get("icon"),
-                            sort_order=_to_int(cat.get("sort_order"), 0)))
+    db.session.add(
+        Category(
+            id=cat_id,
+            user_id=owner,
+            name=name,
+            icon=cat.get("icon"),
+            sort_order=_to_int(cat.get("sort_order"), 0),
+        )
+    )
     db.session.commit()
     return True
 
@@ -351,6 +427,7 @@ def delete_category(cat_id: str, user_id: str) -> bool:
 # --------------------------------------------------------------------------- #
 # 设置仓储
 # --------------------------------------------------------------------------- #
+
 
 def get_app_settings() -> dict:
     row = db.session.get(AppSettings, 1)
@@ -380,58 +457,75 @@ def update_app_settings(updates: Mapping[str, Any]) -> dict:
 # 通知 / 邮件日志仓储
 # --------------------------------------------------------------------------- #
 
+
 def has_channel_notified_today(subscription_id: str, channel: str) -> bool:
     from datetime import date
+
     today = date.today().isoformat()
     row = db.session.execute(
-        select(NotificationLog)
-        .where(NotificationLog.subscription_id == subscription_id,
-               NotificationLog.notification_date == today,
-               NotificationLog.channel == channel,
-               NotificationLog.status == "sent")
+        select(NotificationLog).where(
+            NotificationLog.subscription_id == subscription_id,
+            NotificationLog.notification_date == today,
+            NotificationLog.channel == channel,
+            NotificationLog.status == "sent",
+        )
     ).first()
     return row is not None
 
 
-def log_notification(subscription_id: str, channel: str, status: str,
-                     error_message: str | None = None) -> None:
+def log_notification(
+    subscription_id: str, channel: str, status: str, error_message: str | None = None
+) -> None:
     """幂等记录通知结果（sent 状态不可被降级）。"""
     from datetime import date
+
     notification_date = date.today().isoformat()
     incoming_status = str(status or "").strip().lower() or "failed"
     created_at = now_utc()
-    stmt = sqlite_insert(NotificationLog).values(
-        id=new_id(), subscription_id=subscription_id,
-        notification_date=notification_date, channel=channel,
-        status=incoming_status, error_message=error_message,
-        created_at=created_at,
-    ).on_conflict_do_update(
-        index_elements=["subscription_id", "notification_date", "channel"],
-        set_={
-            "status": sqlite_insert(NotificationLog).excluded.status,
-            "error_message": sqlite_insert(NotificationLog).excluded.error_message,
-            "created_at": sqlite_insert(NotificationLog).excluded.created_at,
-        },
-        where=NotificationLog.status != "sent",
+    stmt = (
+        sqlite_insert(NotificationLog)
+        .values(
+            id=new_id(),
+            subscription_id=subscription_id,
+            notification_date=notification_date,
+            channel=channel,
+            status=incoming_status,
+            error_message=error_message,
+            created_at=created_at,
+        )
+        .on_conflict_do_update(
+            index_elements=["subscription_id", "notification_date", "channel"],
+            set_={
+                "status": sqlite_insert(NotificationLog).excluded.status,
+                "error_message": sqlite_insert(NotificationLog).excluded.error_message,
+                "created_at": sqlite_insert(NotificationLog).excluded.created_at,
+            },
+            where=NotificationLog.status != "sent",
+        )
     )
     db.session.execute(stmt)
     db.session.commit()
 
 
-def log_email(to_address: str, subject: str, status: str,
-              error_message: str | None = None) -> None:
-    db.session.add(EmailLog(
-        id=new_id(), to_address=to_address, subject=subject, status=status,
-        error_message=error_message,
-        sent_at=now_utc() if status == "sent" else None,
-        created_at=now_utc(),
-    ))
+def log_email(to_address: str, subject: str, status: str, error_message: str | None = None) -> None:
+    db.session.add(
+        EmailLog(
+            id=new_id(),
+            to_address=to_address,
+            subject=subject,
+            status=status,
+            error_message=error_message,
+            sent_at=now_utc() if status == "sent" else None,
+            created_at=now_utc(),
+        )
+    )
     db.session.commit()
 
 
 def claim_notification(subscription_id: str, channel: str) -> str | None:
     """原子领取某订阅/渠道/当天的发送名额（单语句 UPSERT，线程安全）。"""
     from datetime import date, timedelta
+
     sub_id = str(subscription_id or "").strip()
     channel_name = str(channel or "").strip()
     if not sub_id or not channel_name:
@@ -441,28 +535,38 @@ def claim_notification(subscription_id: str, channel: str) -> str | None:
     ttl_cutoff = (datetime.now(timezone.utc) - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     claim_id = new_id()
-    stmt = sqlite_insert(NotificationLog).values(
-        id=claim_id, subscription_id=sub_id, notification_date=today,
-        channel=channel_name, status="pending", error_message=None,
-        created_at=now_utc(),
-    ).on_conflict_do_update(
-        index_elements=["subscription_id", "notification_date", "channel"],
-        set_={
-            "id": sqlite_insert(NotificationLog).excluded.id,
-            "status": "pending",
-            "error_message": None,
-            "created_at": sqlite_insert(NotificationLog).excluded.created_at,
-        },
-        # 语义（与旧实现一致）：
-        # - sent / abandoned -> 终态，禁止重新领取
-        # - pending 且新鲜   -> 他人在领取中，返回 None
-        # - pending 超时     -> 可重新领取（TTL 截断线）
-        # - failed / 其他    -> 可随时重新领取
-        where=(
-            ~NotificationLog.status.in_(("sent", "abandoned"))
-            & ((NotificationLog.status != "pending")
-               | (NotificationLog.created_at < ttl_cutoff))
-        ),
+    stmt = (
+        sqlite_insert(NotificationLog)
+        .values(
+            id=claim_id,
+            subscription_id=sub_id,
+            notification_date=today,
+            channel=channel_name,
+            status="pending",
+            error_message=None,
+            created_at=now_utc(),
+        )
+        .on_conflict_do_update(
+            index_elements=["subscription_id", "notification_date", "channel"],
+            set_={
+                "id": sqlite_insert(NotificationLog).excluded.id,
+                "status": "pending",
+                "error_message": None,
+                "created_at": sqlite_insert(NotificationLog).excluded.created_at,
+            },
+            # 语义（与旧实现一致）：
+            # - sent / abandoned -> 终态，禁止重新领取
+            # - pending 且新鲜   -> 他人在领取中，返回 None
+            # - pending 超时     -> 可重新领取（TTL 截断线）
+            # - failed / 其他    -> 可随时重新领取
+            where=(
+                ~NotificationLog.status.in_(("sent", "abandoned"))
+                & (
+                    (NotificationLog.status != "pending")
+                    | (NotificationLog.created_at < ttl_cutoff)
+                )
+            ),
+        )
     )
     result = db.session.execute(stmt)
     db.session.commit()
@@ -471,8 +575,13 @@ def claim_notification(subscription_id: str, channel: str) -> str | None:
     return claim_id
 
 
-def complete_notification(claim_id: str | None, subscription_id: str, channel: str,
-                          status: str, error_message: str | None = None) -> None:
+def complete_notification(
+    claim_id: str | None,
+    subscription_id: str,
+    channel: str,
+    status: str,
+    error_message: str | None = None,
+) -> None:
     """完成/失败/废弃一个 claim；claim 不存在时按传入参数回退记录日志。"""
     valid_statuses = {"pending", "sent", "failed", "abandoned"}
     if status not in valid_statuses or status == "pending":
@@ -498,6 +607,7 @@ def complete_notification(claim_id: str | None, subscription_id: str, channel: s
 # --------------------------------------------------------------------------- #
 # 默认分类补种仓储
 # --------------------------------------------------------------------------- #
+
 
 def is_user_seeded(user_id: str) -> bool:
     return db.session.get(SeededUser, user_id) is not None

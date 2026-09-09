@@ -3,6 +3,7 @@
 所有业务异常统一收敛为 ApiError 及其子类，由应用工厂注册的
 全局 Error Handler 转译为 ``{code, message, data}`` 响应。
 """
+
 from __future__ import annotations
 
 from typing import Any

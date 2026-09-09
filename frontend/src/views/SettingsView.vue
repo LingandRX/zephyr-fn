@@ -140,7 +140,7 @@ function validateCat(name) {
   // 空值用归一化后的 codepoint 长度判断，避免空白字符/全角空格绕过
   if ([...normalized].length === 0) return "请输入分类名称";
   if ([...normalized].length > MAX_CAT_NAME_LEN) return `分类名称最多${MAX_CAT_NAME_LEN}字`;
-  if (/[<>"'&]/.test(normalized)) return "分类名称不能包含 < > \" \' &";
+  if (/[<>"'&]/.test(normalized)) return '分类名称不能包含 < > " \' &';
   if (cats.value.length >= MAX_CAT_COUNT) return `分类数量已达上限(${MAX_CAT_COUNT})`;
   // 重名：大小写+全半角不敏感
   const low = normalized.toLowerCase();

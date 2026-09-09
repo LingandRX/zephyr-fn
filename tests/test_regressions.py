@@ -1,13 +1,13 @@
 """回归测试：覆盖安全修复前未覆盖的统计、日期和导入边界。"""
-from datetime import date
+
 import sys
 import unittest
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
 from backend.services import statistics as services
-
 
 
 class ServicesRegressionTests(unittest.TestCase):

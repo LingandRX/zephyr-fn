@@ -4,6 +4,7 @@
 Must not use the pack-machine's own pip target: Windows/macOS wheels cannot
 run on the NAS. Cross-install manylinux wheels instead.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -55,7 +56,7 @@ def prune_vendor(dest: Path) -> None:
                 continue
 
             # dist-info 中仅保留 METADATA / entry_points.txt / top_level.txt
-            if p.parent.name.endswith(".dist-info"):
+            if p.parent.name.endswith(".dist-info"):  # noqa: SIM102
                 if p.name not in ("METADATA", "entry_points.txt", "top_level.txt"):
                     if p.is_dir():
                         shutil.rmtree(p, ignore_errors=True)

@@ -3,6 +3,7 @@
 函数签名与旧版 storage/db.py 中对应 CRUD 保持一致，降低迁移成本；
 校验逻辑在 schemas/subscription.py，纯持久化在 storage/repositories.py。
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -16,10 +17,21 @@ from ..storage import repositories
 
 # 合并校验用的候选字段（更新场景：当前值 + 请求值）
 _CANDIDATE_FIELDS = (
-    "name", "amount", "currency", "actual_amount", "period_type",
-    "custom_period_value", "custom_period_unit", "auto_renew", "start_date",
-    "first_payment_date", "next_due_date", "lifecycle", "renewal_policy",
-    "billing_status", "grace_period_ends_at",
+    "name",
+    "amount",
+    "currency",
+    "actual_amount",
+    "period_type",
+    "custom_period_value",
+    "custom_period_unit",
+    "auto_renew",
+    "start_date",
+    "first_payment_date",
+    "next_due_date",
+    "lifecycle",
+    "renewal_policy",
+    "billing_status",
+    "grace_period_ends_at",
 )
 
 
@@ -27,11 +39,11 @@ _CANDIDATE_FIELDS = (
 # 序列化辅助
 # --------------------------------------------------------------------------- #
 
+
 def with_status(sub: dict) -> dict:
     """为订阅附加派生状态（即将到期/已过期等展示字段）。"""
     sub = dict(sub)
-    sub["status"] = domain.derive_status(sub.get("lifecycle", "active"),
-                                         sub.get("next_due_date"))
+    sub["status"] = domain.derive_status(sub.get("lifecycle", "active"), sub.get("next_due_date"))
     sub["status_label"] = domain.STATUS_LABELS.get(sub["status"], sub["status"])
     sub["status_color"] = domain.STATUS_COLORS.get(sub["status"], "#6B7280")
     return sub
@@ -87,6 +99,7 @@ def _build_full_row(user_id: str, normalized: Mapping[str, Any]) -> dict:
 # CRUD
 # --------------------------------------------------------------------------- #
 
+
 def list_subscriptions(user_id: str) -> list[dict]:
     return repositories.get_all_subscriptions(user_id)
 
@@ -104,10 +117,7 @@ def update_subscription(sub_id: str, user_id: str, data: dict) -> dict | None:
     current = repositories.get_subscription_by_id(sub_id, user_id)
     if current is None:
         return None
-    requested = {
-        field for field in repositories.SUBSCRIPTION_FIELDS
-        if field in data
-    }
+    requested = {field for field in repositories.SUBSCRIPTION_FIELDS if field in data}
     if not requested:
         return current
     updates = _compute_updates(current, data, requested)
@@ -128,7 +138,9 @@ def renew_subscription(sub_id: str, user_id: str) -> dict | None:
     due = date.fromisoformat(current["next_due_date"] or current["start_date"])
     start = date.fromisoformat(current["start_date"])
     next_due = domain.add_one_period(
-        due, current["period_type"], current["custom_period_value"],
+        due,
+        current["period_type"],
+        current["custom_period_value"],
         current["custom_period_unit"],
         anchor_day=domain.billing_anchor_day(start),
     )
@@ -141,14 +153,14 @@ def renew_subscription(sub_id: str, user_id: str) -> dict | None:
 # 更新计算（旧版 _normalize_update_subscription 的等价实现）
 # --------------------------------------------------------------------------- #
 
-def _compute_updates(current: Mapping[str, Any], data: Mapping[str, Any],
-                     requested: set[str]) -> dict[str, Any]:
+
+def _compute_updates(
+    current: Mapping[str, Any], data: Mapping[str, Any], requested: set[str]
+) -> dict[str, Any]:
     schema = SubscriptionSchema.validate_update(dict(data))
 
     # 合并当前值 + 请求值 → 全量校验（与旧版 candidate 语义一致）
-    candidate: dict[str, Any] = {
-        field: current.get(field) for field in _CANDIDATE_FIELDS
-    }
+    candidate: dict[str, Any] = {field: current.get(field) for field in _CANDIDATE_FIELDS}
     for field in schema:
         if field in _CANDIDATE_FIELDS:
             candidate[field] = schema[field]
@@ -171,8 +183,7 @@ def _compute_updates(current: Mapping[str, Any], data: Mapping[str, Any],
             field in data and data[field] not in (None, "")
             for field in ("custom_period_value", "custom_period_unit")
         ):
-            raise ValidationError(
-                "custom_period_value/custom_period_unit仅适用于custom周期")
+            raise ValidationError("custom_period_value/custom_period_unit仅适用于custom周期")
         candidate["custom_period_value"] = None
         candidate["custom_period_unit"] = None
 
@@ -187,8 +198,7 @@ def _compute_updates(current: Mapping[str, Any], data: Mapping[str, Any],
 
     period_changed = normalized["period_type"] != current.get("period_type")
     custom_changed = any(
-        field in data
-        for field in ("period_type", "custom_period_value", "custom_period_unit")
+        field in data for field in ("period_type", "custom_period_value", "custom_period_unit")
     )
     if period_changed or custom_changed:
         updates["period_type"] = normalized["period_type"]
@@ -202,9 +212,8 @@ def _compute_updates(current: Mapping[str, Any], data: Mapping[str, Any],
     explicit_next_due = "next_due_date" in data
     if normalized["period_type"] == "once":
         updates["next_due_date"] = None
-    elif (
-        (period_changed or custom_changed or "start_date" in data)
-        and (not explicit_next_due or data.get("next_due_date") in (None, ""))
+    elif (period_changed or custom_changed or "start_date" in data) and (
+        not explicit_next_due or data.get("next_due_date") in (None, "")
     ):
         updates["next_due_date"] = _derive_next_due(normalized)
 
@@ -214,6 +223,7 @@ def _compute_updates(current: Mapping[str, Any], data: Mapping[str, Any],
 # --------------------------------------------------------------------------- #
 # 备份/导入导出辅助（全量读取与原始行写入）
 # --------------------------------------------------------------------------- #
+
 
 def get_all_subscriptions_raw(user_id: str | None = None) -> list[dict]:
     return repositories.get_all_subscriptions_raw(user_id)

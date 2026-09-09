@@ -1,9 +1,11 @@
 """备份导出/导入的范围和 CSV 往返回归测试。"""
+
 from __future__ import annotations
 
 import unittest
 
 from helpers import AppTestCase
+
 from backend.services import backup
 from backend.services import subscriptions as sub_service
 
@@ -28,34 +30,26 @@ class CsvDownloadHeadersTests(AppTestCase):
     def test_export_csv_download_headers(self):
         res = self.client.get("/api/export/csv", headers=self.admin_headers)
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(
-            res.headers["Content-Type"], "text/csv; charset=utf-8"
-        )
+        self.assertEqual(res.headers["Content-Type"], "text/csv; charset=utf-8")
         self.assertEqual(res.headers["Content-Type"].count("charset"), 1)
         disposition = res.headers["Content-Disposition"]
         self.assertIn("attachment", disposition)
         self.assertIn("subscriptions.csv", disposition)
         self.assertIn("filename*=", disposition)
         self.assertEqual(res.headers["X-Content-Type-Options"], "nosniff")
-        self.assertEqual(
-            res.headers["Content-Length"], str(len(res.get_data()))
-        )
+        self.assertEqual(res.headers["Content-Length"], str(len(res.get_data())))
 
     def test_import_template_download_headers(self):
         res = self.client.get("/api/backup/import-template", headers=self.admin_headers)
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(
-            res.headers["Content-Type"], "text/csv; charset=utf-8"
-        )
+        self.assertEqual(res.headers["Content-Type"], "text/csv; charset=utf-8")
         self.assertEqual(res.headers["Content-Type"].count("charset"), 1)
         disposition = res.headers["Content-Disposition"]
         self.assertIn("attachment", disposition)
         self.assertIn("import_template.csv", disposition)
         self.assertIn("filename*=", disposition)
         self.assertEqual(res.headers["X-Content-Type-Options"], "nosniff")
-        self.assertEqual(
-            res.headers["Content-Length"], str(len(res.get_data()))
-        )
+        self.assertEqual(res.headers["Content-Length"], str(len(res.get_data())))
         self.assertIn("名称", res.get_data(as_text=True))
 
     def test_import_template_requires_admin(self):

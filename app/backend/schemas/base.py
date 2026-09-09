@@ -1,4 +1,5 @@
 """Schema 基类与公共工具。"""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -24,8 +25,9 @@ def reject_explicit_blank(data: Mapping[str, Any], fields: tuple[str, ...]) -> N
             raise ValidationError(f"{field}不能为空")
 
 
-def optional_text(value: Any, field: str | None = None,
-                  max_length: int | None = None) -> str | None:
+def optional_text(
+    value: Any, field: str | None = None, max_length: int | None = None
+) -> str | None:
     """可选文本字段：空白归一为 None，超长拒绝。"""
     if value in (None, ""):
         return None

@@ -1,4 +1,5 @@
 """PushPlus 微信推送工具（标准库 urllib）。"""
+
 from __future__ import annotations
 
 import json
@@ -42,12 +43,14 @@ def send_pushplus(
         return
 
     # 否则使用 HTTP API
-    payload = json.dumps({
-        "token": token,
-        "title": title,
-        "content": content,
-        "template": "html",
-    }).encode("utf-8")
+    payload = json.dumps(
+        {
+            "token": token,
+            "title": title,
+            "content": content,
+            "template": "html",
+        }
+    ).encode("utf-8")
     req = urllib.request.Request(
         PUSHPLUS_URL,
         data=payload,

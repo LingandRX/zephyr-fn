@@ -3,6 +3,7 @@
 纯基础设施：SMTP 参数一律由调用方传入（scheduler / 测试通知接口
 从设置服务读取后传入），本模块不依赖任何存储层，保持分层纯净。
 """
+
 from __future__ import annotations
 
 import logging

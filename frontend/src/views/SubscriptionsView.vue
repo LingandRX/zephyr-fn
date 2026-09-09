@@ -4,8 +4,8 @@ import {
   getSubscriptions, getCategories, getStatistics,
   createSubscription, updateSubscription, deleteSubscription, renewSubscription,
 } from "../services/api.js";
-import { fmtCents, daysLeft, PERIOD_LABEL, CUSTOM_UNIT_LABEL, yuanToCents, centsToYuan } from "../utils/format.js";
-import { ui, toast, openNewSub } from "../utils/ui.js";
+import { fmtCents, daysLeft, PERIOD_LABEL, CUSTOM_UNIT_LABEL } from "../utils/format.js";
+import { ui, toast } from "../utils/ui.js";
 
 import {
   Dialog, DialogPanel, DialogTitle,
@@ -23,7 +23,6 @@ const loading = ref(false);
 const search = ref("");
 const filterCat = ref("");
 const filterStatus = ref("");
-const NOTES_MAX_LENGTH = 120;
 
 const statusOptions = [
   { label: "全部状态", value: "" },
@@ -221,8 +220,6 @@ async function confirmRenew() {
 }
 
 onMounted(loadAll);
-
-// openNewSub re-export 保证模板按钮可用（App.vue 用 ui.nextComponent 间接触发）
 </script>
 
 <template>

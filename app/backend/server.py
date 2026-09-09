@@ -24,6 +24,7 @@ API（与 zephyr-tarui 后端功能对齐）：
 
 统一响应结构：{code, message, data}（code == 0 表示成功）。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -126,15 +127,16 @@ def _cleanup_old_logs(log_dir: Path) -> None:
 # Unix Socket 服务器
 # --------------------------------------------------------------------------- #
 
+
 def _run_unix_socket(app, sock_path: str) -> None:
     """在 Unix domain socket 上运行 Flask WSGI 应用。"""
     import socket
-    import sys
-    from wsgiref.simple_server import WSGIRequestHandler, WSGIServer
     from socketserver import ThreadingMixIn
+    from wsgiref.simple_server import WSGIRequestHandler, WSGIServer
 
     class UnixWSGIServer(ThreadingMixIn, WSGIServer):
         """标准库的多线程 Unix Socket WSGI 服务器。"""
+
         address_family = socket.AF_UNIX
         daemon_threads = True
 
@@ -150,12 +152,12 @@ def _run_unix_socket(app, sock_path: str) -> None:
 
         def server_bind(self) -> None:
             if os.path.exists(self.server_address):
-                try:
+                try:  # noqa: SIM105
                     os.unlink(self.server_address)
                 except OSError:
                     pass
             self.socket.bind(self.server_address)
-            try:
+            try:  # noqa: SIM105
                 os.chmod(self.server_address, 0o666)
             except OSError:
                 pass
@@ -166,6 +168,7 @@ def _run_unix_socket(app, sock_path: str) -> None:
 
     class UnixWSGIHandler(WSGIRequestHandler):
         """抑制标准库繁杂请求日志，并注入 Unix Socket 所需的 WSGI 环境变量。"""
+
         def log_message(self, format, *args) -> None:
             pass
 
@@ -179,7 +182,11 @@ def _run_unix_socket(app, sock_path: str) -> None:
             env = super().get_environ()
             env["SERVER_NAME"] = "localhost"
             env["SERVER_PORT"] = "80"
-            env["REMOTE_ADDR"] = env.get("HTTP_X_REAL_IP") or env.get("HTTP_X_FORWARDED_FOR", "").split(",")[0].strip() or "127.0.0.1"
+            env["REMOTE_ADDR"] = (
+                env.get("HTTP_X_REAL_IP")
+                or env.get("HTTP_X_FORWARDED_FOR", "").split(",")[0].strip()
+                or "127.0.0.1"
+            )
             # 兼容网关传递的协议（https/http）
             proto = env.get("HTTP_X_FORWARDED_PROTO")
             if proto:
@@ -199,7 +206,7 @@ def _run_unix_socket(app, sock_path: str) -> None:
     finally:
         server.server_close()
         if os.path.exists(sock_path):
-            try:
+            try:  # noqa: SIM105
                 os.unlink(sock_path)
             except OSError:
                 pass
@@ -209,6 +216,7 @@ def _run_unix_socket(app, sock_path: str) -> None:
 # 入口
 # --------------------------------------------------------------------------- #
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="订阅管理 HTTP 服务")
     parser.add_argument("--uds", help="Unix domain socket 路径（网关模式）")
@@ -216,8 +224,9 @@ def main() -> None:
     parser.add_argument("--db", help="数据库文件路径")
     parser.add_argument("--www", help="前端静态目录")
     parser.add_argument("--init-db", action="store_true", help="仅初始化数据库后退出")
-    parser.add_argument("--reminder-days", type=int,
-                        help="安装向导提醒提前天数（配合 --init-db 使用）")
+    parser.add_argument(
+        "--reminder-days", type=int, help="安装向导提醒提前天数（配合 --init-db 使用）"
+    )
     args = parser.parse_args()
 
     config.override("DB_PATH", args.db)

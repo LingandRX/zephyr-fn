@@ -4,6 +4,7 @@
 - 网关前缀剥离：必须在 Flask 创建 Request 之前改写 PATH_INFO，
   before_request 阶段修改 environ 对路由不生效，故实现为 WSGI 中间件。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -33,10 +34,12 @@ _ADMIN_PREFIXES = (
     "/api/backup",
     "/api/export",
 )
-_ADMIN_EXACT = frozenset({
-    "/api/notifications/test-email",
-    "/api/notifications/test-pushplus",
-})
+_ADMIN_EXACT = frozenset(
+    {
+        "/api/notifications/test-email",
+        "/api/notifications/test-pushplus",
+    }
+)
 
 _SECRET_SETTING_FIELDS = ("smtp_password", "pushplus_token", "pushplus_smtp_password")
 
@@ -96,9 +99,8 @@ def parse_identity() -> None:
 def check_admin_only() -> None:
     """管理员专属路径权限校验。"""
     path = request.path
-    is_protected = (
-        path in _ADMIN_EXACT
-        or any(path == p or path.startswith(p + "/") for p in _ADMIN_PREFIXES)
+    is_protected = path in _ADMIN_EXACT or any(
+        path == p or path.startswith(p + "/") for p in _ADMIN_PREFIXES
     )
     if is_protected and not g.identity.is_admin:
         raise ForbiddenError("仅管理员可访问")
@@ -138,7 +140,8 @@ class GatewayPrefixMiddleware:
             return frozenset()
         return frozenset(
             "/" + p.relative_to(self.www_dir).as_posix()
-            for p in self.www_dir.rglob("*") if p.is_file()
+            for p in self.www_dir.rglob("*")
+            if p.is_file()
         )
 
     def _is_internal_path(self, path: str) -> bool:
@@ -155,12 +158,12 @@ class GatewayPrefixMiddleware:
             environ["PATH_INFO"] = "/"
             environ["SCRIPT_NAME"] = (environ.get("SCRIPT_NAME") or "") + prefix
         elif path.startswith(prefix + "/"):
-            environ["PATH_INFO"] = path[len(prefix):]
+            environ["PATH_INFO"] = path[len(prefix) :]
             environ["SCRIPT_NAME"] = (environ.get("SCRIPT_NAME") or "") + prefix
         elif path == "/app":
             environ["PATH_INFO"] = "/"
         elif path.startswith("/app/"):
-            candidate = "/" + path[len("/app/"):]
+            candidate = "/" + path[len("/app/") :]
             if self._is_internal_path(candidate):
                 environ["PATH_INFO"] = candidate
                 environ["SCRIPT_NAME"] = (environ.get("SCRIPT_NAME") or "") + "/app"

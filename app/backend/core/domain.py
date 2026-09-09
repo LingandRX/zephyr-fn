@@ -1,4 +1,5 @@
 """领域逻辑：周期推进、续费策略、状态推导、输入校验与日历事件。"""
+
 from __future__ import annotations
 
 import math
@@ -83,7 +84,9 @@ def add_months(d: date, months: int, *, anchor_day: int | None = None) -> date:
     target_last_day = _days_in_month(year, month)
     if anchor_day is None:
         resolved_anchor = billing_anchor_day(d)
-    elif isinstance(anchor_day, bool) or not isinstance(anchor_day, int) or not 1 <= anchor_day <= 31:
+    elif (
+        isinstance(anchor_day, bool) or not isinstance(anchor_day, int) or not 1 <= anchor_day <= 31
+    ):
         raise ValueError("锚点日必须是1到31的整数")
     else:
         resolved_anchor = anchor_day
@@ -91,7 +94,9 @@ def add_months(d: date, months: int, *, anchor_day: int | None = None) -> date:
 
 
 def add_one_period(
-    d: date, period_type: str, custom_value: int | None = None,
+    d: date,
+    period_type: str,
+    custom_value: int | None = None,
     custom_unit: str | None = None,
     *,
     anchor_day: int | None = None,
@@ -120,7 +125,9 @@ def add_one_period(
 
 
 def sub_one_period(
-    d: date, period_type: str, custom_value: int | None = None,
+    d: date,
+    period_type: str,
+    custom_value: int | None = None,
     custom_unit: str | None = None,
     *,
     anchor_day: int | None = None,
@@ -325,9 +332,7 @@ def normalize_billing_status(value: Any = None, *, default: str = "normal") -> s
     )  # type: ignore[return-value]
 
 
-def normalize_renewal_on_create(
-    auto_renew: bool, explicit_policy: str | None
-) -> tuple[bool, str]:
+def normalize_renewal_on_create(auto_renew: bool, explicit_policy: str | None) -> tuple[bool, str]:
     """创建时统一 auto_renew 与 renewal_policy，并严格校验显式策略。"""
     auto = normalize_bool(auto_renew, "自动续费")
     policy = normalize_renewal_policy(explicit_policy, default=None)
@@ -351,11 +356,7 @@ def resolve_renewal_on_update(
     current_auto = normalize_bool(current_auto_renew, "当前自动续费")
     current = normalize_renewal_policy(current_policy, default="manual") or "manual"
     policy = normalize_renewal_policy(update_policy, default=None)
-    auto = (
-        normalize_bool(update_auto_renew, "自动续费")
-        if update_auto_renew is not None
-        else None
-    )
+    auto = normalize_bool(update_auto_renew, "自动续费") if update_auto_renew is not None else None
     if period_type == "once":
         return False, "manual"
     if policy is not None:
@@ -411,9 +412,7 @@ def normalize_subscription_data(
         auto_renew, renewal_policy = False, "manual"
 
     lifecycle = normalize_lifecycle(values.get("lifecycle"), default="active")
-    billing_status = normalize_billing_status(
-        values.get("billing_status"), default="normal"
-    )
+    billing_status = normalize_billing_status(values.get("billing_status"), default="normal")
 
     start_date = normalize_date(
         values.get("start_date"),
@@ -423,9 +422,7 @@ def normalize_subscription_data(
     )
     first_payment_date = normalize_date(values.get("first_payment_date"), "首次付款日")
     next_due_date = normalize_date(values.get("next_due_date"), "下次到期日")
-    grace_period_ends_at = normalize_date(
-        values.get("grace_period_ends_at"), "宽限期结束日期"
-    )
+    grace_period_ends_at = normalize_date(values.get("grace_period_ends_at"), "宽限期结束日期")
 
     return {
         "name": name,
@@ -520,8 +517,7 @@ def calendar_due_event_type(renewal_policy: str) -> str:
 
 
 def is_calendar_trackable(lifecycle: str) -> bool:
-    return lifecycle in ("active", "in_payment", "grace_period",
-                         "canceled", "ended", "expired")
+    return lifecycle in ("active", "in_payment", "grace_period", "canceled", "ended", "expired")
 
 
 def calendar_termination_date(lifecycle: str, updated_at: str | None) -> date | None:
@@ -539,4 +535,3 @@ def is_calendar_event_visible(lifecycle: str, updated_at: str | None, event_date
         return False
     term = calendar_termination_date(lifecycle, updated_at)
     return term is None or event_date <= term
-

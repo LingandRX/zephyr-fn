@@ -3,9 +3,8 @@
 每个资源一个蓝图，控制器只做「取参数 → 调服务 → 包统一响应」，
 业务逻辑在 services/，持久化在 storage/。
 """
-from __future__ import annotations
 
-from flask import Blueprint
+from __future__ import annotations
 
 from . import (
     backup,

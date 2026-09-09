@@ -4,6 +4,7 @@
 通过应用工厂建库（旧库引导 + Alembic 迁移幂等），
 服务/仓储调用统一包在 ``self.ctx()`` 应用上下文里。
 """
+
 from __future__ import annotations
 
 import sys

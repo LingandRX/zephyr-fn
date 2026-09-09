@@ -6,6 +6,7 @@
 - 校验失败统一抛 ``core.exceptions.ValidationError``（中文文案与旧版一致）。
 - 复用 ``core/domain.py`` 的严格领域校验（金额整数、日期格式、枚举别名等）。
 """
+
 from __future__ import annotations
 
 __all__ = [
