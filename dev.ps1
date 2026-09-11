@@ -5,19 +5,19 @@
     同时启动后端 Flask 开发服务器和前端 Vite 开发服务器。
     前端修改即时热更新（HMR），后端修改需手动重启。
 .PARAMETER BackendPort
-    后端端口（默认 5000）
+    后端端口（默认 3001）
 .PARAMETER FrontendPort
     前端端口（默认 5173）
 .PARAMETER Database
     数据库文件路径（默认 .\data\subscription.db）
 .EXAMPLE
     .\dev.ps1
-    .\dev.ps1 -BackendPort 5001
+    .\dev.ps1 -BackendPort 3001
     .\dev.ps1 -FrontendPort 3000 -Database C:\tmp\test.db
 #>
 
 param(
-    [int]$BackendPort = 5000,
+    [int]$BackendPort = 3001,
     [int]$FrontendPort = 5173,
     [string]$Database = ".\data\subscription.db"
 )

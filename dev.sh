@@ -3,7 +3,7 @@
 #  一键本地开发脚本（Flask 后端 + Vite 前端，支持热更新）
 #
 #  用法：
-#    ./dev.sh                 # 启动开发环境（后端 :5000，前端 :5173）
+#    ./dev.sh                 # 启动开发环境（后端 :3001，前端 :5173）
 #    ./dev.sh -b 5001         # 自定义后端端口
 #    ./dev.sh -f 3000         # 自定义前端端口
 #    ./dev.sh -d /tmp/t.db    # 自定义数据库路径
@@ -14,7 +14,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 # ---- 默认配置 ----
-BACKEND_PORT=5000
+BACKEND_PORT=3001
 FRONTEND_PORT=5173
 DB="./data/subscription.db"
 
