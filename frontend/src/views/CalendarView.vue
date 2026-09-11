@@ -233,7 +233,7 @@ const isOnlyServiceEnd = computed(() => {
 // 明细展开态：选中且有事件的日期（供 details-collapsed 类驱动桌面侧栏开合）
 const detailsOpen = computed(() => !!selectedDateStr.value && selectedDayEvents.value.length > 0);
 
-// 桌面侧栏的渲染快照：关闭时不清空，供 0.28s 收起动画期间继续渲染原内容，
+// 桌面侧栏的渲染快照：关闭时不清空，供 var(--dur-medium) 收起动画期间继续渲染原内容，
 // 避免收起过程中出现「null / 空列表」一闪。
 const detailsSnapshot = ref({ date: null, events: [], onlyServiceEnd: false, totalFormatted: "" });
 
@@ -617,7 +617,7 @@ onActivated(loadMonth);
   color: var(--ios-blue);
   cursor: pointer;
   outline: none;
-  transition: background-color 0.18s ease, transform 0.18s ease;
+  transition: background-color var(--dur-quick) ease, transform var(--dur-quick) ease;
 }
 .cal-nav-btn:hover {
   background: var(--ios-separator);
@@ -662,7 +662,7 @@ onActivated(loadMonth);
   font-size: var(--fs-sm);
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.18s ease, transform 0.18s ease;
+  transition: background var(--dur-quick) ease, transform var(--dur-quick) ease;
 }
 .cal-today-btn:hover {
   background: rgba(0, 122, 255, 0.2);
@@ -716,7 +716,7 @@ onActivated(loadMonth);
   color: var(--ios-gray);
   cursor: pointer;
   outline: none;
-  transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+  transition: background-color var(--dur-quick) ease, color var(--dur-quick) ease, transform var(--dur-quick) ease;
 }
 :global(.cal-legend-btn:hover) {
   background: var(--ios-separator);
@@ -805,7 +805,7 @@ onActivated(loadMonth);
   overflow: hidden;
   cursor: pointer;
   outline: none;
-  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  transition: background var(--dur-quick) ease, box-shadow var(--dur-quick) ease, transform var(--dur-quick) ease;
 }
 .cal-day:hover {
   background: var(--ios-fill);
@@ -842,7 +842,7 @@ onActivated(loadMonth);
   }
 }
 .cal-day {
-  animation: cal-day-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: cal-day-in var(--dur-slow) var(--ease-decelerate) both;
   animation-delay: var(--d, 0ms);
 }
 
@@ -864,7 +864,7 @@ onActivated(loadMonth);
   font-weight: 600;
   color: var(--text);
   font-variant-numeric: tabular-nums;
-  transition: background 0.18s ease, color 0.18s ease;
+  transition: background var(--dur-quick) ease, color var(--dur-quick) ease;
 }
 .cal-day.today .cal-day-num {
   color: var(--ios-red);
@@ -977,7 +977,7 @@ onActivated(loadMonth);
   scroll-margin-top: 12px;
 }
 .details-body {
-  animation: details-body-in 0.18s ease;
+  animation: details-body-in var(--dur-quick) ease;
 }
 @keyframes details-body-in {
   from { opacity: 0; transform: translateY(4px); }
@@ -1037,7 +1037,7 @@ onActivated(loadMonth);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
 }
 .detail-close-icon {
   width: 14px;
@@ -1197,26 +1197,26 @@ onActivated(loadMonth);
 }
 
 /* Headless UI 过渡动画类 */
-.cal-sheet-backdrop-enter { transition: opacity 0.22s ease-out; }
+.cal-sheet-backdrop-enter { transition: opacity var(--dur-base) ease-out; }
 .cal-sheet-backdrop-from { opacity: 0; }
 .cal-sheet-backdrop-to { opacity: 1; }
-.cal-sheet-backdrop-leave { transition: opacity 0.18s ease-in; }
+.cal-sheet-backdrop-leave { transition: opacity var(--dur-quick) ease-in; }
 
 .cal-sheet-panel-enter {
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+  transition: transform var(--dur-slow) var(--ease-decelerate), opacity var(--dur-base) ease;
 }
 .cal-sheet-panel-from { transform: translateY(100%); opacity: 0.6; }
 .cal-sheet-panel-to { transform: translateY(0); opacity: 1; }
 .cal-sheet-panel-leave {
-  transition: transform 0.22s cubic-bezier(0.4, 0, 1, 1), opacity 0.18s ease;
+  transition: transform var(--dur-base) var(--ease-accelerate), opacity var(--dur-quick) ease;
 }
 
 .legend-panel-enter {
-  transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: opacity var(--dur-quick) ease, transform var(--dur-quick) var(--ease-spring);
 }
 .legend-panel-from { opacity: 0; transform: translateY(-6px) scale(0.96); }
 .legend-panel-to { opacity: 1; transform: none; }
-.legend-panel-leave { transition: opacity 0.14s ease-in; }
+.legend-panel-leave { transition: opacity var(--dur-fast) ease-in; }
 
 /* ---------------- 窄屏浮动唤起按钮 ---------------- */
 .details-jump {
@@ -1238,7 +1238,7 @@ onActivated(loadMonth);
   font-size: var(--fs-sm);
   font-weight: 600;
   white-space: nowrap;
-  animation: details-jump-float 2.4s ease-in-out infinite;
+  animation: details-jump-float var(--dur-loop-float) ease-in-out infinite;
 }
 .details-jump:active {
   transform: scale(0.96);
@@ -1304,10 +1304,10 @@ onActivated(loadMonth);
     scrollbar-width: thin;
     box-shadow: none;
     margin-left: 12px;
-    transition: width 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-      margin-left 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-      padding-inline 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-      opacity 0.2s ease;
+    transition: width var(--dur-medium) var(--ease-decelerate),
+      margin-left var(--dur-medium) var(--ease-decelerate),
+      padding-inline var(--dur-medium) var(--ease-decelerate),
+      opacity var(--dur-base) ease;
   }
   .day-details-card.details-collapsed {
     width: 0;

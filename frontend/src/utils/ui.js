@@ -71,11 +71,26 @@ export function openNewSub() {
 
 export const toastState = reactive({ items: [] });
 
-function removeToast(id) {
-  const index = toastState.items.findIndex((item) => item.id === id);
-  if (index >= 0) {
-    toastState.items.splice(index, 1);
-  }
+/** 显示时长：到点后开始退场 */
+const TOAST_VISIBLE_MS = 2300;
+/** 退场动画等待时长：须略大于 HeadlessToast 的 leave transition（--dur-base = 0.2s） */
+const TOAST_LEAVE_MS = 280;
+
+/**
+ * 关闭一条 Toast。
+ * 采用两阶段移除：先把 show 置 false 触发退场动画，动画结束后再从列表摘除，
+ * 否则元素被立即销毁、退场动画不会播放。
+ */
+export function removeToast(id) {
+  const item = toastState.items.find((it) => it.id === id);
+  if (!item || item.show === false) return;
+  item.show = false;
+  setTimeout(() => {
+    const index = toastState.items.findIndex((it) => it.id === id);
+    if (index >= 0) {
+      toastState.items.splice(index, 1);
+    }
+  }, TOAST_LEAVE_MS);
 }
 
 export function toast(msg, type = "ok") {
@@ -83,8 +98,9 @@ export function toast(msg, type = "ok") {
     id: Date.now() + Math.random(),
     msg,
     type,
+    show: true, // 由 HeadlessToast 消费；退场时置 false
   };
 
   toastState.items.push(item);
-  setTimeout(() => removeToast(item.id), 2600);
+  setTimeout(() => removeToast(item.id), TOAST_VISIBLE_MS);
 }

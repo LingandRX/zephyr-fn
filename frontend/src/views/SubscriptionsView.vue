@@ -541,7 +541,7 @@ onMounted(loadAll);
   border: 1px solid transparent;
   border-radius: 10px;
   color: var(--text);
-  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: background-color var(--dur-quick) ease, border-color var(--dur-quick) ease, box-shadow var(--dur-quick) ease;
 }
 .search-wrap input:focus {
   outline: none;
@@ -636,7 +636,7 @@ onMounted(loadAll);
   text-transform: uppercase;
 }
 .table tbody tr {
-  transition: background-color 0.15s ease;
+  transition: background-color var(--dur-fast) ease;
 }
 .table tbody tr:hover {
   background: var(--ios-fill);
@@ -746,7 +746,7 @@ onMounted(loadAll);
   font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
 }
 .row-actions button:hover {
   background: var(--ios-fill);
@@ -783,7 +783,7 @@ onMounted(loadAll);
   backdrop-filter: saturate(180%) blur(20px);
   border: 1px solid var(--ios-card-border);
   border-radius: 16px;
-  transition: transform 0.15s ease;
+  transition: transform var(--dur-fast) ease;
 }
 .sub-item-card:active {
   transform: scale(0.99);
@@ -905,7 +905,7 @@ onMounted(loadAll);
   font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--dur-fast) ease;
 }
 .btn-m:active {
   background: var(--ios-fill);
@@ -1021,7 +1021,7 @@ onMounted(loadAll);
   font: inherit;
   font-size: 16px;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--dur-fast) ease;
 }
 .sub-dialog-btn:hover {
   background: var(--ios-fill);
@@ -1048,13 +1048,13 @@ onMounted(loadAll);
 }
 
 /* Headless UI 过渡动画类 */
-.sub-dialog-backdrop-enter { transition: opacity 0.22s ease-out; }
+.sub-dialog-backdrop-enter { transition: opacity var(--dur-base) ease-out; }
 .sub-dialog-backdrop-from { opacity: 0; }
 .sub-dialog-backdrop-to { opacity: 1; }
-.sub-dialog-backdrop-leave { transition: opacity 0.18s ease-in; }
+.sub-dialog-backdrop-leave { transition: opacity var(--dur-quick) ease-in; }
 
 .sub-dialog-panel-enter {
-  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity var(--dur-base) ease, transform var(--dur-base) var(--ease-decelerate);
 }
 .sub-dialog-panel-from {
   opacity: 0;
@@ -1065,7 +1065,7 @@ onMounted(loadAll);
   transform: none;
 }
 .sub-dialog-panel-leave {
-  transition: opacity 0.15s ease-in, transform 0.15s ease-in;
+  transition: opacity var(--dur-fast) ease-in, transform var(--dur-fast) ease-in;
 }
 
 /* ---------------- 响应式断点适配 ---------------- */

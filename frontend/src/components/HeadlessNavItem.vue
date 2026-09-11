@@ -57,7 +57,7 @@ const emit = defineEmits(['click']);
   display: flex;
   align-items: center;
   gap: 10px;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
   position: relative;
   white-space: nowrap;
   overflow: hidden;

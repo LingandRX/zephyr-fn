@@ -305,7 +305,7 @@ function closeMobile() {
   cursor: pointer;
   margin-bottom: 18px;
   flex-shrink: 0;
-  transition: all 0.15s ease;
+  transition: all var(--dur-fast) ease;
 }
 
 .sidebar-mobile-close:hover {
@@ -351,7 +351,7 @@ function closeMobile() {
   color: var(--ios-gray);
   font-size: var(--fs-sm);
   font-weight: 500;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
 }
 .nav-item:hover {
   background: var(--ios-fill);
@@ -471,7 +471,7 @@ function closeMobile() {
 
 /* ---------- Headless UI 过渡动画类 ---------- */
 :global(.sidebar-backdrop-enter) {
-  transition: opacity 0.25s ease-out;
+  transition: opacity var(--dur-medium) ease-out;
 }
 :global(.sidebar-backdrop-from) {
   opacity: 0;
@@ -480,11 +480,11 @@ function closeMobile() {
   opacity: 1;
 }
 :global(.sidebar-backdrop-leave) {
-  transition: opacity 0.2s ease-in;
+  transition: opacity var(--dur-base) ease-in;
 }
 
 :global(.sidebar-panel-enter) {
-  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform var(--dur-medium) var(--ease-decelerate);
 }
 :global(.sidebar-panel-from) {
   transform: translateX(-100%);
@@ -493,7 +493,7 @@ function closeMobile() {
   transform: translateX(0);
 }
 :global(.sidebar-panel-leave) {
-  transition: transform 0.22s cubic-bezier(0.4, 0, 1, 1);
+  transition: transform var(--dur-base) var(--ease-accelerate);
 }
 
 /* 桌面视口下强制隐藏移动端 Dialog（防止屏幕尺寸变化瞬态残留） */

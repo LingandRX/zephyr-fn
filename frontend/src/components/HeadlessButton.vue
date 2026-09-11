@@ -59,7 +59,7 @@ const emit = defineEmits(['click']);
   font-family: inherit;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--dur-fast) ease;
   white-space: nowrap;
   background: transparent;
   color: inherit;

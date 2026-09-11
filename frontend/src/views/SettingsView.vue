@@ -903,7 +903,7 @@ onMounted(loadAll);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+  transition: background-color var(--dur-quick) ease, color var(--dur-quick) ease, box-shadow var(--dur-quick) ease;
 }
 
 .tab-btn:hover {
@@ -995,7 +995,7 @@ onMounted(loadAll);
 }
 
 .fields-group {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--dur-base) ease;
 }
 
 .field {
@@ -1034,7 +1034,7 @@ onMounted(loadAll);
   color: var(--text);
   font-family: inherit;
   font-size: var(--fs-sm);
-  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: background-color var(--dur-quick) ease, border-color var(--dur-quick) ease, box-shadow var(--dur-quick) ease;
 }
 
 .settings-section input:focus,
@@ -1073,7 +1073,7 @@ onMounted(loadAll);
   background: var(--ios-fill);
   color: var(--text);
   font-weight: 500;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
 }
 
 .settings-section :deep(.headless-btn:hover:not(:disabled)) {
@@ -1136,7 +1136,7 @@ onMounted(loadAll);
   font-size: var(--fs-xs);
   color: var(--ios-blue);
   font-weight: 600;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--dur-base) ease;
 }
 
 .save-status-badge.saving {
@@ -1228,7 +1228,7 @@ onMounted(loadAll);
   background: var(--ios-separator);
   color: var(--ios-gray);
   cursor: pointer;
-  transition: color 0.15s ease, background-color 0.15s ease;
+  transition: color var(--dur-fast) ease, background-color var(--dur-fast) ease;
 }
 
 .cat-chip button:hover {
@@ -1258,7 +1258,7 @@ onMounted(loadAll);
   font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--dur-fast) ease;
 }
 
 .file-btn:hover {
@@ -1318,7 +1318,7 @@ onMounted(loadAll);
   border-right: 2px solid currentColor;
   border-bottom: 2px solid currentColor;
   transform: rotate(-45deg);
-  transition: transform 0.2s ease;
+  transition: transform var(--dur-base) ease;
 }
 
 .smtp-details[open] summary::before {
@@ -1345,7 +1345,7 @@ onMounted(loadAll);
 /* ---------------- 通知渠道折叠过渡 ---------------- */
 .ch-collapse-enter-active,
 .ch-collapse-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  transition: opacity var(--dur-quick) ease, transform var(--dur-quick) ease;
 }
 
 .ch-collapse-enter-from,
@@ -1476,7 +1476,7 @@ onMounted(loadAll);
   font: inherit;
   font-size: 16px;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--dur-fast) ease;
 }
 
 .set-dialog-btn:hover {
@@ -1506,13 +1506,13 @@ onMounted(loadAll);
 }
 
 /* 过渡动画 */
-.set-dialog-backdrop-enter { transition: opacity 0.22s ease-out; }
+.set-dialog-backdrop-enter { transition: opacity var(--dur-base) ease-out; }
 .set-dialog-backdrop-from { opacity: 0; }
 .set-dialog-backdrop-to { opacity: 1; }
-.set-dialog-backdrop-leave { transition: opacity 0.18s ease-in; }
+.set-dialog-backdrop-leave { transition: opacity var(--dur-quick) ease-in; }
 
 .set-dialog-panel-enter {
-  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity var(--dur-base) ease, transform var(--dur-base) var(--ease-decelerate);
 }
 .set-dialog-panel-from {
   opacity: 0;
@@ -1523,7 +1523,7 @@ onMounted(loadAll);
   transform: none;
 }
 .set-dialog-panel-leave {
-  transition: opacity 0.15s ease-in, transform 0.15s ease-in;
+  transition: opacity var(--dur-fast) ease-in, transform var(--dur-fast) ease-in;
 }
 
 @media (prefers-reduced-motion: reduce) {

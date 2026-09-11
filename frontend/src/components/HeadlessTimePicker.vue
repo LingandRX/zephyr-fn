@@ -438,7 +438,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   outline: none;
   text-align: left;
-  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: background-color var(--dur-quick) ease, border-color var(--dur-quick) ease, box-shadow var(--dur-quick) ease;
 }
 
 .custom-time-picker-trigger:hover {
@@ -484,7 +484,7 @@ onBeforeUnmount(() => {
   width: 22px;
   height: 22px;
   color: var(--ios-gray);
-  transition: color 0.18s ease;
+  transition: color var(--dur-quick) ease;
 }
 
 .custom-time-picker.is-open .custom-time-picker-icon {
@@ -504,7 +504,7 @@ onBeforeUnmount(() => {
   color: var(--ios-gray);
   cursor: pointer;
   outline: none;
-  transition: color 0.18s ease, background-color 0.18s ease;
+  transition: color var(--dur-quick) ease, background-color var(--dur-quick) ease;
 }
 
 .custom-time-picker-clear-btn:hover {
@@ -625,7 +625,7 @@ onBeforeUnmount(() => {
   scroll-snap-align: center;
   letter-spacing: 0.5px;
   font-variant-numeric: tabular-nums;
-  transition: color 0.18s ease, font-size 0.18s ease;
+  transition: color var(--dur-quick) ease, font-size var(--dur-quick) ease;
 }
 
 .custom-time-picker-dropdown .time-cell:hover {
@@ -664,7 +664,7 @@ onBeforeUnmount(() => {
   color: var(--ios-blue);
   cursor: pointer;
   outline: none;
-  transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+  transition: background-color var(--dur-quick) ease, color var(--dur-quick) ease, transform var(--dur-quick) ease;
 }
 
 .custom-time-picker-dropdown .quick-btn:hover {
@@ -695,7 +695,7 @@ onBeforeUnmount(() => {
 /* ---------------- 浮层动效 ---------------- */
 .ctp-fade-enter-active,
 .ctp-fade-leave-active {
-  transition: opacity 0.16s ease, transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity var(--dur-fast) ease, transform var(--dur-fast) var(--ease-decelerate);
 }
 
 .ctp-fade-enter-from,

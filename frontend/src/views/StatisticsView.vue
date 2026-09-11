@@ -391,7 +391,7 @@ onActivated(() => {
   border-radius: 8px 8px 2px 2px;
   position: relative;
   cursor: pointer;
-  transition: background 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease;
+  transition: background var(--dur-medium) ease, box-shadow var(--dur-medium) ease, transform var(--dur-base) ease;
   outline: none;
   flex-shrink: 0;
 }
@@ -442,7 +442,7 @@ onActivated(() => {
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), visibility 0.2s;
+  transition: opacity var(--dur-base) ease, transform var(--dur-base) var(--ease-spring), visibility var(--dur-base);
   z-index: 10;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
   text-align: center;
@@ -488,7 +488,7 @@ onActivated(() => {
   white-space: nowrap;
   text-align: center;
   font-weight: 500;
-  transition: color 0.2s ease;
+  transition: color var(--dur-base) ease;
 }
 
 .trend-col.is-current .trend-month {
@@ -539,7 +539,7 @@ onActivated(() => {
 }
 
 .desktop-cat-table .table tbody tr {
-  transition: background 0.15s ease;
+  transition: background var(--dur-fast) ease;
 }
 
 .desktop-cat-table .table tbody tr:hover {
@@ -607,7 +607,7 @@ onActivated(() => {
   height: 100%;
   background: linear-gradient(90deg, var(--ios-blue), var(--ios-teal));
   border-radius: 4px;
-  transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: width var(--dur-xslow) var(--ease-spring);
 }
 
 .pct-text {
@@ -677,7 +677,7 @@ onActivated(() => {
 .skeleton-line {
   background: var(--card-2);
   border-radius: 8px;
-  animation: ios-shimmer 1.8s infinite ease-in-out;
+  animation: ios-shimmer var(--dur-loop-shimmer) infinite ease-in-out;
 }
 
 .skeleton-line.sm { height: 12px; width: 50%; margin-bottom: 8px; }
@@ -701,10 +701,10 @@ onActivated(() => {
   background: var(--card-2);
   border-radius: 8px 8px 2px 2px;
   height: 60%;
-  animation: ios-shimmer 1.8s infinite ease-in-out;
+  animation: ios-shimmer var(--dur-loop-shimmer) infinite ease-in-out;
 }
-.skeleton-bar:nth-child(2n) { height: 85%; animation-delay: 0.2s; }
-.skeleton-bar:nth-child(3n) { height: 40%; animation-delay: 0.4s; }
+.skeleton-bar:nth-child(2n) { height: 85%; animation-delay: var(--dur-base); }
+.skeleton-bar:nth-child(3n) { height: 40%; animation-delay: var(--dur-slower); }
 
 .cat-skeleton {
   display: flex;

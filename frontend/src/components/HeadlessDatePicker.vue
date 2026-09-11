@@ -581,7 +581,7 @@ onBeforeUnmount(() => {
   gap: 6px;
   cursor: pointer;
   outline: none;
-  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: background-color var(--dur-quick) ease, border-color var(--dur-quick) ease, box-shadow var(--dur-quick) ease;
   text-align: left;
 }
 
@@ -626,7 +626,7 @@ onBeforeUnmount(() => {
   width: 20px;
   height: 20px;
   color: var(--ios-gray);
-  transition: color 0.18s ease;
+  transition: color var(--dur-quick) ease;
 }
 
 .custom-date-picker.is-open .custom-date-picker-icon {
@@ -646,7 +646,7 @@ onBeforeUnmount(() => {
   color: var(--ios-gray);
   cursor: pointer;
   outline: none;
-  transition: color 0.18s ease, background-color 0.18s ease;
+  transition: color var(--dur-quick) ease, background-color var(--dur-quick) ease;
 }
 
 .custom-date-picker-clear-btn:hover {
@@ -697,7 +697,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   outline: none;
-  transition: background-color 0.18s ease, transform 0.18s ease;
+  transition: background-color var(--dur-quick) ease, transform var(--dur-quick) ease;
 }
 
 .custom-date-picker-dropdown .nav-btn:hover {
@@ -718,7 +718,7 @@ onBeforeUnmount(() => {
   color: var(--text);
   cursor: pointer;
   outline: none;
-  transition: background-color 0.18s ease, color 0.18s ease;
+  transition: background-color var(--dur-quick) ease, color var(--dur-quick) ease;
 }
 
 .custom-date-picker-dropdown .current-period-btn:hover {
@@ -770,7 +770,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   padding: 0;
   outline: none;
-  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-fast) ease;
 }
 
 .custom-date-picker-dropdown .day-cell:hover {
@@ -826,7 +826,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   outline: none;
-  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-fast) ease;
 }
 
 .custom-date-picker-dropdown .month-cell:hover {
@@ -868,7 +868,7 @@ onBeforeUnmount(() => {
   color: var(--ios-blue);
   cursor: pointer;
   outline: none;
-  transition: background-color 0.18s ease, color 0.18s ease;
+  transition: background-color var(--dur-quick) ease, color var(--dur-quick) ease;
 }
 
 .custom-date-picker-dropdown .quick-btn:hover {
@@ -886,7 +886,7 @@ onBeforeUnmount(() => {
 /* ---------------- 浮层动效 ---------------- */
 .cdp-fade-enter-active,
 .cdp-fade-leave-active {
-  transition: opacity 0.16s ease, transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity var(--dur-fast) ease, transform var(--dur-fast) var(--ease-decelerate);
 }
 
 .cdp-fade-enter-from,

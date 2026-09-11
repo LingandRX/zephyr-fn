@@ -243,7 +243,7 @@ function handleClear(e) {
   gap: 6px;
   cursor: pointer;
   outline: none;
-  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: background-color var(--dur-quick) ease, border-color var(--dur-quick) ease, box-shadow var(--dur-quick) ease;
   text-align: left;
 }
 
@@ -285,7 +285,7 @@ function handleClear(e) {
   width: 20px;
   height: 20px;
   color: var(--ios-gray);
-  transition: transform 0.2s ease, color 0.18s ease;
+  transition: transform var(--dur-base) ease, color var(--dur-quick) ease;
   cursor: pointer;
 }
 
@@ -308,7 +308,7 @@ function handleClear(e) {
   color: var(--ios-gray);
   cursor: pointer;
   outline: none;
-  transition: color 0.18s ease, background-color 0.18s ease;
+  transition: color var(--dur-quick) ease, background-color var(--dur-quick) ease;
 }
 
 .custom-select-clear-btn:hover {
@@ -344,7 +344,7 @@ function handleClear(e) {
   border: 1px solid var(--ios-card-border);
   border-radius: 14px;
   box-shadow: var(--ios-shadow-panel);
-  animation: csl-dropdown-in 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: csl-dropdown-in var(--dur-fast) var(--ease-decelerate);
 }
 
 @keyframes csl-dropdown-in {
@@ -380,7 +380,7 @@ function handleClear(e) {
   color: var(--text);
   font-size: var(--fs-sm);
   cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
 .custom-select-option.is-active {

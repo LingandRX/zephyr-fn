@@ -430,7 +430,7 @@ function handleTemplateSelect(template) {
   background: rgba(0, 0, 0, 0.4);
   -webkit-backdrop-filter: blur(3px);
   backdrop-filter: blur(3px);
-  animation: modal-fade-in 0.18s ease-out;
+  animation: modal-fade-in var(--dur-quick) ease-out;
 }
 
 :global(.modal-dialog-container) {
@@ -455,7 +455,7 @@ function handleTemplateSelect(template) {
   border: 1px solid var(--ios-card-border);
   border-radius: 18px;
   box-shadow: var(--ios-shadow-panel);
-  animation: modal-zoom-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: modal-zoom-in var(--dur-base) var(--ease-decelerate);
 }
 
 @keyframes modal-fade-in {
@@ -498,7 +498,7 @@ function handleTemplateSelect(template) {
   background: var(--ios-fill);
   color: var(--ios-gray);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
 }
 
 .modal-close:hover {
@@ -539,7 +539,7 @@ function handleTemplateSelect(template) {
   color: var(--text);
   font-family: inherit;
   font-size: var(--fs-sm);
-  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: background-color var(--dur-quick) ease, border-color var(--dur-quick) ease, box-shadow var(--dur-quick) ease;
 }
 
 .modal-form input:not([type="checkbox"]):not([type="radio"]) {
@@ -630,7 +630,7 @@ function handleTemplateSelect(template) {
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color 0.18s ease, transform 0.12s ease;
+  transition: background-color var(--dur-quick) ease, transform var(--dur-instant) ease;
 }
 
 .template-btn:hover {
@@ -678,7 +678,7 @@ function handleTemplateSelect(template) {
   background: transparent;
   color: var(--ios-blue);
   font-weight: 500;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
 }
 
 .modal-foot :deep(.headless-btn:hover:not(:disabled)) {

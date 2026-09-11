@@ -73,7 +73,7 @@ function toggle() {
   border: none;
   padding: 0;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: background-color var(--dur-base) ease;
   flex-shrink: 0;
 }
 
@@ -101,7 +101,7 @@ function toggle() {
   background: white;
   border-radius: 50%;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform var(--dur-base) var(--ease-standard);
   pointer-events: none;
 }
 

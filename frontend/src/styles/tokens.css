@@ -1,6 +1,8 @@
 /* ===================== 设计令牌（Design Tokens） =====================
  * 规则：页面/组件样式中禁止使用魔法数字，一律引用本文件令牌。
- * 色板 | 间距 | 字号 | 圆角 | 阴影 | z-index
+ * 色板 | 间距 | 字号 | 圆角 | 阴影 | z-index | 动画时长 | 缓动曲线
+ * 动效命名约定：入场用 --dur-* + --ease-decelerate/--ease-spring（长且回弹），
+ *             退场用更短的一档 + var(--ease-accelerate) 或 ease-in。
  */
 :root {
   /* 色板 */
@@ -67,6 +69,25 @@
   --z-sidebar: 40;
   --z-modal: 50;
   --z-toast: 100;
+
+  /* 动画时长刻度：8 档 + 2 个循环专用，按需就近取用，禁止再写裸时长 */
+  --dur-instant: 0.12s;      /* 即时反馈（按下高亮、滚动条 hover） */
+  --dur-fast: 0.15s;         /* 最快一档：hover 变色 / 图标着色 */
+  --dur-quick: 0.18s;        /* 常用微交互（原 0.16~0.18s，使用最广） */
+  --dur-base: 0.2s;          /* 标准档：小浮层、弹窗进出（原 0.2~0.22s） */
+  --dur-medium: 0.25s;       /* 布局微调、面板展开（原 0.25~0.28s） */
+  --dur-slow: 0.3s;          /* 抽屉 / 弹窗 / 提醒面板进出（原 0.3~0.34s） */
+  --dur-slower: 0.4s;        /* 大幅位移 */
+  --dur-xslow: 0.6s;         /* 数据可视化（进度条填充） */
+  --dur-loop-shimmer: 1.8s;  /* 骨架屏循环动画 */
+  --dur-loop-float: 2.4s;    /* 浮动按钮循环动画 */
+
+  /* 缓动曲线：仅自定义曲线需令牌化，ease / ease-in / ease-out 等关键字可直接写 */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);     /* 标准进出（侧边栏宽度等） */
+  --ease-decelerate: cubic-bezier(0.16, 1, 0.3, 1);  /* 入场：快速起步、缓缓停下 */
+  --ease-accelerate: cubic-bezier(0.4, 0, 1, 1);     /* 退场：缓缓起步、快速离场 */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);  /* 回弹：iOS 弹性感 */
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);      /* iOS 底部抽屉 */
 }
 
 /* 浅色主题 */

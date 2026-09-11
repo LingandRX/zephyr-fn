@@ -3,10 +3,11 @@
 //   侧边栏（导航 / 新增按钮 / 折叠按钮）+ 顶栏 + 浮动到期提醒 + 主区（Sub Page 插槽）+ Toast
 //   切换导航 = 切换本壳下的 Sub Page（keep-alive 保留各页状态）
 import { computed, ref, watch, onMounted } from "vue";
-import { ui, toastState, openNewSub, setTheme } from "../utils/ui.js";
+import { ui, toastState, removeToast, openNewSub, setTheme } from "../utils/ui.js";
 import { getUpcomingNotifications } from "../services/api.js";
 
 import Sidebar from "../components/Sidebar.vue";
+import HeadlessToast from "../components/HeadlessToast.vue";
 import SubscriptionsView from "../views/SubscriptionsView.vue";
 import CalendarView from "../views/CalendarView.vue";
 import StatisticsView from "../views/StatisticsView.vue";
@@ -145,9 +146,12 @@ onMounted(loadNotice);
 
       <!-- Sub Page 容器：切换导航即切换这里渲染的页面；内部滚动，不带动顶栏/侧边栏 -->
       <div class="page-host">
-        <keep-alive>
-          <component :is="currentPage" />
-        </keep-alive>
+        <!-- out-in：先退场再入场，避免两页重叠导致高度跳动；过渡类见 styles/main.css -->
+        <Transition name="page" mode="out-in">
+          <keep-alive>
+            <component :is="currentPage" />
+          </keep-alive>
+        </Transition>
       </div>
     </main>
   </div>
@@ -231,25 +235,17 @@ onMounted(loadNotice);
     </Transition>
   </section>
 
-  <!-- Toast -->
+  <!-- Toast：堆叠容器 + HeadlessToast（自带进出动画，退场由 removeToast 两阶段处理） -->
   <div v-if="toastState.items.length" class="toast-stack" aria-live="polite" aria-atomic="false">
-    <div
+    <HeadlessToast
       v-for="item in toastState.items"
       :key="item.id"
-      class="toast"
-      :class="item.type"
-      role="status"
-    >
-      <div class="toast-icon" aria-hidden="true">
-        <svg v-if="item.type === 'ok'" viewBox="0 0 24 24" fill="none">
-          <path d="M5 12.5l4.2 4.2L19 2.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <svg v-else viewBox="0 0 24 24" fill="none">
-          <path d="M12 8v5M12 16h.01M10.3 3.2l-7.2 14.4A1.8 1.8 0 0 0 4.7 20h14.6a1.8 1.8 0 0 0 1.6-2.4L13.7 3.2a1.8 1.8 0 0 0-3.4 0z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </div>
-      <span>{{ item.msg }}</span>
-    </div>
+      :show="item.show"
+      :type="item.type === 'ok' ? 'success' : 'error'"
+      :message="item.msg"
+      :duration="0"
+      @close="removeToast(item.id)"
+    />
   </div>
 </template>
 
@@ -268,7 +264,7 @@ onMounted(loadNotice);
   justify-content: center;
   /* 图标描边颜色与侧边栏导航图标（订阅列表）一致，暗色模式下清晰可见 */
   color: var(--muted);
-  transition: all 0.15s ease;
+  transition: all var(--dur-fast) ease;
 }
 .theme-toggle:hover {
   color: var(--text);
@@ -306,7 +302,7 @@ onMounted(loadNotice);
   cursor: pointer;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
   z-index: 29;
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition: background var(--dur-fast) ease, transform var(--dur-fast) ease;
 }
 
 .fab-add:hover {

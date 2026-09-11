@@ -91,7 +91,7 @@ const emit = defineEmits(['update:modelValue', 'focus', 'blur']);
   padding: var(--space-2) 10px;
   font-size: var(--fs-sm);
   font-family: inherit;
-  transition: border-color 0.15s ease;
+  transition: border-color var(--dur-fast) ease;
   width: 100%;
   box-sizing: border-box;
 }

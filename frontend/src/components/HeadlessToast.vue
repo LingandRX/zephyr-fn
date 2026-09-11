@@ -3,9 +3,13 @@
  * HeadlessToast 通知组件：
  * 使用 Headless UI Transition 实现动画效果。
  * 支持 success/error 类型、自动关闭、手动关闭。
+ *
+ * 自动关闭：默认 duration=3000ms 后 emit('close')；
+ *   本项目由 utils/ui.js 统一管理生命期，传入 :duration="0" 关闭内部计时器，
+ *   退场则通过父级把 show 置 false 触发（见 ui.js removeToast 的两阶段移除）。
  */
-import { Transition } from '@headlessui/vue';
-import { ref, watch, onMounted } from 'vue';
+import { TransitionRoot, TransitionChild } from '@headlessui/vue';
+import { watch, onMounted, onUnmounted } from 'vue';
 
 const props = defineProps({
   show: {
@@ -59,44 +63,48 @@ onMounted(() => {
     startTimer();
   }
 });
+
+onUnmounted(stopTimer);
 </script>
 
 <template>
-  <Transition
-    enter-active-class="toast-enter-active"
-    enter-from-class="toast-enter-from"
-    enter-to-class="toast-enter-to"
-    leave-active-class="toast-leave-active"
-    leave-from-class="toast-leave-from"
-    leave-to-class="toast-leave-to"
-  >
-    <div
-      v-if="show"
-      class="headless-toast"
-      :class="`toast-${type}`"
-      role="alert"
-      aria-live="polite"
+  <TransitionRoot :show="show" as="template">
+    <TransitionChild
+      as="template"
+      enter-active-class="toast-enter-active"
+      enter-from-class="toast-enter-from"
+      enter-to-class="toast-enter-to"
+      leave-active-class="toast-leave-active"
+      leave-from-class="toast-leave-from"
+      leave-to-class="toast-leave-to"
     >
-      <div class="toast-icon" aria-hidden="true">
-        <svg v-if="type === 'success'" viewBox="0 0 24 24" fill="none">
-          <path d="M5 12.5l4.2 4.2L19 2.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <svg v-else-if="type === 'error'" viewBox="0 0 24 24" fill="none">
-          <path d="M12 8v5M12 16h.01M10.3 3.2l-7.2 14.4A1.8 1.8 0 0 0 4.7 20h14.6a1.8 1.8 0 0 0 1.6-2.4L13.7 3.2a1.8 1.8 0 0 0-3.4 0z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <svg v-else viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8" />
-          <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-        </svg>
+      <div
+        class="headless-toast"
+        :class="`toast-${type}`"
+        role="alert"
+        aria-live="polite"
+      >
+        <div class="toast-icon" aria-hidden="true">
+          <svg v-if="type === 'success'" viewBox="0 0 24 24" fill="none">
+            <path d="M5 12.5l4.2 4.2L19 2.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <svg v-else-if="type === 'error'" viewBox="0 0 24 24" fill="none">
+            <path d="M12 8v5M12 16h.01M10.3 3.2l-7.2 14.4A1.8 1.8 0 0 0 4.7 20h14.6a1.8 1.8 0 0 0 1.6-2.4L13.7 3.2a1.8 1.8 0 0 0-3.4 0z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8" />
+            <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </div>
+        <span class="toast-message">{{ message }}</span>
+        <button class="toast-close" @click="emit('close')" aria-label="关闭通知">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </button>
       </div>
-      <span class="toast-message">{{ message }}</span>
-      <button class="toast-close" @click="emit('close')" aria-label="关闭通知">
-        <svg viewBox="0 0 24 24" fill="none">
-          <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-        </svg>
-      </button>
-    </div>
-  </Transition>
+    </TransitionChild>
+  </TransitionRoot>
 </template>
 
 <style scoped>
@@ -164,7 +172,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s ease;
+  transition: color var(--dur-fast) ease;
 }
 
 .toast-close:hover {
@@ -176,10 +184,14 @@ onMounted(() => {
   height: 14px;
 }
 
-/* 动画 */
-.toast-enter-active,
+/* 动画：入场略长 + 减速曲线，退场更短 + 加速曲线；
+ * 显式列出 opacity/transform，避免 transition: all 连带过渡其它属性。 */
+.toast-enter-active {
+  transition: opacity var(--dur-slow) ease, transform var(--dur-slow) var(--ease-decelerate);
+}
+
 .toast-leave-active {
-  transition: all 0.3s ease;
+  transition: opacity var(--dur-base) ease-in, transform var(--dur-base) var(--ease-accelerate);
 }
 
 .toast-enter-from {
@@ -200,5 +212,10 @@ onMounted(() => {
 .toast-leave-to {
   opacity: 0;
   transform: translateX(100%);
+}
+
+/* 浅色模式用更柔和的投影（原 main.css 的 .toast 覆盖迁移至此） */
+:root[data-theme="light"] .headless-toast {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 </style>

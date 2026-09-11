@@ -327,7 +327,7 @@ function close() {
   background: rgba(0, 0, 0, 0.4);
   -webkit-backdrop-filter: blur(3px);
   backdrop-filter: blur(3px);
-  animation: ts-fade-in 0.2s ease-out;
+  animation: ts-fade-in var(--dur-base) ease-out;
 }
 
 :global(.template-dialog-container) {
@@ -357,7 +357,7 @@ function close() {
   border-radius: 18px;
   box-shadow: var(--ios-shadow-panel);
   overflow: hidden;
-  animation: ts-pop-in 0.34s cubic-bezier(0.32, 0.72, 0, 1);
+  animation: ts-pop-in var(--dur-slow) var(--ease-sheet);
 }
 
 /* 移动端抓手（桌面隐藏） */
@@ -400,7 +400,7 @@ function close() {
   font-family: inherit;
   font-size: 17px;
   cursor: pointer;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--dur-fast) ease;
 }
 
 .sheet-cancel:active {
@@ -433,7 +433,7 @@ function close() {
   border-radius: 10px;
   background: var(--ios-fill);
   color: var(--ios-gray);
-  transition: box-shadow 0.18s ease;
+  transition: box-shadow var(--dur-quick) ease;
 }
 
 .sheet-search:focus-within {
@@ -577,7 +577,7 @@ function close() {
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color 0.18s ease, color 0.18s ease, transform 0.12s ease;
+  transition: background-color var(--dur-quick) ease, color var(--dur-quick) ease, transform var(--dur-instant) ease;
 }
 
 .chip:active {
@@ -639,7 +639,7 @@ function close() {
   font-family: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--dur-fast) ease;
 }
 
 .ios-row:active {
@@ -783,7 +783,7 @@ function close() {
     max-height: 90vh;
     max-height: 90dvh;
     border-radius: 18px 18px 0 0;
-    animation: ts-sheet-up 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+    animation: ts-sheet-up var(--dur-slower) var(--ease-sheet);
   }
 
   .sheet-grabber {
