@@ -210,9 +210,13 @@ let statusTimer = null;
 
 // 保存状态按卡片作用域显示：只有被修改的卡片才出现「保存中/保存成功」，
 // 避免在 SMTP 卡片上编辑、却在 PushPlus 卡片上看到保存提示。
+// scope 必须与「卡片」一一对应：一个 scope 只能覆盖一张卡片上的字段，
+// 否则在某张卡片上编辑、却会在另一张卡片上看到「保存中/已保存」提示。
 const SCOPE_FIELDS = {
   general: [
     "default_currency", "exchange_rate_usd", "exchange_rate_hkd",
+  ],
+  reminder: [
     "notification_days", "notification_time", "notification_enabled",
     "do_not_disturb_start", "do_not_disturb_end",
   ],
@@ -558,6 +562,10 @@ onMounted(loadAll);
             <input v-model="form.exchange_rate_hkd" type="number" step="0.0001" min="0" />
           </label>
         </div>
+        <div class="sub-hint-row">
+          <div class="muted sub-hint">更改后自动生效并保存</div>
+          <span v-if="saveStatusText && saveScopes.has('general')" class="save-status-badge" :class="{ saving }">{{ saveStatusText }}</span>
+        </div>
       </div>
 
       <div class="card">
@@ -584,7 +592,7 @@ onMounted(loadAll);
         </div>
         <div class="sub-hint-row">
           <div class="muted sub-hint">更改后自动生效并保存</div>
-          <span v-if="saveStatusText && saveScopes.has('general')" class="save-status-badge" :class="{ saving }">{{ saveStatusText }}</span>
+          <span v-if="saveStatusText && saveScopes.has('reminder')" class="save-status-badge" :class="{ saving }">{{ saveStatusText }}</span>
         </div>
       </div>
     </TabPanel>
