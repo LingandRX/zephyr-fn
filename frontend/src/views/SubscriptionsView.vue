@@ -358,6 +358,10 @@ onMounted(loadAll);
               <span class="stat-lbl">下次扣费</span>
               <span class="stat-val">{{ s.next_due_date || "—" }}</span>
             </div>
+            <div class="item-stat">
+              <span class="stat-lbl">当前周期</span>
+              <span class="stat-val">{{ s.current_period_start || "—" }} ~ {{ s.current_period_end || "—" }}</span>
+            </div>
             <div class="item-amount">
               <span class="amt-val">{{ fmtCents(s.amount, s.currency) }}</span>
               <span class="amt-cycle">/ {{ PERIOD_LABEL[s.period_type] || s.period_type }}</span>

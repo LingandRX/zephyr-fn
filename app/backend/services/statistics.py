@@ -243,6 +243,24 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
     year_end = date(now.year, 12, 31)
     future_end = now + timedelta(days=30)
 
+    # 获取本月和本年的实际支付记录
+    month_start_str = month_start.isoformat()
+    month_end_str = month_end.isoformat()
+    year_start_str = year_start.isoformat()
+    year_end_str = year_end.isoformat()
+    
+    # 本月实际支付金额
+    monthly_payments = repositories.get_payments_by_date_range(
+        user_id, month_start_str, month_end_str, "success"
+    )
+    monthly_actual_expense = sum(_convert_to_cny(p["amount"], p["currency"], settings) for p in monthly_payments)
+    
+    # 本年实际支付金额
+    yearly_payments = repositories.get_payments_by_date_range(
+        user_id, year_start_str, year_end_str, "success"
+    )
+    yearly_expense = sum(_convert_to_cny(p["amount"], p["currency"], settings) for p in yearly_payments)
+
     for sub in subs:
         if sub["lifecycle"] not in ("active", "in_payment"):
             continue
@@ -259,32 +277,6 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
         cny_monthly = _convert_to_cny(monthly_amount, sub["currency"], settings)
         monthly_expense += cny_monthly
 
-        if sub["auto_renew"]:
-            monthly_actual_expense += (
-                _count_cycles_in_range(sub, month_start, month_end) * cny_amount
-            )
-        else:
-            pay_date = sub["first_payment_date"] or sub["start_date"]
-            try:
-                pd = date.fromisoformat(pay_date)
-            except ValueError:
-                pd = None
-            if pd and pd.year == now.year and pd.month == now.month:
-                monthly_actual_expense += cny_amount
-
-        yearly_amount = _yearly_amount(sub, mode)
-        cny_yearly = _convert_to_cny(yearly_amount, sub["currency"], settings)
-        if sub["auto_renew"]:
-            yearly_expense += _count_cycles_in_range(sub, year_start, year_end) * cny_amount
-        else:
-            pay_date = sub["first_payment_date"] or sub["start_date"]
-            try:
-                pd = date.fromisoformat(pay_date)
-            except ValueError:
-                pd = None
-            if pd and pd.year == now.year:
-                yearly_expense += cny_amount
-
         if sub.get("next_due_date"):
             try:
                 due = date.fromisoformat(sub["next_due_date"])
@@ -293,24 +285,25 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
             if due and now <= due <= future_end:
                 upcoming_30_days += cny_amount
 
+        yearly_amount = _yearly_amount(sub, mode)
+        cny_yearly = _convert_to_cny(yearly_amount, sub["currency"], settings)
+
         cat_id = sub["category_id"] or "uncategorized"
         cat_monthly[cat_id] = cat_monthly.get(cat_id, 0) + cny_monthly
         cat_yearly[cat_id] = cat_yearly.get(cat_id, 0) + cny_yearly
 
-        for ms, me in zip(month_starts, month_ends):
-            m_key = ms.strftime("%Y-%m")
-            if sub["auto_renew"]:
-                cycles = _count_cycles_in_range(sub, ms, me)
-                if cycles > 0:
-                    monthly_amounts[m_key] = monthly_amounts.get(m_key, 0) + cycles * cny_amount
-            else:
-                pay_date = sub["first_payment_date"] or sub["start_date"]
-                try:
-                    pd = date.fromisoformat(pay_date)
-                except (ValueError, TypeError):
-                    pd = None
-                if pd and ms <= pd <= me:
-                    monthly_amounts[m_key] = monthly_amounts.get(m_key, 0) + cny_amount
+    # 月度趋势计算：移出 subs 循环，只查询该时间范围内的支付记录并聚合
+    overall_start_str = month_starts[0].isoformat()
+    overall_end_str = month_ends[-1].isoformat()
+    trend_payments = repositories.get_payments_by_date_range(
+        user_id, overall_start_str, overall_end_str, "success"
+    )
+    for p in trend_payments:
+        # paid_at 格式为 YYYY-MM-DD
+        m_key = p["paid_at"][:7]
+        if m_key in monthly_amounts:
+            amount_cny = _convert_to_cny(p["amount"], p["currency"], settings)
+            monthly_amounts[m_key] += amount_cny
 
     category_stats = []
     for cat_id, amount_cny in cat_monthly.items():

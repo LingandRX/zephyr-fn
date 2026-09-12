@@ -25,7 +25,7 @@ from . import new_id, now_utc
 
 logger = logging.getLogger("subscription.db")
 
-CURRENT_LEGACY_DB_VERSION = 12
+CURRENT_LEGACY_DB_VERSION = 13
 
 # app_settings 的字段定义集中维护，迁移与 SETTINGS_FIELDS 共用这份清单，
 # 避免新增设置字段后忘记补 schema。
@@ -67,6 +67,7 @@ _VALID_TABLE_NAMES = frozenset(
         "categories",
         "db_version",
         "seeded_users",
+        "payments",
     }
 )
 
@@ -189,6 +190,42 @@ ALTER TABLE app_settings ADD COLUMN pushplus_smtp_password TEXT;
 ALTER TABLE app_settings ADD COLUMN pushplus_smtp_from_address TEXT;
 """,
     ),
+    # v13：添加支付流水表并修改订阅表结构。
+    (
+        13,
+        """
+CREATE TABLE IF NOT EXISTS payments (
+    id TEXT PRIMARY KEY,
+    subscription_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    currency TEXT NOT NULL,
+    paid_at TEXT NOT NULL,
+    period_start TEXT NOT NULL,
+    period_end TEXT NOT NULL,
+    payment_type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'success',
+    external_txn_id TEXT,
+    note TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_payment_user_date_status
+  ON payments(user_id, paid_at, status);
+CREATE INDEX IF NOT EXISTS idx_payment_sub_date
+  ON payments(subscription_id, paid_at);
+CREATE INDEX IF NOT EXISTS idx_payment_period
+  ON payments(period_start, period_end);
+ALTER TABLE subscriptions ADD COLUMN current_period_start TEXT;
+ALTER TABLE subscriptions ADD COLUMN current_period_end TEXT;
+ALTER TABLE subscriptions ADD COLUMN next_billing_date TEXT;
+ALTER TABLE subscriptions ADD COLUMN last_payment_date TEXT;
+ALTER TABLE subscriptions ADD COLUMN renewal_confirmed INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE subscriptions ADD COLUMN cancelled_at TEXT;
+ALTER TABLE subscriptions ADD COLUMN paused_at TEXT;
+CREATE INDEX IF NOT EXISTS idx_sub_period
+  ON subscriptions(current_period_start, current_period_end);
+""",
+    ),
 ]
 
 
@@ -223,6 +260,7 @@ def bootstrap_legacy_database() -> bool:
         _ensure_category_schema(conn)
         _seed_default_categories(conn)
         seed_default_settings(conn)
+        _migrate_payment_data(conn)
         conn.execute(
             text(
                 "INSERT INTO db_version (id, version) VALUES (1, :v) "
@@ -454,6 +492,80 @@ def seed_default_settings(conn: Any) -> None:
             ),
             {"now": now},
         )
+
+
+def _migrate_payment_data(conn: Any) -> None:
+    """为现有订阅创建首次支付记录（幂等）。"""
+    # 检查payments表是否存在
+    try:
+        conn.execute(text("SELECT 1 FROM payments LIMIT 1"))
+    except Exception:
+        return
+    
+    # 为现有订阅创建首次支付记录
+    conn.execute(text("""
+        INSERT INTO payments (
+            id,
+            subscription_id,
+            user_id,
+            amount,
+            currency,
+            paid_at,
+            period_start,
+            period_end,
+            payment_type,
+            status,
+            note,
+            created_at
+        )
+        SELECT
+            hex(randomblob(16)),
+            s.id,
+            s.user_id,
+            s.amount,
+            s.currency,
+            s.first_payment_date,
+            s.start_date,
+            s.next_due_date,
+            'first',
+            'success',
+            'migrated initial payment',
+            s.created_at
+        FROM subscriptions s
+        WHERE s.first_payment_date IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM payments p
+              WHERE p.subscription_id = s.id
+                AND p.payment_type = 'first'
+          )
+    """))
+    
+    # 更新订阅的当前周期信息
+    conn.execute(text("""
+        UPDATE subscriptions
+        SET
+            current_period_start = COALESCE(first_payment_date, start_date),
+            current_period_end = next_due_date,
+            last_payment_date = first_payment_date,
+            renewal_confirmed = CASE
+                WHEN lifecycle = 'active' AND auto_renew = 0 THEN 0
+                ELSE 1
+            END
+        WHERE current_period_start IS NULL
+    """))
+    
+    # 根据lifecycle状态设置cancelled_at和paused_at
+    conn.execute(text("""
+        UPDATE subscriptions
+        SET cancelled_at = updated_at
+        WHERE lifecycle = 'canceled' AND cancelled_at IS NULL
+    """))
+    
+    conn.execute(text("""
+        UPDATE subscriptions
+        SET paused_at = updated_at
+        WHERE lifecycle = 'paused' AND paused_at IS NULL
+    """))
 
 
 # --------------------------------------------------------------------------- #

@@ -20,14 +20,14 @@ const bigCards = computed(() => {
       sub: "按月平摊估算",
     },
     {
-      label: "本月实际到期",
+      label: "本月实际支出",
       value: fmtCents(s.monthly_actual_expense, cur),
-      sub: "当月实际需付",
+      sub: "当月实际支付金额",
     },
     {
-      label: "年平摊支出",
+      label: "年度实际支出",
       value: fmtCents(s.yearly_expense, cur),
-      sub: "年度总预算估算",
+      sub: "年度实际支付金额",
     },
     {
       label: "未来 30 天",

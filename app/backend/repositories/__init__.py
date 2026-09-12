@@ -28,6 +28,7 @@ from ..models import (
     Category,
     EmailLog,
     NotificationLog,
+    Payment,
     SeededUser,
     Subscription,
 )
@@ -50,11 +51,18 @@ SUBSCRIPTION_COLUMNS = (
     "sharing_count",
     "start_date",
     "first_payment_date",
+    "current_period_start",
+    "current_period_end",
     "next_due_date",
+    "next_billing_date",
+    "last_payment_date",
+    "renewal_confirmed",
     "lifecycle",
     "renewal_policy",
     "billing_status",
     "grace_period_ends_at",
+    "cancelled_at",
+    "paused_at",
     "sync_version",
     "created_at",
     "updated_at",
@@ -76,11 +84,18 @@ SUBSCRIPTION_FIELDS = (
     "sharing_count",
     "start_date",
     "first_payment_date",
+    "current_period_start",
+    "current_period_end",
     "next_due_date",
+    "next_billing_date",
+    "last_payment_date",
+    "renewal_confirmed",
     "lifecycle",
     "renewal_policy",
     "billing_status",
     "grace_period_ends_at",
+    "cancelled_at",
+    "paused_at",
 )
 
 # 设置字段白名单
@@ -238,8 +253,10 @@ def renew_subscription(sub_id: str, user_id: str, next_due: str) -> dict | None:
     if row is None or row.user_id != user_id:
         return None
     row.next_due_date = next_due
+    row.current_period_end = next_due
     row.lifecycle = "active"
     row.billing_status = "normal"
+    row.renewal_confirmed = 0
     row.updated_at = now_utc()
     db.session.commit()
     return row.to_dict()
@@ -616,3 +633,85 @@ def is_user_seeded(user_id: str) -> bool:
 def mark_user_seeded(user_id: str) -> None:
     db.session.add(SeededUser(user_id=user_id, seeded_at=now_utc()))
     db.session.commit()
+
+
+# --------------------------------------------------------------------------- #
+# 支付流水仓储
+# --------------------------------------------------------------------------- #
+
+
+def get_all_payments(user_id: str) -> list[dict]:
+    """获取用户的所有支付流水。"""
+    rows = db.session.execute(
+        select(Payment)
+        .where(Payment.user_id == user_id)
+        .order_by(Payment.paid_at.desc())
+    ).scalars()
+    return [row.to_dict() for row in rows]
+
+
+def get_payments_by_subscription(subscription_id: str) -> list[dict]:
+    """获取订阅的所有支付流水。"""
+    rows = db.session.execute(
+        select(Payment)
+        .where(Payment.subscription_id == subscription_id)
+        .order_by(Payment.paid_at.desc())
+    ).scalars()
+    return [row.to_dict() for row in rows]
+
+
+def get_payments_by_date_range(
+    user_id: str,
+    start_date: str,
+    end_date: str,
+    status: str = "success"
+) -> list[dict]:
+    """获取指定日期范围内的支付流水（闭区间：start_date <= paid_at <= end_date）。"""
+    rows = db.session.execute(
+        select(Payment)
+        .where(
+            Payment.user_id == user_id,
+            Payment.status == status,
+            Payment.paid_at >= start_date,
+            Payment.paid_at <= end_date
+        )
+        .order_by(Payment.paid_at.desc())
+    ).scalars()
+    return [row.to_dict() for row in rows]
+
+
+def insert_payment(payment_data: dict) -> dict:
+    """插入支付流水。"""
+    row = Payment(**payment_data)
+    db.session.add(row)
+    db.session.commit()
+    return row.to_dict()
+
+
+def create_payment_for_subscription(
+    subscription_id: str,
+    user_id: str,
+    amount: int,
+    currency: str,
+    paid_at: str,
+    period_start: str,
+    period_end: str,
+    payment_type: str,
+    note: str = None
+) -> dict:
+    """为订阅创建支付流水。"""
+    payment_data = {
+        "id": new_id(),
+        "subscription_id": subscription_id,
+        "user_id": user_id,
+        "amount": amount,
+        "currency": currency,
+        "paid_at": paid_at,
+        "period_start": period_start,
+        "period_end": period_end,
+        "payment_type": payment_type,
+        "status": "success",
+        "note": note,
+        "created_at": now_utc(),
+    }
+    return insert_payment(payment_data)

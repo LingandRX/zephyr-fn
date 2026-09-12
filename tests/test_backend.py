@@ -453,6 +453,45 @@ class ServicesTests(AppTestCase):
         trend_amounts = [m["amount"] for m in stats["monthly_trend"]]
         self.assertIsInstance(trend_amounts, list)
 
+    def test_subscription_creation_creates_payment(self):
+        sub = sub_service.create_subscription(
+            "u_pay_test",
+            {
+                "name": "Apple Music",
+                "amount": 1000,
+                "currency": "CNY",
+                "period_type": "month",
+                "auto_renew": True,
+                "start_date": "2026-01-01",
+                "next_due_date": "2026-02-01",
+            },
+        )
+        payments = repositories.get_payments_by_subscription(sub["id"])
+        self.assertEqual(len(payments), 1)
+        self.assertEqual(payments[0]["payment_type"], "first")
+        self.assertEqual(payments[0]["amount"], 1000)
+
+    def test_renew_subscription_creates_renewal_payment(self):
+        sub = sub_service.create_subscription(
+            "u_renew_test",
+            {
+                "name": "Spotify",
+                "amount": 1500,
+                "currency": "CNY",
+                "period_type": "month",
+                "auto_renew": True,
+                "start_date": "2026-01-01",
+                "next_due_date": "2026-02-01",
+            },
+        )
+        renewed = sub_service.renew_subscription(sub["id"], "u_renew_test")
+        self.assertIsNotNone(renewed)
+        payments = repositories.get_payments_by_subscription(sub["id"])
+        self.assertEqual(len(payments), 2)
+        types = [p["payment_type"] for p in payments]
+        self.assertIn("first", types)
+        self.assertIn("renewal", types)
+
     def test_calendar_events(self):
         events = get_calendar_events("u1", 2026, 8)
         self.assertTrue(events)

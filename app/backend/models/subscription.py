@@ -12,6 +12,7 @@ class Subscription(db.Model):
     __table_args__ = (
         Index("idx_sub_user", "user_id"),
         Index("idx_sub_next", "next_due_date"),
+        Index("idx_sub_period", "current_period_start", "current_period_end"),
     )
 
     id = Column(String(32), primary_key=True)
@@ -30,11 +31,18 @@ class Subscription(db.Model):
     sharing_count = Column(Integer, nullable=True)
     start_date = Column(String(10), nullable=False)
     first_payment_date = Column(String(10), nullable=True)
+    current_period_start = Column(String(10), nullable=True)
+    current_period_end = Column(String(10), nullable=True)
     next_due_date = Column(String(10), nullable=True)
+    next_billing_date = Column(String(10), nullable=True)
+    last_payment_date = Column(String(10), nullable=True)
+    renewal_confirmed = Column(Integer, nullable=False, default=0)
     lifecycle = Column(String(16), nullable=False, default="active")
     renewal_policy = Column(String(16), nullable=False, default="auto")
     billing_status = Column(String(16), nullable=False, default="normal")
     grace_period_ends_at = Column(String(10), nullable=True)
+    cancelled_at = Column(String(32), nullable=True)
+    paused_at = Column(String(32), nullable=True)
     sync_version = Column(Integer, nullable=False, default=1)
     created_at = Column(String(32), nullable=False)
     updated_at = Column(String(32), nullable=False)
@@ -42,4 +50,5 @@ class Subscription(db.Model):
     def to_dict(self) -> dict:
         data = {column.name: getattr(self, column.name) for column in self.__table__.columns}
         data["auto_renew"] = bool(data["auto_renew"])
+        data["renewal_confirmed"] = bool(data["renewal_confirmed"])
         return data

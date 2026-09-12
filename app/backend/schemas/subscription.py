@@ -53,11 +53,18 @@ _DOMAIN_FIELDS = (
     "auto_renew",
     "start_date",
     "first_payment_date",
+    "current_period_start",
+    "current_period_end",
     "next_due_date",
+    "next_billing_date",
+    "last_payment_date",
+    "renewal_confirmed",
     "lifecycle",
     "renewal_policy",
     "billing_status",
     "grace_period_ends_at",
+    "cancelled_at",
+    "paused_at",
 )
 # 由 Schema 清洗的持久化字段
 _CLEAN_FIELDS = ("category_id", "notes", "sharing_role", "sharing_count")
@@ -105,11 +112,18 @@ _FIELD_NORMALIZERS: dict[str, Callable[[Any], Any]] = {
     "auto_renew": lambda v: domain.normalize_bool(v, "自动续费", default=True),
     "start_date": lambda v: domain.normalize_date(v, "开始日期", allow_none=False),
     "first_payment_date": lambda v: domain.normalize_date(v, "首次付款日"),
+    "current_period_start": lambda v: domain.normalize_date(v, "当前周期开始日期"),
+    "current_period_end": lambda v: domain.normalize_date(v, "当前周期结束日期"),
     "next_due_date": lambda v: domain.normalize_date(v, "下次到期日"),
+    "next_billing_date": lambda v: domain.normalize_date(v, "下次计费日"),
+    "last_payment_date": lambda v: domain.normalize_date(v, "最后付款日"),
+    "renewal_confirmed": lambda v: domain.normalize_bool(v, "续费已确认", default=False),
     "lifecycle": lambda v: domain.normalize_lifecycle(v, default="active"),
     "renewal_policy": lambda v: domain.normalize_renewal_policy(v, default=None),
     "billing_status": lambda v: domain.normalize_billing_status(v, default="normal"),
     "grace_period_ends_at": lambda v: domain.normalize_date(v, "宽限期结束日期"),
+    "cancelled_at": lambda v: domain.normalize_date(v, "取消日期"),
+    "paused_at": lambda v: domain.normalize_date(v, "暂停日期"),
 }
 
 

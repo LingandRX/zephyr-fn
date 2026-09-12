@@ -461,8 +461,15 @@ def normalize_subscription_data(
         default=today,
     )
     first_payment_date = normalize_date(values.get("first_payment_date"), "首次付款日")
+    current_period_start = normalize_date(values.get("current_period_start"), "当前周期开始日期")
+    current_period_end = normalize_date(values.get("current_period_end"), "当前周期结束日期")
     next_due_date = normalize_date(values.get("next_due_date"), "下次到期日")
+    next_billing_date = normalize_date(values.get("next_billing_date"), "下次计费日")
+    last_payment_date = normalize_date(values.get("last_payment_date"), "最后付款日")
+    renewal_confirmed = normalize_bool(values.get("renewal_confirmed", False), "续费已确认", default=False)
     grace_period_ends_at = normalize_date(values.get("grace_period_ends_at"), "宽限期结束日期")
+    cancelled_at = normalize_date(values.get("cancelled_at"), "取消日期")
+    paused_at = normalize_date(values.get("paused_at"), "暂停日期")
 
     return {
         "name": name,
@@ -478,8 +485,15 @@ def normalize_subscription_data(
         "billing_status": billing_status,
         "start_date": start_date,
         "first_payment_date": first_payment_date,
+        "current_period_start": current_period_start,
+        "current_period_end": current_period_end,
         "next_due_date": next_due_date,
+        "next_billing_date": next_billing_date,
+        "last_payment_date": last_payment_date,
+        "renewal_confirmed": renewal_confirmed,
         "grace_period_ends_at": grace_period_ends_at,
+        "cancelled_at": cancelled_at,
+        "paused_at": paused_at,
     }
 
 
