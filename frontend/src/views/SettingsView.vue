@@ -11,7 +11,6 @@ import {
   getSettings, saveSettings, getCategories, createCategory, deleteCategory,
   importCsv, download,
   testEmailNotification, testPushPlusNotification,
-  getLogTail,
 } from "../services/api.js";
 import { toast } from "../utils/ui.js";
 
@@ -42,10 +41,6 @@ const TABS = [
   { key: "backup", label: "数据与备份", svg: [
     "M906.666667 298.666667L725.333333 117.333333c-14.933333-14.933333-32-21.333333-53.333333-21.333333H170.666667C130.133333 96 96 130.133333 96 170.666667v682.666666c0 40.533333 34.133333 74.666667 74.666667 74.666667h682.666666c40.533333 0 74.666667-34.133333 74.666667-74.666667V349.866667c0-19.2-8.533333-38.4-21.333333-51.2zM652.8 864H371.2V648.533333h281.6v215.466667z m211.2-10.666667c0 6.4-4.266667 10.666667-10.666667 10.666667h-140.8V618.666667c0-17.066667-12.8-29.866667-29.866666-29.866667H341.333333c-17.066667 0-29.866667 12.8-29.866666 29.866667v245.333333H170.666667c-6.4 0-10.666667-4.266667-10.666667-10.666667V170.666667c0-6.4 4.266667-10.666667 10.666667-10.666667h140.8V320c0 17.066667 12.8 29.866667 29.866666 29.866667h277.333334c17.066667 0 29.866667-12.8 29.866666-29.866667s-12.8-29.866667-29.866666-29.866667H371.2V160h302.933333c2.133333 0 6.4 2.133333 8.533334 2.133333l179.2 179.2c2.133333 2.133333 2.133333 4.266667 2.133333 8.533334V853.333333z",
   ] },
-  { key: "logs", label: "运行日志", svg: [
-    "M832 74.666667H192c-17.066667 0-32 14.933333-32 32v765.866666c0 12.8 4.266667 23.466667 12.8 34.133334 8.533333 10.666667 21.333333 17.066667 36.266667 19.2h6.4c12.8 0 23.466667-4.266667 34.133333-12.8l264.533333-213.333334 264.533334 213.333334c8.533333 8.533333 21.333333 12.8 34.133333 12.8 29.866667 0 53.333333-23.466667 53.333333-53.333334V106.666667c-2.133333-17.066667-17.066667-32-34.133333-32z m-32 776.533333L531.2 633.6c-10.666667-8.533333-27.733333-8.533333-40.533333 0L224 851.2V138.666667h576v712.533333z",
-    "M341.333333 341.333333h320c17.066667 0 32-14.933333 32-32S678.4 277.333333 661.333333 277.333333H341.333333c-17.066667 0-32 14.933333-32 32S324.266667 341.333333 341.333333 341.333333zM341.333333 512h213.333334c17.066667 0 32-14.933333 32-32S571.733333 448 554.666667 448H341.333333c-17.066667 0-32 14.933333-32 32S324.266667 512 341.333333 512z",
-  ] },
 ];
 
 const activeTabIndex = ref(0);
@@ -58,32 +53,9 @@ const testingEmail = ref(false);
 const testingPushplus = ref(false);
 const testEmailTarget = ref("");
 
-// ---------- 运行日志 ----------
-const LOG_LINES = 200;
-const logLines = ref([]);
-const logFile = ref("");
-const logError = ref("");
-const logLoading = ref(false);
-
-async function loadLogTail() {
-  logLoading.value = true;
-  logError.value = "";
-  try {
-    const r = await getLogTail(LOG_LINES);
-    logLines.value = r.lines || [];
-    logFile.value = r.file || "";
-  } catch (err) {
-    logError.value = err.message;
-  } finally {
-    logLoading.value = false;
-  }
-}
-
 // 切换 Tab 时的回调
 function handleTabChange(index) {
   activeTabIndex.value = index;
-  // 切到「运行日志」页签时自动加载
-  if (TABS[index]?.key === "logs") loadLogTail();
 }
 
 const form = reactive({
@@ -786,26 +758,6 @@ onMounted(loadAll);
         </div>
       </div>
     </TabPanel>
-
-        <!-- 子页面 5：运行日志 -->
-        <TabPanel class="settings-section">
-      <div class="card">
-        <div class="section-header">
-          <h3>运行日志</h3>
-          <HeadlessButton size="sm" class="log-refresh" :disabled="logLoading" @click="loadLogTail">
-            {{ logLoading ? "加载中…" : "刷新" }}
-          </HeadlessButton>
-        </div>
-        <p class="muted">
-          最近 {{ LOG_LINES }} 行（{{ logFile || "app.log" }}）。日志按大小轮转（单文件 2MB，保留 5 份），
-          超过 30 天自动清理。
-        </p>
-        <pre v-if="logLines.length" class="log-view">{{ logLines.join("\n") }}</pre>
-        <div v-else-if="logError" class="empty">加载失败：{{ logError }}</div>
-        <div v-else-if="logLoading" class="empty">加载中…</div>
-        <div v-else class="empty">暂无日志</div>
-      </div>
-    </TabPanel>
       </TabPanels>
     </TabGroup>
 
@@ -1265,24 +1217,6 @@ onMounted(loadAll);
   background: var(--ios-separator);
 }
 
-/* ---------------- 运行日志 ---------------- */
-.log-view {
-  margin: 0;
-  padding: 12px 14px;
-  max-height: 420px;
-  overflow-y: auto;
-  background: var(--ios-fill);
-  border: none;
-  border-radius: 12px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text);
-  white-space: pre-wrap;
-  word-break: break-all;
-  scrollbar-width: thin;
-}
-
 /* ---------------- PushPlus SMTP 折叠区 ---------------- */
 .smtp-details {
   margin-top: 12px;
@@ -1389,12 +1323,6 @@ onMounted(loadAll);
   .dnd-separator {
     display: none;
   }
-}
-
-/* 刷新按钮：文案在「刷新 / 加载中…」间切换，固定最小宽度避免抖动变形 */
-.section-header :deep(.log-refresh) {
-  min-width: 6.5em;
-  justify-content: center;
 }
 
 /* ---------------- 删除分类确认弹窗（iOS 弹窗） ---------------- */
