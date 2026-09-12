@@ -89,10 +89,11 @@ def _derive_period_and_status(normalized: Mapping[str, Any]) -> dict[str, Any]:
     # 4. 最后付款日：未显式传入则默认使用首次付款日
     last_payment_date = normalized.get("last_payment_date") or first_pay_str
     
-    # 5. 自动续费/手动续费确认状态：如果是自动续费默认为 1，手动且无确认则为 0
+    # 5. 自动续费/手动续费确认状态：由单一事实来源 renewal_policy 判定
     renewal_confirmed = normalized.get("renewal_confirmed")
     if renewal_confirmed is None:
-        renewal_confirmed = 1 if normalized.get("auto_renew") else 0
+        policy = normalized.get("renewal_policy") or ("auto" if normalized.get("auto_renew") else "manual")
+        renewal_confirmed = 1 if policy == "auto" else 0
     else:
         renewal_confirmed = int(renewal_confirmed)
         
@@ -121,7 +122,7 @@ def _build_full_row(user_id: str, normalized: Mapping[str, Any]) -> dict:
         "period_type": normalized["period_type"],
         "custom_period_value": normalized.get("custom_period_value"),
         "custom_period_unit": normalized.get("custom_period_unit"),
-        "auto_renew": int(normalized["auto_renew"]),
+        "auto_renew": int(normalized.get("renewal_policy") == "auto"),
         "sharing_role": normalized.get("sharing_role"),
         "sharing_count": normalized.get("sharing_count"),
         "start_date": normalized["start_date"],
@@ -138,6 +139,7 @@ def _build_full_row(user_id: str, normalized: Mapping[str, Any]) -> dict:
         "grace_period_ends_at": normalized.get("grace_period_ends_at"),
         "cancelled_at": normalized.get("cancelled_at"),
         "paused_at": normalized.get("paused_at"),
+        "deleted_at": None,
         "sync_version": 1,
         "created_at": timestamp,
         "updated_at": timestamp,
@@ -194,8 +196,12 @@ def update_subscription(sub_id: str, user_id: str, data: dict) -> dict | None:
     return repositories.update_subscription_fields(sub_id, user_id, updates)
 
 
-def delete_subscription(sub_id: str, user_id: str) -> bool:
-    return repositories.delete_subscription(sub_id, user_id)
+def delete_subscription(sub_id: str, user_id: str, hard: bool = False) -> bool:
+    return repositories.delete_subscription(sub_id, user_id, hard=hard)
+
+
+def restore_subscription(sub_id: str, user_id: str) -> dict | None:
+    return repositories.restore_subscription(sub_id, user_id)
 
 
 def renew_subscription(sub_id: str, user_id: str) -> dict | None:
@@ -298,7 +304,7 @@ def _compute_updates(
         updates["custom_period_unit"] = normalized["custom_period_unit"]
 
     if "auto_renew" in data or "renewal_policy" in data or period_changed:
-        updates["auto_renew"] = int(normalized["auto_renew"])
+        updates["auto_renew"] = int(normalized.get("renewal_policy") == "auto")
         updates["renewal_policy"] = normalized["renewal_policy"]
 
     explicit_next_due = "next_due_date" in data

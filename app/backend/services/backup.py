@@ -80,6 +80,7 @@ _SUBSCRIPTION_COLUMNS = (
     "renewal_policy",
     "billing_status",
     "grace_period_ends_at",
+    "deleted_at",
     "sync_version",
     "created_at",
     "updated_at",

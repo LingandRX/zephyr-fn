@@ -48,6 +48,14 @@ def delete_subscription(sub_id: str):
     return ok({"ok": True})
 
 
+@bp.route("/subscriptions/<sub_id>/restore", methods=["POST"])
+def restore_subscription(sub_id: str):
+    sub = subscriptions.restore_subscription(sub_id, g.identity.user_id)
+    if sub is None:
+        raise NotFoundError("已删除的订阅不存在")
+    return ok(subscriptions.with_status(sub))
+
+
 @bp.route("/subscriptions/<sub_id>/renew", methods=["POST"])
 def renew_subscription(sub_id: str):
     sub = subscriptions.renew_subscription(sub_id, g.identity.user_id)

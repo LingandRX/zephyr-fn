@@ -86,6 +86,13 @@ def _convert_to_cny(amount: int, currency: str, settings: dict) -> int:
     return amount
 
 
+def _payment_cny_amount(p: dict, settings: dict) -> int:
+    """获取支付流水折算到人民币的金额（分）。优先读取流水快照 amount_cny，缺失时降级为当前汇率折算。"""
+    if p.get("amount_cny") is not None:
+        return int(p["amount_cny"])
+    return _convert_to_cny(p["amount"], p["currency"], settings)
+
+
 def _to_default_currency(amount_cny: int, default_currency: str, settings: dict) -> int:
     """把人民币金额换算到默认货币。"""
     if default_currency == "CNY":
@@ -253,13 +260,13 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
     monthly_payments = repositories.get_payments_by_date_range(
         user_id, month_start_str, month_end_str, "success"
     )
-    monthly_actual_expense = sum(_convert_to_cny(p["amount"], p["currency"], settings) for p in monthly_payments)
+    monthly_actual_expense = sum(_payment_cny_amount(p, settings) for p in monthly_payments)
     
     # 本年实际支付金额
     yearly_payments = repositories.get_payments_by_date_range(
         user_id, year_start_str, year_end_str, "success"
     )
-    yearly_expense = sum(_convert_to_cny(p["amount"], p["currency"], settings) for p in yearly_payments)
+    yearly_expense = sum(_payment_cny_amount(p, settings) for p in yearly_payments)
 
     for sub in subs:
         if sub["lifecycle"] not in ("active", "in_payment"):
@@ -302,7 +309,7 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
         # paid_at 格式为 YYYY-MM-DD
         m_key = p["paid_at"][:7]
         if m_key in monthly_amounts:
-            amount_cny = _convert_to_cny(p["amount"], p["currency"], settings)
+            amount_cny = _payment_cny_amount(p, settings)
             monthly_amounts[m_key] += amount_cny
 
     category_stats = []
@@ -368,9 +375,8 @@ def _events_for_month(sub: dict, year: int, month: int) -> list[dict]:
        - 若非自动续费或一次性订阅：显示一条“服务到期”事件 (service_end)。
     """
     events: list[dict] = []
-    auto_renew = domain.should_auto_renew_on_wake(
-        sub.get("auto_renew", False), sub.get("renewal_policy", "auto")
-    )
+    # 单一事实来源（SSOT）：业务决策直接收敛至 renewal_policy == "auto"
+    auto_renew = domain.should_auto_renew_on_wake(sub.get("renewal_policy", "auto"))
 
     # 1. 开始日期 / 首付日期 -> 首次扣款 (new_subscription)
     start_str = sub.get("first_payment_date") or sub.get("start_date")

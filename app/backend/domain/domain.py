@@ -466,7 +466,11 @@ def normalize_subscription_data(
     next_due_date = normalize_date(values.get("next_due_date"), "下次到期日")
     next_billing_date = normalize_date(values.get("next_billing_date"), "下次计费日")
     last_payment_date = normalize_date(values.get("last_payment_date"), "最后付款日")
-    renewal_confirmed = normalize_bool(values.get("renewal_confirmed", False), "续费已确认", default=False)
+    if "renewal_confirmed" in values and values["renewal_confirmed"] is not None:
+        renewal_confirmed = normalize_bool(values["renewal_confirmed"], "续费已确认")
+    else:
+        # 单一事实来源（SSOT）：未显式指定时，自动续费默认为已确认(True)，手动/停止默认为未确认(False)
+        renewal_confirmed = (renewal_policy == "auto")
     grace_period_ends_at = normalize_date(values.get("grace_period_ends_at"), "宽限期结束日期")
     cancelled_at = normalize_date(values.get("cancelled_at"), "取消日期")
     paused_at = normalize_date(values.get("paused_at"), "暂停日期")
@@ -497,8 +501,20 @@ def normalize_subscription_data(
     }
 
 
-def should_auto_renew_on_wake(auto_renew: bool, renewal_policy: str) -> bool:
-    return auto_renew and renewal_policy == "auto"
+def should_auto_renew_on_wake(auto_renew_or_policy: Any, renewal_policy: str | None = None) -> bool:
+    """业务决策单一事实来源（SSOT）：统一收敛至 renewal_policy 判定。
+
+    为保持兼容，支持传入 (auto_renew, renewal_policy) 或直接传入 (renewal_policy,)。
+    只要 renewal_policy 为 'auto'，即判定为自动续费；
+    当且仅当未显式指定 renewal_policy 时，降级兼容读取布尔值 auto_renew。
+    """
+    if renewal_policy is not None:
+        policy = str(renewal_policy).strip().lower()
+    elif isinstance(auto_renew_or_policy, str):
+        policy = auto_renew_or_policy.strip().lower()
+    else:
+        return bool(auto_renew_or_policy)
+    return policy == "auto"
 
 
 def derive_status(lifecycle: str, next_due_date: str | None, today: date | None = None) -> str:

@@ -11,6 +11,7 @@ class Subscription(db.Model):
     __tablename__ = "subscriptions"
     __table_args__ = (
         Index("idx_sub_user", "user_id"),
+        Index("idx_sub_user_deleted", "user_id", "deleted_at"),
         Index("idx_sub_next", "next_due_date"),
         Index("idx_sub_period", "current_period_start", "current_period_end"),
     )
@@ -43,12 +44,14 @@ class Subscription(db.Model):
     grace_period_ends_at = Column(String(10), nullable=True)
     cancelled_at = Column(String(32), nullable=True)
     paused_at = Column(String(32), nullable=True)
+    deleted_at = Column(String(32), nullable=True)
     sync_version = Column(Integer, nullable=False, default=1)
     created_at = Column(String(32), nullable=False)
     updated_at = Column(String(32), nullable=False)
 
     def to_dict(self) -> dict:
         data = {column.name: getattr(self, column.name) for column in self.__table__.columns}
-        data["auto_renew"] = bool(data["auto_renew"])
+        # 单一事实来源（SSOT）：auto_renew 为展示层/旧前端兼容字段，完全由 renewal_policy 派生
+        data["auto_renew"] = (self.renewal_policy == "auto")
         data["renewal_confirmed"] = bool(data["renewal_confirmed"])
         return data

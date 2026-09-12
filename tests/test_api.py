@@ -252,10 +252,21 @@ class FlaskApiSecurityTests(AppTestCase):
         response = self.client.delete(f"/api/subscriptions/{sub_id}", headers=headers)
         self.assertEqual(response.get_json()["data"]["ok"], True)
 
-        # 不存在 -> 404 信封
+        # 软删除后 -> 404 信封
         response = self.client.get(f"/api/subscriptions/{sub_id}", headers=headers)
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.get_json()["code"], 404)
+
+        # 恢复已删除的订阅
+        response = self.client.post(f"/api/subscriptions/{sub_id}/restore", headers=headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["code"], 0)
+        self.assertEqual(response.get_json()["data"]["id"], sub_id)
+
+        # 恢复后可正常查询
+        response = self.client.get(f"/api/subscriptions/{sub_id}", headers=headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["data"]["name"], "Spotify")
 
 
 def create_app_production_like():

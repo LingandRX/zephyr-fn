@@ -117,6 +117,12 @@ class DomainTests(unittest.TestCase):
         self.assertEqual(domain.normalize_renewal_on_create(True, "stop"), (False, "stop"))
         self.assertEqual(domain.normalize_renewal_on_create(True, None), (True, "auto"))
         self.assertEqual(domain.normalize_renewal_on_create(False, None), (False, "manual"))
+        # 验证单一事实来源：显式 renewal_policy 始终覆盖 auto_renew
+        self.assertEqual(domain.normalize_renewal_on_create(False, "auto"), (True, "auto"))
+        self.assertEqual(domain.normalize_renewal_on_create(True, "manual"), (False, "manual"))
+        self.assertTrue(domain.should_auto_renew_on_wake("auto"))
+        self.assertTrue(domain.should_auto_renew_on_wake(False, "auto"))
+        self.assertFalse(domain.should_auto_renew_on_wake(True, "manual"))
 
     def test_derive_status(self):
         from datetime import date, timedelta
@@ -200,6 +206,47 @@ class SubscriptionServiceTests(AppTestCase):
         )
         self.assertFalse(sub["auto_renew"])
         self.assertEqual(sub["renewal_policy"], "manual")
+
+    def test_renewal_policy_single_source_of_truth(self):
+        user_id = "u_ssot"
+        # 1. 冲突输入：传入 auto_renew=False 但显式指定 renewal_policy="auto"
+        # 业务以 renewal_policy 为权威，展示层 auto_renew 自动同步矫正为 True
+        sub1 = sub_service.create_subscription(
+            user_id,
+            {
+                "name": "SSOT-1",
+                "amount": 1000,
+                "period_type": "month",
+                "auto_renew": False,
+                "renewal_policy": "auto",
+                "start_date": "2026-01-01",
+            },
+        )
+        self.assertEqual(sub1["renewal_policy"], "auto")
+        self.assertTrue(sub1["auto_renew"])
+        self.assertTrue(sub1["renewal_confirmed"])
+
+        # 2. 冲突输入：传入 auto_renew=True 但显式指定 renewal_policy="manual"
+        # 业务以 renewal_policy 为权威，展示层 auto_renew 自动同步矫正为 False
+        sub2 = sub_service.create_subscription(
+            user_id,
+            {
+                "name": "SSOT-2",
+                "amount": 1000,
+                "period_type": "month",
+                "auto_renew": True,
+                "renewal_policy": "manual",
+                "start_date": "2026-01-01",
+            },
+        )
+        self.assertEqual(sub2["renewal_policy"], "manual")
+        self.assertFalse(sub2["auto_renew"])
+        self.assertEqual(sub2["renewal_confirmed"], 0)
+
+        # 3. 更新操作：只更新 renewal_policy="stop"，auto_renew 自动同步为 False
+        up = sub_service.update_subscription(sub1["id"], user_id, {"renewal_policy": "stop"})
+        self.assertEqual(up["renewal_policy"], "stop")
+        self.assertFalse(up["auto_renew"])
 
     def test_switching_from_custom_period_clears_legacy_custom_fields(self):
         sub = sub_service.create_subscription(
@@ -470,6 +517,47 @@ class ServicesTests(AppTestCase):
         self.assertEqual(len(payments), 1)
         self.assertEqual(payments[0]["payment_type"], "first")
         self.assertEqual(payments[0]["amount"], 1000)
+        self.assertEqual(payments[0]["currency"], "CNY")
+        self.assertEqual(payments[0]["exchange_rate"], 1.0)
+        self.assertEqual(payments[0]["amount_cny"], 1000)
+
+    def test_payment_exchange_rate_snapshot_and_isolation(self):
+        # 1. 创建美元订阅，生成第一笔按 7.2 汇率折算的支付记录
+        sub = sub_service.create_subscription(
+            "u_usd_test",
+            {
+                "name": "ChatGPT Plus",
+                "amount": 2000,  # 20.00 USD
+                "currency": "USD",
+                "period_type": "month",
+                "auto_renew": True,
+                "start_date": "2026-01-01",
+                "next_due_date": "2026-02-01",
+            },
+        )
+        payments = repositories.get_payments_by_subscription(sub["id"])
+        self.assertEqual(len(payments), 1)
+        p1 = payments[0]
+        self.assertEqual(p1["amount"], 2000)
+        self.assertEqual(p1["currency"], "USD")
+        self.assertAlmostEqual(p1["exchange_rate"], 7.2)
+        self.assertEqual(p1["amount_cny"], round(2000 * 7.2))  # 14400
+
+        # 2. 系统设置修改汇率（比如 USD 暴涨到 8.0）
+        repositories.update_app_settings({"exchange_rate_usd": 8.0})
+
+        # 3. 验证历史第一笔支付记录的 amount_cny 与 exchange_rate 快照完全不受影响
+        p1_after = repositories.get_payments_by_subscription(sub["id"])[0]
+        self.assertAlmostEqual(p1_after["exchange_rate"], 7.2)
+        self.assertEqual(p1_after["amount_cny"], 14400)
+
+        # 4. 再次续费，生成新支付流水，新流水使用新汇率 8.0
+        sub_service.renew_subscription(sub["id"], "u_usd_test")
+        payments_renewed = repositories.get_payments_by_subscription(sub["id"])
+        self.assertEqual(len(payments_renewed), 2)
+        p2 = [p for p in payments_renewed if p["payment_type"] == "renewal"][0]
+        self.assertAlmostEqual(p2["exchange_rate"], 8.0)
+        self.assertEqual(p2["amount_cny"], round(2000 * 8.0))  # 16000
 
     def test_renew_subscription_creates_renewal_payment(self):
         sub = sub_service.create_subscription(
@@ -491,6 +579,53 @@ class ServicesTests(AppTestCase):
         types = [p["payment_type"] for p in payments]
         self.assertIn("first", types)
         self.assertIn("renewal", types)
+
+    def test_soft_delete_preserves_payments_and_can_restore(self):
+        user_id = "u_soft_del_test"
+        sub = sub_service.create_subscription(
+            user_id,
+            {
+                "name": "Netflix",
+                "amount": 2500,
+                "currency": "CNY",
+                "period_type": "month",
+                "auto_renew": True,
+                "start_date": "2026-01-01",
+                "next_due_date": "2026-02-01",
+            },
+        )
+        sub_id = sub["id"]
+
+        # 验证初始已生成支付流水
+        payments_before = repositories.get_payments_by_subscription(sub_id)
+        self.assertEqual(len(payments_before), 1)
+
+        # 执行删除（软删除）
+        deleted_ok = sub_service.delete_subscription(sub_id, user_id)
+        self.assertTrue(deleted_ok)
+
+        # 默认查询已查不到
+        self.assertIsNone(sub_service.get_subscription(sub_id, user_id))
+        all_subs = sub_service.list_subscriptions(user_id)
+        self.assertNotIn(sub_id, [s["id"] for s in all_subs])
+
+        # 核心保证：关联的 payments 流水依然完好无损！
+        payments_after = repositories.get_payments_by_subscription(sub_id)
+        self.assertEqual(len(payments_after), 1)
+        self.assertEqual(payments_after[0]["amount"], 2500)
+
+        # 软删除项不能被续费
+        self.assertIsNone(sub_service.renew_subscription(sub_id, user_id))
+
+        # 支持被恢复 (restore)
+        restored = sub_service.restore_subscription(sub_id, user_id)
+        self.assertIsNotNone(restored)
+        self.assertIsNone(restored["deleted_at"])
+
+        # 恢复后重新出现在正常列表中
+        self.assertIsNotNone(sub_service.get_subscription(sub_id, user_id))
+        restored_list = sub_service.list_subscriptions(user_id)
+        self.assertIn(sub_id, [s["id"] for s in restored_list])
 
     def test_calendar_events(self):
         events = get_calendar_events("u1", 2026, 8)

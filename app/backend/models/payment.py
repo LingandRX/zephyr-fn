@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Column, Index, Integer, String
+from sqlalchemy import Column, Float, Index, Integer, String
 
 from ..extensions import db
 
@@ -20,6 +20,8 @@ class Payment(db.Model):
     user_id = Column(String(128), nullable=False)
     amount = Column(Integer, nullable=False)
     currency = Column(String(8), nullable=False)
+    exchange_rate = Column(Float, nullable=False, default=1.0)
+    amount_cny = Column(Integer, nullable=False, default=0)
     paid_at = Column(String(32), nullable=False)
     period_start = Column(String(10), nullable=False)
     period_end = Column(String(10), nullable=False)

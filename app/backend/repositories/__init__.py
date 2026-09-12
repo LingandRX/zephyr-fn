@@ -63,6 +63,7 @@ SUBSCRIPTION_COLUMNS = (
     "grace_period_ends_at",
     "cancelled_at",
     "paused_at",
+    "deleted_at",
     "sync_version",
     "created_at",
     "updated_at",
@@ -195,25 +196,30 @@ def is_secret_placeholder(value: Any) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def get_all_subscriptions(user_id: str) -> list[dict]:
+def get_all_subscriptions(user_id: str, include_deleted: bool = False) -> list[dict]:
+    stmt = select(Subscription).where(Subscription.user_id == user_id)
+    if not include_deleted:
+        stmt = stmt.where(Subscription.deleted_at.is_(None))
     rows = db.session.execute(
-        select(Subscription)
-        .where(Subscription.user_id == user_id)
-        .order_by(Subscription.next_due_date.asc(), Subscription.name.asc())
+        stmt.order_by(Subscription.next_due_date.asc(), Subscription.name.asc())
     ).scalars()
     return [row.to_dict() for row in rows]
 
 
-def get_subscription_by_id(sub_id: str, user_id: str) -> dict | None:
+def get_subscription_by_id(
+    sub_id: str, user_id: str, include_deleted: bool = False
+) -> dict | None:
     row = db.session.get(Subscription, sub_id)
     if row is None or row.user_id != user_id:
+        return None
+    if not include_deleted and row.deleted_at is not None:
         return None
     return row.to_dict()
 
 
 def insert_subscription(normalized: Mapping[str, Any]) -> dict:
     """插入订阅行（调用方需传入已归一化的全列字典）。"""
-    row = Subscription(**{k: normalized[k] for k in SUBSCRIPTION_COLUMNS})
+    row = Subscription(**{k: normalized.get(k) for k in SUBSCRIPTION_COLUMNS})
     db.session.add(row)
     db.session.commit()
     return row.to_dict()
@@ -224,7 +230,7 @@ def update_subscription_fields(
 ) -> dict | None:
     """按字段白名单更新订阅；返回更新后的行，不存在返回 None。"""
     row = db.session.get(Subscription, sub_id)
-    if row is None or row.user_id != user_id:
+    if row is None or row.user_id != user_id or row.deleted_at is not None:
         return None
     allowed = {k: v for k, v in updates.items() if k in SUBSCRIPTION_FIELDS}
     if not allowed:
@@ -236,21 +242,47 @@ def update_subscription_fields(
     return row.to_dict()
 
 
-def delete_subscription(sub_id: str, user_id: str) -> bool:
+def delete_subscription(sub_id: str, user_id: str, hard: bool = False) -> bool:
+    """删除订阅。默认软删除（置 deleted_at）；hard=True 时物理删除。"""
     row = db.session.execute(
-        select(Subscription).where(Subscription.id == sub_id, Subscription.user_id == user_id)
+        select(Subscription).where(
+            Subscription.id == sub_id,
+            Subscription.user_id == user_id,
+            Subscription.deleted_at.is_(None),
+        )
     ).scalar_one_or_none()
     if row is None:
         return False
-    db.session.delete(row)
+    if hard:
+        db.session.delete(row)
+    else:
+        row.deleted_at = now_utc()
+        row.updated_at = now_utc()
     db.session.commit()
     return True
+
+
+def restore_subscription(sub_id: str, user_id: str) -> dict | None:
+    """恢复已软删除的订阅。"""
+    row = db.session.execute(
+        select(Subscription).where(
+            Subscription.id == sub_id,
+            Subscription.user_id == user_id,
+            Subscription.deleted_at.is_not(None),
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    row.deleted_at = None
+    row.updated_at = now_utc()
+    db.session.commit()
+    return row.to_dict()
 
 
 def renew_subscription(sub_id: str, user_id: str, next_due: str) -> dict | None:
     """推进续费：置 next_due_date 并复位生命周期/账单状态。"""
     row = db.session.get(Subscription, sub_id)
-    if row is None or row.user_id != user_id:
+    if row is None or row.user_id != user_id or row.deleted_at is not None:
         return None
     row.next_due_date = next_due
     row.current_period_end = next_due
@@ -262,17 +294,23 @@ def renew_subscription(sub_id: str, user_id: str, next_due: str) -> dict | None:
     return row.to_dict()
 
 
-def get_all_subscriptions_raw(user_id: str | None = None) -> list[dict]:
-    """读取原始订阅；传入 user_id 时只返回该用户数据。"""
+def get_all_subscriptions_raw(
+    user_id: str | None = None, include_deleted: bool = False
+) -> list[dict]:
+    """读取原始订阅；传入 user_id 时只返回该用户数据。默认过滤软删除。"""
     stmt = select(Subscription).order_by(Subscription.id)
     if user_id is not None:
         stmt = stmt.where(Subscription.user_id == user_id)
+    if not include_deleted:
+        stmt = stmt.where(Subscription.deleted_at.is_(None))
     return [row.to_dict() for row in db.session.execute(stmt).scalars()]
 
 
 def get_subscription_dedup_keys(user_id: str | None = None) -> set:
-    """去重键：名称|金额|周期类型。"""
-    stmt = select(Subscription.name, Subscription.amount, Subscription.period_type)
+    """去重键：名称|金额|周期类型（仅未删除项）。"""
+    stmt = select(Subscription.name, Subscription.amount, Subscription.period_type).where(
+        Subscription.deleted_at.is_(None)
+    )
     if user_id is not None:
         stmt = stmt.where(Subscription.user_id == user_id)
     return {
@@ -681,8 +719,29 @@ def get_payments_by_date_range(
 
 
 def insert_payment(payment_data: dict) -> dict:
-    """插入支付流水。"""
-    row = Payment(**payment_data)
+    """插入支付流水。若未显式指定汇率或本位币金额，则根据当前设置快照自动补齐。"""
+    data = dict(payment_data)
+    amount = int(data.get("amount") or 0)
+    currency = str(data.get("currency") or "CNY").upper()
+
+    if data.get("exchange_rate") is None:
+        settings = get_app_settings()
+        if currency == "USD":
+            data["exchange_rate"] = float(settings.get("exchange_rate_usd") or 7.2)
+        elif currency == "HKD":
+            data["exchange_rate"] = float(settings.get("exchange_rate_hkd") or 0.92)
+        else:
+            data["exchange_rate"] = 1.0
+    else:
+        data["exchange_rate"] = float(data["exchange_rate"])
+
+    if data.get("amount_cny") is None:
+        rate = data["exchange_rate"]
+        data["amount_cny"] = round(amount * rate) if currency != "CNY" else amount
+    else:
+        data["amount_cny"] = int(data["amount_cny"])
+
+    row = Payment(**data)
     db.session.add(row)
     db.session.commit()
     return row.to_dict()
@@ -697,7 +756,9 @@ def create_payment_for_subscription(
     period_start: str,
     period_end: str,
     payment_type: str,
-    note: str = None
+    note: str | None = None,
+    exchange_rate: float | None = None,
+    amount_cny: int | None = None,
 ) -> dict:
     """为订阅创建支付流水。"""
     payment_data = {
@@ -706,6 +767,8 @@ def create_payment_for_subscription(
         "user_id": user_id,
         "amount": amount,
         "currency": currency,
+        "exchange_rate": exchange_rate,
+        "amount_cny": amount_cny,
         "paid_at": paid_at,
         "period_start": period_start,
         "period_end": period_end,
