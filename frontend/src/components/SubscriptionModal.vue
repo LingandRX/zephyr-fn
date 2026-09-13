@@ -118,15 +118,37 @@ function calcNextDueDate(startDate, periodType) {
   return `${result.getFullYear()}-${String(result.getMonth() + 1).padStart(2, "0")}-${String(result.getDate()).padStart(2, "0")}`;
 }
 
+// 用订阅对象回填表单（编辑初始化 / 编辑态「重置」共用同一份映射，避免两处漂移）
+function fillFromSubscription(sub) {
+  const sd = sub.start_date || "";
+  form.value = {
+    name: sub.name,
+    category_id: sub.category_id || "",
+    currency: sub.currency,
+    amount: centsToYuan(sub.amount),
+    period_type: sub.period_type,
+    custom_value: sub.custom_period_value ?? "1",
+    custom_unit: sub.custom_period_unit || "month",
+    auto_renew: !!sub.auto_renew,
+    start_date: sd,
+    first_payment_date: sub.first_payment_date || sd || "",
+    next_due_date: sub.next_due_date || "",
+    notes: sub.notes || "",
+  };
+}
+
 function resetForm() {
+  // 编辑态：恢复为当前订阅的原始值，而不是清空（清空后保存会直接校验失败）
+  if (isEditing.value && props.subscription) {
+    fillFromSubscription(props.subscription);
+    return;
+  }
   const fresh = emptyForm();
   fresh.first_payment_date = fresh.start_date;
   const next = calcNextDueDate(fresh.start_date, fresh.period_type);
   if (next) fresh.next_due_date = next;
   form.value = fresh;
-  if (!isEditing.value) {
-    clearDraft();
-  }
+  clearDraft();
 }
 
 const notesLength = computed(() => Array.from(form.value.notes || "").length);
@@ -158,21 +180,7 @@ watch(
   ([visible, sub]) => {
     if (!visible) return;
     if (sub) {
-      const sd = sub.start_date || "";
-      form.value = {
-        name: sub.name,
-        category_id: sub.category_id || "",
-        currency: sub.currency,
-        amount: centsToYuan(sub.amount),
-        period_type: sub.period_type,
-        custom_value: sub.custom_period_value ?? "1",
-        custom_unit: sub.custom_period_unit || "month",
-        auto_renew: !!sub.auto_renew,
-        start_date: sd,
-        first_payment_date: sub.first_payment_date || sd || "",
-        next_due_date: sub.next_due_date || "",
-        notes: sub.notes || "",
-      };
+      fillFromSubscription(sub);
     } else {
       const draft = loadDraft();
       if (draft) {

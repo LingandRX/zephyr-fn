@@ -279,8 +279,14 @@ function goToday() {
 
 // keep-alive 下「切换回本页」不会重新 onMounted，需在 onActivated 重新拉取当月数据，
 // 否则在其他页面新增订阅后切回时日历仍显示旧数据。
+// 注意：onActivated 在首次挂载时也会触发，跳过首次以免与 onMounted 重复请求当月三个月份的数据。
 onMounted(loadMonth);
-onActivated(loadMonth);
+let activationCount = 0;
+onActivated(() => {
+  activationCount += 1;
+  if (activationCount === 1) return;
+  loadMonth();
+});
 </script>
 
 <template>

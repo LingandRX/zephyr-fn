@@ -55,7 +55,11 @@ watch(
   { immediate: true },
 );
 
+// keep-alive 下 onActivated 在首次挂载时也会触发，跳过首次以免与 onMounted 重复拉取
+let activationCount = 0;
 onActivated(() => {
+  activationCount += 1;
+  if (activationCount === 1) return;
   loadAll();
   if (ui.showAddModal) {
     openModal();

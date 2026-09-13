@@ -227,7 +227,21 @@ watch(
     clearTimeout(saveTimer);
     const scopes = dirtyScopes();
     // 保存成功后内部字段回写（掩码 / configured 等）触发的变化不再进入保存流程
-    if (!scopes.size) return;
+    if (!scopes.size) {
+      // 用户把改动撤销回已保存值：结束本次保存流程，清掉「正在保存...」进度态。
+      // 否则 saveTimer 已被 clearTimeout 清掉，不会再有回调重置 saving，徽标会永久停留。
+      // statusTimer 非空说明正在展示「已保存 / 保存失败」，交由它自己清理，避免被提前覆盖。
+      if (!statusTimer) {
+        saving.value = false;
+        saveStatusText.value = "";
+        saveScopes.value = new Set();
+      }
+      return;
+    }
+    // 新一轮改动开始：取消上一次「已保存 / 保存失败」提示的清理定时器，
+    // 避免它在新一轮保存进行中把刚设的状态再次清空。
+    clearTimeout(statusTimer);
+    statusTimer = null;
     saveScopes.value = scopes;
     saving.value = true;
     saveStatusText.value = "正在保存...";
@@ -298,12 +312,20 @@ watch(
         saveStatusText.value = "✓ 设置已保存";
         clearTimeout(statusTimer);
         statusTimer = setTimeout(() => {
+          statusTimer = null;
           saveStatusText.value = "";
           saveScopes.value = new Set();
         }, 2000);
       } catch (err) {
         saving.value = false;
         saveStatusText.value = "保存失败";
+        // 失败提示同样要自动清理：否则没有后续编辑时会一直停留在页面上
+        clearTimeout(statusTimer);
+        statusTimer = setTimeout(() => {
+          statusTimer = null;
+          saveStatusText.value = "";
+          saveScopes.value = new Set();
+        }, 3000);
         toast(err.message, "err");
       }
     }, 800);
