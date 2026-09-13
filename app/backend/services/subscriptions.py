@@ -155,6 +155,32 @@ def list_subscriptions(user_id: str) -> list[dict]:
     return repositories.get_all_subscriptions(user_id)
 
 
+def list_subscriptions_paginated(
+    user_id: str,
+    page: int = 1,
+    per_page: int = 20,
+    lifecycle: str | None = None,
+    category_id: str | None = None,
+) -> dict:
+    """分页查询订阅列表，返回包含分页信息的字典。"""
+    from math import ceil
+
+    items, total = repositories.get_subscriptions_paginated(
+        user_id=user_id,
+        page=page,
+        per_page=per_page,
+        lifecycle=lifecycle,
+        category_id=category_id,
+    )
+    return {
+        'items': [with_status(s) for s in items],
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'pages': ceil(total / per_page) if total > 0 else 0,
+    }
+
+
 def get_subscription(sub_id: str, user_id: str) -> dict | None:
     return repositories.get_subscription_by_id(sub_id, user_id)
 

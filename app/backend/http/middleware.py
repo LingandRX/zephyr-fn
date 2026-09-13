@@ -65,7 +65,14 @@ def _parse_admin_flag(raw_value: str | None) -> bool:
 
 
 def parse_identity() -> None:
-    """解析网关身份，注入 ``g.identity``。"""
+    """解析网关身份，注入 ``g.identity``。
+
+    健康检查端点无需认证，直接返回。
+    """
+    # 健康检查路径无需身份认证
+    if request.path == '/api/health':
+        return
+
     raw_user_id = request.headers.get("X-Trim-Userid")
     raw_is_admin = request.headers.get("X-Trim-Isadmin")
     raw_username = request.headers.get("X-Trim-Username")
@@ -107,6 +114,10 @@ def parse_identity() -> None:
 
 def check_admin_only() -> None:
     """管理员专属路径权限校验。"""
+    # 健康检查路径无需校验
+    if request.path == '/api/health':
+        return
+
     path = request.path
     is_protected = path in _ADMIN_EXACT or any(
         path == p or path.startswith(p + "/") for p in _ADMIN_PREFIXES
@@ -117,7 +128,7 @@ def check_admin_only() -> None:
 
 def ensure_default_categories() -> None:
     """新用户首次访问 API 时补种默认分类（幂等）。"""
-    if request.path.startswith("/api/"):
+    if request.path.startswith("/api/") and request.path != '/api/health':
         ensure_default_categories_for_user(g.identity.user_id)
 
 

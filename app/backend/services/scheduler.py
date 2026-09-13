@@ -27,6 +27,11 @@ send_pushplus = channels.send_pushplus
 DEFAULT_PUSH_TIME = "09:00"  # 每日固定推送时刻默认值（24h 制 HH:MM）
 LOGGER_NAME = "subscription"
 
+# 优雅停机控制：set() 时调度线程退出
+_stop_event = threading.Event()
+_scheduler_thread: threading.Thread | None = None
+_scheduler_lock = threading.Lock()
+
 
 def _logger() -> logging.Logger:
     return logging.getLogger(LOGGER_NAME)
@@ -229,20 +234,43 @@ def _next_delay(app: Flask) -> float:
 
 
 def _loop(app: Flask, reminder_days: int | None) -> None:
-    while True:
-        # 先睡到下一个每日推送时刻（启动后不立即执行）
-        time.sleep(_next_delay(app))
-        try:
-            with app.app_context():
-                _check_reminders(reminder_days)
-        except Exception:  # noqa: BLE001
-            _logger().exception("定时任务执行出错")
+    # 启动后先等一轮再执行（不立即触发）
+    _next_fire = datetime.now() + timedelta(seconds=_next_delay(app))
+    while not _stop_event.is_set():
+        now = datetime.now()
+        if now >= _next_fire:
+            try:
+                with app.app_context():
+                    _check_reminders(reminder_days)
+            except Exception:  # noqa: BLE001
+                _logger().exception("定时任务执行出错")
+            # 计算下一个推送时刻（读取最新配置，允许配置变更实时生效）
+            _next_fire = datetime.now() + timedelta(seconds=_next_delay(app))
+        else:
+            # 短轮询：每 60 秒检查一次是否已到推送时刻
+            _stop_event.wait(60)
 
 
 def start_scheduler(app: Flask, reminder_days: int | None = None) -> threading.Thread:
     """启动后台调度线程；调用方需传入应用实例（工厂产物）。"""
-    thread = threading.Thread(
-        target=_loop, args=(app, reminder_days), name="scheduler", daemon=True
-    )
-    thread.start()
-    return thread
+    global _stop_event, _scheduler_thread
+    with _scheduler_lock:
+        _stop_event.clear()  # 允许 stop_scheduler 后重启
+        thread = threading.Thread(
+            target=_loop, args=(app, reminder_days), name="scheduler", daemon=True
+        )
+        _scheduler_thread = thread
+        thread.start()
+        return thread
+
+
+def stop_scheduler(timeout: float = 10.0) -> None:
+    """通知调度线程优雅退出（最多等待 timeout 秒）。"""
+    global _scheduler_thread
+    with _scheduler_lock:
+        _logger().info("正在停止调度器...")
+        _stop_event.set()
+        if _scheduler_thread is not None and _scheduler_thread.is_alive():
+            _scheduler_thread.join(timeout=timeout)
+        _scheduler_thread = None
+

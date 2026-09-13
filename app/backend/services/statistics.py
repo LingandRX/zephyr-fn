@@ -187,7 +187,7 @@ def _count_cycles_in_range(sub: dict, range_start: date, range_end: date) -> int
     guard = 0
     while anchor > range_end:
         guard += 1
-        if guard > 5000:
+        if guard > 50000:
             return 0
         prev = back(anchor)
         if prev is None:
@@ -195,7 +195,7 @@ def _count_cycles_in_range(sub: dict, range_start: date, range_end: date) -> int
         anchor = prev
     while anchor > range_start and anchor > start_date:
         guard += 1
-        if guard > 5000:
+        if guard > 50000:
             return 0
         prev = back(anchor)
         if prev is None:
@@ -203,7 +203,7 @@ def _count_cycles_in_range(sub: dict, range_start: date, range_end: date) -> int
         anchor = prev
     while anchor < range_start:
         guard += 1
-        if guard > 5000:
+        if guard > 50000:
             return 0
         nxt = step(anchor)
         if nxt is None:
@@ -212,7 +212,7 @@ def _count_cycles_in_range(sub: dict, range_start: date, range_end: date) -> int
     count = 0
     while anchor <= range_end:
         guard += 1
-        if guard > 5000:
+        if guard > 50000:
             break
         if anchor > start_date:
             count += 1
@@ -242,7 +242,7 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
     active_count = 0
     cat_monthly: dict[str, int] = {}
     cat_yearly: dict[str, int] = {}
-    monthly_amounts: dict[str, int] = {}
+    monthly_amounts: dict[str, int] = {ms.strftime('%Y-%m'): 0 for ms in month_starts}
 
     month_start = now.replace(day=1)
     month_end = _month_end(now)

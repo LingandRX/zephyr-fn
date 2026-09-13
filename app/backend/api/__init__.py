@@ -9,8 +9,10 @@ from __future__ import annotations
 from . import (
     backup,
     categories,
+    health,
     logs,
     notifications,
+    payments,
     settings,
     statistics,
     subscriptions,
@@ -19,6 +21,7 @@ from . import (
 
 
 def register_blueprints(app) -> None:
+    app.register_blueprint(health.bp)
     app.register_blueprint(subscriptions.bp)
     app.register_blueprint(categories.bp)
     app.register_blueprint(settings.bp)
@@ -26,6 +29,7 @@ def register_blueprints(app) -> None:
     app.register_blueprint(backup.bp)
     app.register_blueprint(notifications.bp)
     app.register_blueprint(logs.bp)
+    app.register_blueprint(payments.bp)
     app.register_blueprint(web.bp)
 
 

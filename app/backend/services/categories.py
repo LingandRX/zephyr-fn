@@ -17,6 +17,8 @@ from .. import repositories
 from ..repositories.bootstrap import DEFAULT_CATEGORY_TEMPLATES
 
 # 进程内已播种用户缓存（按数据库文件隔离），避免每个 API 请求都查询 seeded_users。
+# 注意：此缓存仅在单进程内有效。当前 fnOS 部署为单进程模式，
+# 若未来改为多进程，需要改为共享存储或直接查库。
 _seeded_cache: set[tuple[str, str]] = set()
 
 

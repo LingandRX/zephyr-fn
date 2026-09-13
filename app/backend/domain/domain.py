@@ -6,7 +6,7 @@ import math
 import re
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, overload
 
 __all__ = [
     # 常量
@@ -294,6 +294,38 @@ def normalize_date(
         raise ValueError(f"{field}不是有效日期") from exc
 
 
+@overload
+def _normalize_enum(
+    value: Any,
+    choices: tuple[str, ...],
+    field: str,
+    *,
+    aliases: Mapping[str, str] | None = ...,
+    default: str,
+) -> str: ...
+
+
+@overload
+def _normalize_enum(
+    value: Any,
+    choices: tuple[str, ...],
+    field: str,
+    *,
+    aliases: Mapping[str, str] | None = ...,
+    default: str | None = ...,
+) -> str | None: ...
+
+
+@overload
+def _normalize_enum(
+    value: Any,
+    choices: tuple[str, ...],
+    field: str,
+    *,
+    aliases: Mapping[str, str] | None = ...,
+) -> str | None: ...
+
+
 def _normalize_enum(
     value: Any,
     choices: tuple[str, ...],
@@ -327,7 +359,7 @@ def normalize_currency(value: Any = None, *, default: str = "CNY") -> str:
 
 
 def normalize_period_type(value: Any = None, *, default: str = "month") -> str:
-    return _normalize_enum(value, PERIOD_TYPES, "周期类型", default=default)  # type: ignore[return-value]
+    return _normalize_enum(value, PERIOD_TYPES, "周期类型", default=default)
 
 
 def normalize_custom_period(
@@ -359,7 +391,7 @@ def normalize_lifecycle(value: Any = None, *, default: str = "active") -> str:
         "生命周期",
         aliases=_LIFECYCLE_ALIASES,
         default=default,
-    )  # type: ignore[return-value]
+    )
 
 
 def normalize_billing_status(value: Any = None, *, default: str = "normal") -> str:
@@ -369,7 +401,7 @@ def normalize_billing_status(value: Any = None, *, default: str = "normal") -> s
         "账单状态",
         aliases=_BILLING_ALIASES,
         default=default,
-    )  # type: ignore[return-value]
+    )
 
 
 def normalize_renewal_on_create(auto_renew: bool, explicit_policy: str | None) -> tuple[bool, str]:

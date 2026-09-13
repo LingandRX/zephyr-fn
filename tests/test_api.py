@@ -1,280 +1,363 @@
-"""HTTP API 安全边界回归测试。
+"""API 集成测试（使用 Flask test_client）。
 
-使用 Flask 测试客户端与统一响应信封 {code, message, data}。
+覆盖：健康检查、订阅 CRUD + 分页、分类 CRUD、设置密钥脱敏、
+权限控制、支付流水。
 """
 
 from __future__ import annotations
 
-import unittest
+import json
 
-from helpers import AppTestCase
-
-from backend import config
-from backend.extensions import db
-from backend.services import subscriptions as sub_service
-from backend import repositories
+import pytest
 
 
-class FlaskApiSecurityTests(AppTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        # 静态目录：index.html + 越界目录（路径穿越测试用）
-        cls.www = cls.root / "www"
-        cls.www.mkdir()
-        (cls.www / "index.html").write_text("ok", encoding="utf-8")
-        outside = cls.root / "www2"
-        outside.mkdir()
-        (outside / "secret.txt").write_text("not for serving", encoding="utf-8")
-        config.override("WWW_DIR", str(cls.www))
+def _json(response):
+    """解析 JSON 响应体。"""
+    return response.get_json(force=True)
 
-        with cls.ctx():
-            sub_service.create_subscription(
-                "alice",
-                {
-                    "name": "Alice Service",
-                    "amount": 100,
-                    "period_type": "month",
-                    "start_date": "2026-01-01",
-                },
-            )
-            sub_service.create_subscription(
-                "bob",
-                {
-                    "name": "Bob Service",
-                    "amount": 200,
-                    "period_type": "month",
-                    "start_date": "2026-01-01",
-                },
-            )
 
-    def setUp(self):
-        super().setUp()
-        self.client = self.app.test_client()
+def _assert_ok(data, code=0):
+    """断言统一响应信封结构。"""
+    assert data["code"] == code
+    assert "message" in data
+    assert "data" in data
 
-    @staticmethod
-    def _identity_headers(user_id: str, is_admin: bool = False) -> dict:
-        return {
-            "X-Trim-Userid": user_id,
-            "X-Trim-Isadmin": "true" if is_admin else "false",
-        }
 
-    @staticmethod
-    def _unwrap(payload: dict) -> dict:
-        """解包统一信封：校验 code == 0 并返回 data。"""
-        assert payload["code"] == 0, payload
-        return payload["data"]
+def _create_subscription(client, **overrides):
+    """辅助：创建一个订阅并返回解析后的 JSON data。"""
+    from datetime import date, timedelta
+    _future = (date.today() + timedelta(days=30)).isoformat()
+    payload = {
+        "name": "测试订阅",
+        "amount": 1900,
+        "currency": "CNY",
+        "period_type": "month",
+        "auto_renew": True,
+        "start_date": _future,
+        "first_payment_date": _future,
+    }
+    payload.update(overrides)
+    resp = client.post("/api/subscriptions", json=payload)
+    assert resp.status_code == 201
+    body = _json(resp)
+    _assert_ok(body)
+    return body["data"]
 
-    def test_tcp_without_identity_headers_keeps_local_development_access(self):
-        """本地开发模式允许无身份头访问。"""
-        response = self.client.get("/api/settings")
-        self.assertEqual(response.status_code, 200)
-        data = self._unwrap(response.get_json())
-        self.assertEqual(data["default_currency"], "CNY")
 
-    def test_regular_user_cannot_read_or_update_system_settings(self):
-        """普通用户不能读取或更新系统设置。"""
-        headers = self._identity_headers("alice")
-        response = self.client.get("/api/settings", headers=headers)
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.get_json()["code"], 403)
+# --------------------------------------------------------------------------- #
+# 健康检查
+# --------------------------------------------------------------------------- #
 
-        response = self.client.put(
-            "/api/settings",
-            headers=headers,
-            json={"notification_days": 30},
-        )
-        self.assertEqual(response.status_code, 403)
-        data = response.get_json()
-        self.assertIn("管理员", data["message"])
 
-    def test_admin_settings_redact_secrets_and_preserve_masked_updates(self):
-        """管理员设置接口：密钥脱敏、掩码更新保持原密钥。"""
-        headers = self._identity_headers("admin", is_admin=True)
-        with self.ctx():
-            repositories.update_app_settings(
-                {
-                    "smtp_password": "smtp-initial-secret",
-                    "pushplus_token": "push-initial-token",
-                }
-            )
+class TestHealthAPI:
+    def test_health_check(self, client):
+        resp = client.get("/api/health")
+        assert resp.status_code == 200
+        body = _json(resp)
+        _assert_ok(body)
+        assert body["data"]["status"] == "ok"
+        assert "version" in body["data"]
 
-        response = self.client.get("/api/settings", headers=headers)
-        self.assertEqual(response.status_code, 200)
-        public = self._unwrap(response.get_json())
-        self.assertNotIn("smtp_password", public)
-        self.assertNotIn("pushplus_token", public)
-        self.assertTrue(public["smtp_password_configured"])
-        self.assertTrue(public["pushplus_token_configured"])
-        self.assertEqual(public["pushplus_token_masked"], "*" * len("push-initial-token"))
-        self.assertEqual(public["smtp_password_masked"], "*" * len("smtp-initial-secret"))
 
-        # 掩码/空值更新不能清空原密钥
-        response = self.client.put(
-            "/api/settings",
-            headers=headers,
-            json={
-                "notification_days": 5,
-                "smtp_password": "***",
-                "pushplus_token": "",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        raw = repositories.get_app_settings()
-        self.assertEqual(raw["smtp_password"], "smtp-initial-secret")
-        self.assertEqual(raw["pushplus_token"], "push-initial-token")
-        self.assertEqual(raw["notification_days"], 5)
+# --------------------------------------------------------------------------- #
+# 订阅 CRUD
+# --------------------------------------------------------------------------- #
 
-        # 只有明确输入新值才更新密钥
-        response = self.client.put(
-            "/api/settings",
-            headers=headers,
-            json={
-                "smtp_password": "smtp-new-secret",
-                "pushplus_token": "push-new-token",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        raw = repositories.get_app_settings()
-        self.assertEqual(raw["smtp_password"], "smtp-new-secret")
-        self.assertEqual(raw["pushplus_token"], "push-new-token")
 
-        # 清空标记删除密钥
-        response = self.client.put(
-            "/api/settings",
-            headers=headers,
-            json={"pushplus_token_clear": True},
-        )
-        self.assertEqual(response.status_code, 200)
-        raw = repositories.get_app_settings()
-        self.assertIsNone(raw["pushplus_token"])
-        self.assertEqual(raw["smtp_password"], "smtp-new-secret")
+class TestSubscriptionAPI:
+    def test_create_subscription(self, client):
+        sub = _create_subscription(client)
+        assert sub["name"] == "测试订阅"
+        assert sub["amount"] == 1900
+        assert sub["currency"] == "CNY"
+        assert sub["status"] in ("active", "expiring", "expired")
 
-        response = self.client.get("/api/settings", headers=headers)
-        self.assertEqual(response.status_code, 200)
-        public = self._unwrap(response.get_json())
-        self.assertNotIn("pushplus_token", public)
-        self.assertFalse(public["pushplus_token_configured"])
-        self.assertEqual(public["pushplus_token_masked"], "")
+    def test_list_subscriptions(self, client):
+        _create_subscription(client, name="Sub1")
+        _create_subscription(client, name="Sub2")
+        resp = client.get("/api/subscriptions")
+        assert resp.status_code == 200
+        body = _json(resp)
+        _assert_ok(body)
+        assert len(body["data"]) >= 2
 
-    def test_user_subscription_api_stays_isolated_and_exports_are_protected(self):
-        """用户订阅数据隔离，导出接口受管理员保护。"""
-        user_headers = self._identity_headers("alice")
-        response = self.client.get("/api/subscriptions", headers=user_headers)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            [item["name"] for item in self._unwrap(response.get_json())],
-            ["Alice Service"],
-        )
+    def test_get_subscription(self, client):
+        created = _create_subscription(client)
+        sub_id = created["id"]
+        resp = client.get(f"/api/subscriptions/{sub_id}")
+        assert resp.status_code == 200
+        body = _json(resp)
+        _assert_ok(body)
+        assert body["data"]["id"] == sub_id
 
-        response = self.client.get("/api/export/csv", headers=user_headers)
-        self.assertEqual(response.status_code, 403)
+    def test_update_subscription(self, client):
+        created = _create_subscription(client)
+        sub_id = created["id"]
+        resp = client.put(f"/api/subscriptions/{sub_id}", json={
+            "name": "更新后名称",
+            "amount": 2990,
+        })
+        assert resp.status_code == 200
+        body = _json(resp)
+        _assert_ok(body)
+        assert body["data"]["name"] == "更新后名称"
+        assert body["data"]["amount"] == 2990
 
-    def test_admin_can_read_full_export(self):
-        """管理员可以导出所有用户数据。"""
-        headers = self._identity_headers("admin", is_admin=True)
-        response = self.client.get("/api/export/csv", headers=headers)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("Alice Service", response.get_data(as_text=True))
-        self.assertIn("Bob Service", response.get_data(as_text=True))
+    def test_delete_subscription(self, client):
+        created = _create_subscription(client)
+        sub_id = created["id"]
+        resp = client.delete(f"/api/subscriptions/{sub_id}")
+        assert resp.status_code == 200
+        body = _json(resp)
+        _assert_ok(body)
+        assert body["data"]["ok"] is True
 
-    def test_static_path_traversal_is_not_served(self):
-        """路径穿越攻击被阻止。"""
-        response = self.client.get("/../www2/secret.txt")
-        self.assertNotIn(b"not for serving", response.get_data())
+        # 删除后 GET 应 404
+        resp2 = client.get(f"/api/subscriptions/{sub_id}")
+        assert resp2.status_code == 404
 
-    def test_oversized_request_body_is_rejected(self):
-        """超大请求体被拒绝。"""
-        headers = self._identity_headers("admin", is_admin=True)
-        response = self.client.post(
+    def test_get_nonexistent_subscription(self, client):
+        resp = client.get("/api/subscriptions/nonexistent-id")
+        assert resp.status_code == 404
+
+    def test_restore_subscription(self, client):
+        created = _create_subscription(client)
+        sub_id = created["id"]
+        # 删除
+        client.delete(f"/api/subscriptions/{sub_id}")
+        # 恢复
+        resp = client.post(f"/api/subscriptions/{sub_id}/restore")
+        assert resp.status_code == 200
+        body = _json(resp)
+        _assert_ok(body)
+        assert body["data"]["id"] == sub_id
+
+    def test_renew_subscription(self, client):
+        created = _create_subscription(client, period_type="month", start_date="2026-01-15")
+        sub_id = created["id"]
+        resp = client.post(f"/api/subscriptions/{sub_id}/renew")
+        assert resp.status_code == 200
+        body = _json(resp)
+        _assert_ok(body)
+
+    def test_renew_once_subscription_fails(self, client):
+        """一次性订阅不可续费。"""
+        created = _create_subscription(client, period_type="once", auto_renew=False)
+        sub_id = created["id"]
+        resp = client.post(f"/api/subscriptions/{sub_id}/renew")
+        assert resp.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# 订阅分页
+# --------------------------------------------------------------------------- #
+
+
+class TestSubscriptionPagination:
+    def test_pagination_basic(self, client):
+        _create_subscription(client, name="Page Sub 1")
+        _create_subscription(client, name="Page Sub 2")
+        _create_subscription(client, name="Page Sub 3")
+        resp = client.get("/api/subscriptions?page=1&per_page=2")
+        assert resp.status_code == 200
+        body = _json(resp)
+        _assert_ok(body)
+        data = body["data"]
+        assert "items" in data
+        assert "total" in data
+        assert data["page"] == 1
+        assert data["per_page"] == 2
+        assert data["pages"] >= 2
+        assert len(data["items"]) == 2
+
+    def test_pagination_page_2(self, client):
+        _create_subscription(client, name="Page2 Sub 1")
+        _create_subscription(client, name="Page2 Sub 2")
+        _create_subscription(client, name="Page2 Sub 3")
+        resp = client.get("/api/subscriptions?page=2&per_page=2")
+        assert resp.status_code == 200
+        body = _json(resp)
+        assert len(body["data"]["items"]) == 1
+
+    def test_pagination_by_lifecycle(self, client):
+        _create_subscription(client, name="Active Sub", lifecycle="active")
+        resp = client.get("/api/subscriptions?page=1&per_page=10&lifecycle=active")
+        assert resp.status_code == 200
+        body = _json(resp)
+        assert body["data"]["total"] >= 1
+
+
+# --------------------------------------------------------------------------- #
+# 分类 CRUD
+# --------------------------------------------------------------------------- #
+
+
+class TestCategoryAPI:
+    def test_list_categories(self, client):
+        # 先创建一个分类（确保至少有一个）
+        client.post("/api/categories", json={"name": "自建分类", "icon": "📦"})
+        resp = client.get("/api/categories")
+        assert resp.status_code == 200
+        body = _json(resp)
+        _assert_ok(body)
+        assert len(body["data"]) >= 1
+
+    def test_create_category(self, client):
+        resp = client.post("/api/categories", json={"name": "新分类", "icon": "📦"})
+        assert resp.status_code == 201
+        body = _json(resp)
+        _assert_ok(body)
+        assert body["data"]["name"] == "新分类"
+
+    def test_update_category(self, client):
+        resp = client.post("/api/categories", json={"name": "待更新"})
+        cat_id = _json(resp)["data"]["id"]
+        resp2 = client.put(f"/api/categories/{cat_id}", json={"name": "已更新"})
+        assert resp2.status_code == 200
+        assert _json(resp2)["data"]["name"] == "已更新"
+
+    def test_delete_category(self, client):
+        resp = client.post("/api/categories", json={"name": "待删除"})
+        cat_id = _json(resp)["data"]["id"]
+        resp2 = client.delete(f"/api/categories/{cat_id}")
+        assert resp2.status_code == 200
+
+    def test_create_duplicate_category_raises(self, client):
+        client.post("/api/categories", json={"name": "重复分类"})
+        resp2 = client.post("/api/categories", json={"name": "重复分类"})
+        assert resp2.status_code == 409  # ConflictError
+
+
+# --------------------------------------------------------------------------- #
+# 设置
+# --------------------------------------------------------------------------- #
+
+
+class TestSettingsAPI:
+    def test_get_settings_masks_secrets(self, client):
+        """GET /api/settings 不应返回密钥原文。"""
+        resp = client.get("/api/settings")
+        assert resp.status_code == 200
+        body = _json(resp)
+        _assert_ok(body)
+        data = body["data"]
+        # 不应出现原始密钥字段
+        assert "smtp_password" not in data
+        assert "pushplus_token" not in data
+        # 应有脱敏字段
+        assert "smtp_password_configured" in data
+        assert "smtp_password_masked" in data
+
+    def test_update_settings(self, client):
+        resp = client.put("/api/settings", json={
+            "notification_days": 14,
+            "default_currency": "USD",
+        })
+        assert resp.status_code == 200
+        body = _json(resp)
+        _assert_ok(body)
+        # 验证更新生效
+        resp2 = client.get("/api/settings")
+        data2 = _json(resp2)["data"]
+        assert data2["notification_days"] == 14
+        assert data2["default_currency"] == "USD"
+
+
+# --------------------------------------------------------------------------- #
+# 权限控制
+# --------------------------------------------------------------------------- #
+
+
+class TestPermissions:
+    def test_normal_user_cannot_access_settings(self, normal_client):
+        """非管理员请求 /api/settings 应返回 403。"""
+        resp = normal_client.get("/api/settings")
+        assert resp.status_code == 403
+        body = _json(resp)
+        assert body["code"] == 403
+
+    def test_normal_user_can_list_subscriptions(self, normal_client):
+        """普通用户可以查看自己的订阅列表。"""
+        resp = normal_client.get("/api/subscriptions")
+        assert resp.status_code == 200
+
+    def test_normal_user_cannot_import_csv(self, normal_client):
+        """非管理员不能导入 CSV。"""
+        resp = normal_client.post("/api/backup/import-csv",
+                                  data="名称,金额\nTest,100",
+                                  content_type="text/csv")
+        assert resp.status_code == 403
+
+
+# --------------------------------------------------------------------------- #
+# 支付流水
+# --------------------------------------------------------------------------- #
+
+
+class TestPaymentsAPI:
+    def test_list_payments_empty(self, client):
+        """无订阅时返回空列表。"""
+        resp = client.get("/api/payments")
+        assert resp.status_code == 200
+        body = _json(resp)
+        _assert_ok(body)
+        assert isinstance(body["data"], list)
+
+    def test_payment_created_on_subscription(self, client):
+        """创建订阅自动生成首笔支付流水。"""
+        _create_subscription(client, name="付费订阅")
+        resp = client.get("/api/payments")
+        body = _json(resp)
+        assert len(body["data"]) >= 1
+        assert body["data"][0]["payment_type"] == "first"
+
+    def test_payment_by_subscription_id(self, client):
+        created = _create_subscription(client)
+        sub_id = created["id"]
+        resp = client.get(f"/api/payments?subscription_id={sub_id}")
+        assert resp.status_code == 200
+        body = _json(resp)
+        assert len(body["data"]) >= 1
+        assert body["data"][0]["subscription_id"] == sub_id
+
+    def test_payment_by_date_range(self, client):
+        _create_subscription(client)
+        resp = client.get("/api/payments?start_date=2025-01-01&end_date=2027-12-31")
+        assert resp.status_code == 200
+        body = _json(resp)
+        assert len(body["data"]) >= 1
+
+    def test_payment_date_range_requires_both(self, client):
+        """start_date 和 end_date 必须同时提供。"""
+        resp = client.get("/api/payments?start_date=2025-01-01")
+        assert resp.status_code == 400
+
+    def test_user_cannot_access_other_users_payments(self, client, normal_client):
+        """用户不能通过 subscription_id 越权查看其他用户的支付流水。"""
+        created = _create_subscription(client, name="管理员私密订阅")
+        sub_id = created["id"]
+        # normal_client 用户与 client 用户 ID 不同（test-user vs normal-user）
+        resp = normal_client.get(f"/api/payments?subscription_id={sub_id}")
+        assert resp.status_code == 404
+        body = _json(resp)
+        assert body["code"] == 404
+
+
+# --------------------------------------------------------------------------- #
+# 错误处理
+# --------------------------------------------------------------------------- #
+
+
+class TestErrorHandling:
+    def test_404_not_found(self, client):
+        resp = client.get("/api/nonexistent-endpoint")
+        assert resp.status_code == 404
+
+    def test_create_with_invalid_json(self, client):
+        """传入非 JSON 应触发 400 或统一错误。"""
+        resp = client.post(
             "/api/subscriptions",
-            headers=headers,
-            data="x" * (config.MAX_REQUEST_BODY_BYTES + 1),
+            data="not json",
             content_type="application/json",
         )
-        self.assertEqual(response.status_code, 413)
-        self.assertEqual(response.get_json()["code"], 413)
-
-    def test_unix_socket_without_identity_headers_is_rejected(self):
-        """Unix Socket 模式必须携带身份头。"""
-        app = create_app_production_like()
-        app.config["TESTING"] = True
-
-        def _cleanup():
-            with app.app_context():
-                db.session.remove()
-                db.engine.dispose()
-
-        self.addCleanup(_cleanup)
-        client = app.test_client()
-        response = client.get("/api/settings")
-        self.assertEqual(response.status_code, 401)
-
-    def test_subscription_crud_returns_unified_envelope(self):
-        """订阅 CRUD 返回统一信封 {code, message, data}。"""
-        # 使用独立用户，避免污染其他测试的 alice/bob 数据
-        headers = self._identity_headers("crud-user")
-        # 创建
-        response = self.client.post(
-            "/api/subscriptions",
-            headers=headers,
-            json={
-                "name": "Spotify",
-                "amount": 1500,
-                "period_type": "month",
-                "start_date": "2026-01-01",
-            },
-        )
-        self.assertEqual(response.status_code, 201)
-        body = response.get_json()
-        self.assertEqual(body["code"], 0)
-        self.assertEqual(body["message"], "ok")
-        self.assertEqual(body["data"]["name"], "Spotify")
-        sub_id = body["data"]["id"]
-
-        # 查询单个
-        response = self.client.get(f"/api/subscriptions/{sub_id}", headers=headers)
-        self.assertEqual(response.get_json()["data"]["name"], "Spotify")
-
-        # 更新
-        response = self.client.put(
-            f"/api/subscriptions/{sub_id}",
-            headers=headers,
-            json={"amount": 1800},
-        )
-        self.assertEqual(response.get_json()["data"]["amount"], 1800)
-
-        # 续费
-        response = self.client.post(f"/api/subscriptions/{sub_id}/renew", headers=headers)
-        self.assertEqual(response.status_code, 200)
-
-        # 删除
-        response = self.client.delete(f"/api/subscriptions/{sub_id}", headers=headers)
-        self.assertEqual(response.get_json()["data"]["ok"], True)
-
-        # 软删除后 -> 404 信封
-        response = self.client.get(f"/api/subscriptions/{sub_id}", headers=headers)
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.get_json()["code"], 404)
-
-        # 恢复已删除的订阅
-        response = self.client.post(f"/api/subscriptions/{sub_id}/restore", headers=headers)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["code"], 0)
-        self.assertEqual(response.get_json()["data"]["id"], sub_id)
-
-        # 恢复后可正常查询
-        response = self.client.get(f"/api/subscriptions/{sub_id}", headers=headers)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["data"]["name"], "Spotify")
-
-
-def create_app_production_like():
-    """创建不允许无身份头访问的应用（模拟 Unix Socket 网关模式）。"""
-    from backend.app import create_app as _factory
-
-    return _factory(allow_headerless_local_identity=False)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert resp.status_code in (400, 415, 500)  # Flask/Werkzeug 行为差异

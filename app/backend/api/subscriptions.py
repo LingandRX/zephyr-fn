@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from flask import Blueprint, g, request
 
-from ..domain.exceptions import NotFoundError
+from ..domain.exceptions import NotFoundError, ValidationError
 from ..http.response import ok
 from ..services import subscriptions
 
@@ -13,6 +13,32 @@ bp = Blueprint("api_subscriptions", __name__, url_prefix="/api")
 
 @bp.route("/subscriptions", methods=["GET"])
 def list_subscriptions():
+    # 支持分页：如果有 page 参数，返回分页结果；否则返回全量列表（向后兼容）
+    if "page" in request.args:
+        try:
+            page = max(1, int(request.args.get("page", "1")))
+        except (ValueError, TypeError):
+            raise ValidationError("page 必须是正整数")
+
+        per_page_raw = request.args.get("per_page", "20")
+        try:
+            per_page = max(1, min(100, int(per_page_raw)))
+        except (ValueError, TypeError):
+            raise ValidationError("per_page 必须是 1-100 的整数")
+
+        lifecycle = request.args.get("lifecycle") or None
+        category_id = request.args.get("category_id") or None
+
+        result = subscriptions.list_subscriptions_paginated(
+            user_id=g.identity.user_id,
+            page=page,
+            per_page=per_page,
+            lifecycle=lifecycle,
+            category_id=category_id,
+        )
+        return ok(result)
+
+    # 向后兼容：无 page 参数时返回全量列表
     subs = subscriptions.list_subscriptions(g.identity.user_id)
     return ok([subscriptions.with_status(s) for s in subs])
 

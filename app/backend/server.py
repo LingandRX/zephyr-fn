@@ -31,6 +31,7 @@ import argparse
 import logging
 import logging.handlers
 import os
+import signal
 import sys
 import time
 from pathlib import Path
@@ -204,6 +205,7 @@ def _run_unix_socket(app, sock_path: str) -> None:
     except KeyboardInterrupt:
         log.info("退出")
     finally:
+        scheduler.stop_scheduler()
         server.server_close()
         if os.path.exists(sock_path):
             try:  # noqa: SIM105
@@ -218,6 +220,10 @@ def _run_unix_socket(app, sock_path: str) -> None:
 
 
 def main() -> None:
+    # 注册 SIGTERM 优雅停机（仅 Unix；Windows 无 SIGTERM）
+    if sys.platform != "win32":
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+
     parser = argparse.ArgumentParser(description="订阅管理 HTTP 服务")
     parser.add_argument("--uds", help="Unix domain socket 路径（网关模式）")
     parser.add_argument("--http", type=int, help="TCP 端口（本地调试）")
@@ -248,13 +254,16 @@ def main() -> None:
     scheduler.start_scheduler(app)
     log.info("定时任务已启动")
 
-    if is_gateway:
-        sock_path = args.uds or str(Path(os.environ["TRIM_APPDEST"]) / "app.sock")
-        _run_unix_socket(app, sock_path)
-    else:
-        port = args.http or 8000
-        log.info("监听 http://127.0.0.1:%d", port)
-        app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False)
+    try:
+        if is_gateway:
+            sock_path = args.uds or str(Path(os.environ["TRIM_APPDEST"]) / "app.sock")
+            _run_unix_socket(app, sock_path)
+        else:
+            port = args.http or 8000
+            log.info("监听 http://127.0.0.1:%d", port)
+            app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False)
+    finally:
+        scheduler.stop_scheduler()
 
 
 if __name__ == "__main__":

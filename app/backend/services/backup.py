@@ -14,9 +14,8 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 from ..domain import domain
-from ..extensions import db
-from ..models import Category, Subscription
 from .. import repositories
+from ..schemas.category import normalize_sort_order as _safe_sort_order
 
 MAX_IMPORT_ROWS = 10_000
 MAX_NAME_LENGTH = 200
@@ -57,35 +56,6 @@ _LIFECYCLE_ALIASES = {
         if key in domain.LIFECYCLES
     },
 }
-
-_SUBSCRIPTION_COLUMNS = (
-    "id",
-    "user_id",
-    "name",
-    "amount",
-    "currency",
-    "actual_amount",
-    "category_id",
-    "notes",
-    "period_type",
-    "custom_period_value",
-    "custom_period_unit",
-    "auto_renew",
-    "sharing_role",
-    "sharing_count",
-    "start_date",
-    "first_payment_date",
-    "next_due_date",
-    "lifecycle",
-    "renewal_policy",
-    "billing_status",
-    "grace_period_ends_at",
-    "deleted_at",
-    "sync_version",
-    "created_at",
-    "updated_at",
-)
-
 
 def _period_label(period_type: str) -> str:
     return domain.PERIOD_LABELS.get(period_type, period_type)
@@ -492,22 +462,6 @@ def _normalize_imported_sub(raw: dict, user_id: str, category_id: str | None = N
 # --------------------------------------------------------------------------- #
 
 
-def _insert_category_conn(session: Any, category: dict) -> None:
-    session.add(
-        Category(
-            id=category["id"],
-            user_id=category["user_id"],
-            name=category["name"],
-            icon=category.get("icon"),
-            sort_order=category.get("sort_order", 0),
-        )
-    )
-
-
-def _insert_subscription_conn(session: Any, sub: dict) -> None:
-    session.add(Subscription(**{column: sub.get(column) for column in _SUBSCRIPTION_COLUMNS}))
-
-
 def _load_existing_subscriptions(user_id: str) -> tuple[dict[str, dict], set[str]]:
     target_user = _require_user_id(user_id)
     rows = repositories.get_all_subscriptions_raw()
@@ -623,14 +577,6 @@ def _plan_categories(
     return source_to_target, name_to_target, pending, conflicts
 
 
-def _safe_sort_order(value: Any) -> int:
-    try:
-        parsed = _parse_nonnegative_int(value, "分类排序", default=0)
-        return parsed if parsed is not None else 0
-    except ValueError:
-        return 0
-
-
 def _resolve_category_id(
     source_id: Any, source_to_target: dict[str, str], target_user: str
 ) -> str | None:
@@ -708,18 +654,7 @@ def _commit_import(
     categories: list[dict], subscriptions: list[dict]
 ) -> tuple[bool, str | None, bool]:
     """在单个事务中写入导入数据；失败整体回滚。"""
-    if not categories and not subscriptions:
-        return True, None, True
-    try:
-        for category in categories:
-            _insert_category_conn(db.session, category)
-        for sub in subscriptions:
-            _insert_subscription_conn(db.session, sub)
-        db.session.commit()
-        return True, None, True
-    except Exception as exc:  # noqa: BLE001
-        db.session.rollback()
-        return False, str(exc), True
+    return repositories.batch_import(categories, subscriptions)
 
 
 def _import_result(

@@ -1,77 +1,90 @@
-"""pytest 公共 fixtures。
+"""共享测试 Fixtures。
 
-提供：
-- app       : 测试用 Flask 应用实例（内存 SQLite，自动建表/拆表）
-- client    : Flask 测试客户端
-- db_session: 带事务回滚的数据库会话（每个测试自动隔离）
+使用 TestingConfig（内存 SQLite）创建隔离的 Flask 应用，
+每个测试函数在独立的 app context + 数据库事务中运行。
 """
 
 from __future__ import annotations
 
+import os
 import sys
-from pathlib import Path
+
+# 将 app/ 加入 PYTHONPATH，保证 backend 包可按包路径导入
+_APP_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "app")
+sys.path.insert(0, os.path.abspath(_APP_DIR))
 
 import pytest
 
-# 让 backend 包可导入（backend 的父目录 app/ 加入 sys.path）
-_app_dir = str(Path(__file__).resolve().parents[1] / "app")
-if _app_dir not in sys.path:
-    sys.path.insert(0, _app_dir)
-
-from backend.app import create_app  # noqa: E402
-from backend.extensions import db as _db  # noqa: E402
+from backend.app import create_app
+from backend.config import TestingConfig
+from backend.extensions import db as _db
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def app():
-    """创建测试用 Flask 应用（整个测试会话共享一个实例）。"""
-    application = create_app(
-        config_object=type(
-            "TestConfig",
-            (),
-            {
-                "TESTING": True,
-                "DEBUG": False,
-                "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
-                "SQLALCHEMY_TRACK_MODIFICATIONS": False,
-                "ALLOW_HEADERLESS_LOCAL": True,
-                "SECRET_KEY": "test-secret-key",
-            },
-        )
-    )
-    with application.app_context():
-        _db.create_all()
-        yield application
-        _db.session.remove()
-        _db.drop_all()
+    """创建测试用 Flask 应用，每次测试使用全新的内存数据库。"""
+    flask_app = create_app(TestingConfig)
+    with flask_app.app_context():
+        yield flask_app
 
 
 @pytest.fixture()
 def client(app):
-    """Flask 测试客户端（每个测试独立）。"""
-    return app.test_client()
+    """Flask test client，自动注入管理员身份头。"""
+
+    class _AdminClient:
+        """包装 test_client，自动注入管理员身份头。"""
+
+        def __init__(self, flask_client):
+            self._client = flask_client
+
+        def get(self, url, **kwargs):
+            headers = kwargs.pop("headers", {})
+            headers.setdefault("X-Trim-Userid", "test-user")
+            headers.setdefault("X-Trim-Isadmin", "true")
+            return self._client.get(url, headers=headers, **kwargs)
+
+        def post(self, url, **kwargs):
+            headers = kwargs.pop("headers", {})
+            headers.setdefault("X-Trim-Userid", "test-user")
+            headers.setdefault("X-Trim-Isadmin", "true")
+            return self._client.post(url, headers=headers, **kwargs)
+
+        def put(self, url, **kwargs):
+            headers = kwargs.pop("headers", {})
+            headers.setdefault("X-Trim-Userid", "test-user")
+            headers.setdefault("X-Trim-Isadmin", "true")
+            return self._client.put(url, headers=headers, **kwargs)
+
+        def delete(self, url, **kwargs):
+            headers = kwargs.pop("headers", {})
+            headers.setdefault("X-Trim-Userid", "test-user")
+            headers.setdefault("X-Trim-Isadmin", "true")
+            return self._client.delete(url, headers=headers, **kwargs)
+
+    with app.test_client() as c:
+        yield _AdminClient(c)
 
 
 @pytest.fixture()
-def db_session(app):
-    """带事务回滚的数据库会话（每个测试自动隔离，不污染其他测试）。
+def normal_client(app):
+    """非管理员 test client（X-Trim-Isadmin: false）。"""
 
-    用法：
-        def test_something(db_session):
-            db_session.add(MyModel(...))
-            db_session.commit()
-            # 测试结束后自动回滚
-    """
-    with app.app_context():
-        connection = _db.engine.connect()
-        transaction = connection.begin()
+    class _NormalClient:
+        def __init__(self, flask_client):
+            self._client = flask_client
 
-        options = dict(bind=connection, binds={})
-        session = _db.create_scoped_session(options=options)
-        _db.session = session
+        def get(self, url, **kwargs):
+            headers = kwargs.pop("headers", {})
+            headers.setdefault("X-Trim-Userid", "normal-user")
+            headers.setdefault("X-Trim-Isadmin", "false")
+            return self._client.get(url, headers=headers, **kwargs)
 
-        yield session
+        def post(self, url, **kwargs):
+            headers = kwargs.pop("headers", {})
+            headers.setdefault("X-Trim-Userid", "normal-user")
+            headers.setdefault("X-Trim-Isadmin", "false")
+            return self._client.post(url, headers=headers, **kwargs)
 
-        transaction.rollback()
-        connection.close()
-        session.remove()
+    with app.test_client() as c:
+        yield _NormalClient(c)

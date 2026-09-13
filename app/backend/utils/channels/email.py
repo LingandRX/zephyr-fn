@@ -83,7 +83,7 @@ def send_email(
     msg["From"] = smtp_from
     msg["To"] = to_address
 
-    logger.info(f"准备发送邮件: from={smtp_from}, to={to_address}, host={smtp_host}:{smtp_port}")
+    logger.info("准备发送邮件: from=%s, to=%s, host=%s:%s", smtp_from, to_address, smtp_host, smtp_port)
 
     # 根据端口选择连接方式
     if smtp_port == 465:
@@ -96,14 +96,14 @@ def send_email(
         if smtp_user:
             server.login(smtp_user, smtp_pass or "")
         server.sendmail(smtp_from, [to_address], msg.as_string())
-        logger.info(f"邮件发送成功: to={to_address}")
+        logger.info("邮件发送成功: to=%s", to_address)
     except smtplib.SMTPException as e:
-        logger.error(f"邮件发送失败: to={to_address}, error={e}")
+        logger.error("邮件发送失败: to=%s, error=%s", to_address, e)
         raise
     finally:
         try:
             server.quit()
         except smtplib.SMTPException as e:
-            logger.warning(f"关闭 SMTP 连接时出错: {e}")
+            logger.warning("关闭 SMTP 连接时出错: %s", e)
         except Exception as e:
-            logger.warning(f"关闭 SMTP 连接时发生未知错误: {e}")
+            logger.warning("关闭 SMTP 连接时发生未知错误: %s", e)
