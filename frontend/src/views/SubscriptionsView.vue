@@ -1078,7 +1078,7 @@ onMounted(loadAll);
   .mobile-only { display: flex !important; }
 
   /* 给右下角浮动「+」按钮留出空间：滚到底时列表末尾不被遮挡 */
-  .page { padding-bottom: 92px; }
+  .page { padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
 
   .stats-grid {
     margin-bottom: 14px;

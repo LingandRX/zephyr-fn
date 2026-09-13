@@ -290,7 +290,7 @@ onMounted(loadNotice);
   justify-content: center;
   position: fixed;
   right: clamp(16px, 4vw, 24px);
-  bottom: clamp(80px, 12vw, 100px);
+  bottom: calc(clamp(80px, 12vw, 100px) + env(safe-area-inset-bottom, 0px));
   width: 56px;
   height: 56px;
   border: none;
