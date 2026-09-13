@@ -8,12 +8,37 @@ Create Date: 2026-09-12
 from __future__ import annotations
 
 from alembic import op
+from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision = "0004_add_payments_table"
 down_revision = "0003_add_notification_time"
 branch_labels = None
 depends_on = None
+
+# 本迁移与旧库引导（repositories/bootstrap.py 的 v13）内容重叠：
+# 存量库会先经 bootstrap 就地补迁到 v13（此时 alembic_version 仍停在 0003），
+# 随后 Alembic 再执行本迁移。因此这里必须逐列守卫，
+# 否则 SQLite 会抛 "duplicate column name" 导致应用启动失败。
+_SUBSCRIPTION_COLUMNS = (
+    ("current_period_start", "TEXT"),
+    ("current_period_end", "TEXT"),
+    ("next_billing_date", "TEXT"),
+    ("last_payment_date", "TEXT"),
+    ("renewal_confirmed", "INTEGER NOT NULL DEFAULT 0"),
+    ("cancelled_at", "TEXT"),
+    ("paused_at", "TEXT"),
+)
+
+
+def _column_exists(table: str, column: str) -> bool:
+    """检查 SQLite 表中是否存在指定列。"""
+    from alembic import context
+
+    bind = context.get_bind()
+    result = bind.execute(text(f"PRAGMA table_info({table})"))
+    existing = {row[1] for row in result.fetchall()}
+    return column in existing
 
 
 def upgrade() -> None:
@@ -51,43 +76,11 @@ def upgrade() -> None:
     """)
 
     # 3. 修改订阅表结构 - 添加新字段
-    # 注意：SQLite 不支持 ALTER TABLE ADD COLUMN IF NOT EXISTS
-    # 我们需要先检查字段是否存在，如果不存在则添加
-
-    # 添加 current_period_start 字段
-    op.execute("""
-        ALTER TABLE subscriptions ADD COLUMN current_period_start TEXT
-    """)
-
-    # 添加 current_period_end 字段
-    op.execute("""
-        ALTER TABLE subscriptions ADD COLUMN current_period_end TEXT
-    """)
-
-    # 添加 next_billing_date 字段
-    op.execute("""
-        ALTER TABLE subscriptions ADD COLUMN next_billing_date TEXT
-    """)
-
-    # 添加 last_payment_date 字段
-    op.execute("""
-        ALTER TABLE subscriptions ADD COLUMN last_payment_date TEXT
-    """)
-
-    # 添加 renewal_confirmed 字段
-    op.execute("""
-        ALTER TABLE subscriptions ADD COLUMN renewal_confirmed INTEGER NOT NULL DEFAULT 0
-    """)
-
-    # 添加 cancelled_at 字段
-    op.execute("""
-        ALTER TABLE subscriptions ADD COLUMN cancelled_at TEXT
-    """)
-
-    # 添加 paused_at 字段
-    op.execute("""
-        ALTER TABLE subscriptions ADD COLUMN paused_at TEXT
-    """)
+    # 注意：SQLite 不支持 ALTER TABLE ADD COLUMN IF NOT EXISTS，
+    # 因此先查 PRAGMA table_info 判断列是否已存在，已存在则跳过（幂等）。
+    for column, definition in _SUBSCRIPTION_COLUMNS:
+        if not _column_exists("subscriptions", column):
+            op.execute(f"ALTER TABLE subscriptions ADD COLUMN {column} {definition}")
 
     # 4. 创建新的索引
     op.execute("""
