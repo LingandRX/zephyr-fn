@@ -122,14 +122,15 @@ async function loadMonth() {
 
 function makeCell(dateStr, day, other, todayStr, byDate) {
   const dayEvents = byDate[dateStr] || [];
+  const showCountBadge = dayEvents.length > 2;
   return {
     day,
     dateStr,
     other,
     today: dateStr === todayStr,
     events: dayEvents,
-    visibleEvents: dayEvents.slice(0, 2),
-    more: Math.max(0, dayEvents.length - 2),
+    visibleEvents: showCountBadge ? [] : dayEvents.slice(0, 2),
+    more: showCountBadge ? dayEvents.length : Math.max(0, dayEvents.length - 2),
   };
 }
 
@@ -379,7 +380,7 @@ onActivated(loadMonth);
 
             <!-- 桌面端/宽屏：事件胶囊 -->
             <div class="events-wrap desktop-events">
-              <template v-if="c.visibleEvents">
+              <template v-if="c.visibleEvents.length">
                 <div
                   v-for="(e, j) in c.visibleEvents"
                   :key="j"
@@ -392,8 +393,11 @@ onActivated(loadMonth);
                   <span class="event-type-pill">{{ getEventMeta(e).shortLabel }}</span>
                   <span class="event-amt">{{ e.amount_formatted }}</span>
                 </div>
-                <div v-if="c.more" class="cal-event more-badge">+{{ c.more }} 项</div>
+                <div v-if="c.more" class="cal-event more-badge" :title="`还有 ${c.more} 项事件`">+{{ c.more }}</div>
               </template>
+              <div v-else-if="c.events.length > 2" class="cal-event more-badge is-count" :title="`还有 ${c.events.length} 项事件`">
+                {{ c.events.length }}
+              </div>
             </div>
 
             <!-- 移动端：圆点 -->
@@ -778,8 +782,10 @@ onActivated(loadMonth);
 .cal-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-rows: auto repeat(var(--cal-rows, 5), minmax(96px, 1fr));
   gap: 4px;
   width: 100%;
+  min-height: 480px;
 }
 .cal-dow {
   text-align: center;
@@ -793,7 +799,8 @@ onActivated(loadMonth);
 /* 单元格：无边框，靠圆角底色区分状态 */
 .cal-day {
   min-width: 0;
-  height: 98px;
+  min-height: 96px;
+  height: auto;
   padding: 6px;
   border-radius: 12px;
   background: transparent;
@@ -885,16 +892,20 @@ onActivated(loadMonth);
   flex-direction: column;
   gap: 3px;
   overflow: hidden;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 108px;
 }
 .cal-event {
   font-size: 11px;
   border-radius: 7px;
   padding: 3px 6px;
-  display: flex;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 5px;
   min-width: 0;
+  max-width: 100%;
   line-height: 1.25;
   background: var(--ios-fill);
   color: var(--text);
@@ -925,7 +936,6 @@ onActivated(loadMonth);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1 1 0%;
   min-width: 0;
   font-weight: 600;
 }
@@ -936,6 +946,7 @@ onActivated(loadMonth);
   border-radius: 4px;
   font-weight: 600;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 .cal-event.new .event-type-pill {
   color: var(--ios-blue);
@@ -954,6 +965,7 @@ onActivated(loadMonth);
   color: var(--ios-gray);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .more-badge {
   justify-content: center;
@@ -961,6 +973,36 @@ onActivated(loadMonth);
   font-size: 10px;
   background: transparent;
   border: 1px dashed var(--ios-separator);
+  white-space: nowrap;
+}
+.more-badge.is-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 122, 255, 0.18);
+  background: rgba(0, 122, 255, 0.08);
+  color: var(--ios-blue);
+  font-weight: 600;
+  font-size: 8px;
+  letter-spacing: 0.02em;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+  margin-inline: auto;
+}
+
+@media (max-width: 980px) {
+  .event-type-pill,
+  .event-amt {
+    display: none;
+  }
+
+  .cal-event {
+    grid-template-columns: 16px minmax(0, 1fr);
+  }
 }
 
 /* 移动端圆点（≤768px 才显示） */
@@ -1286,13 +1328,13 @@ onActivated(loadMonth);
   .cal-grid {
     flex: 1 1 auto;
     min-height: 0;
-    /* 首行周标题 auto，其余 5/6 行等分剩余高度（行数由 --cal-rows 决定） */
-    grid-template-rows: auto repeat(var(--cal-rows, 5), minmax(0, 1fr));
+    /* 首行周标题 auto，其余 5/6 行至少保留 96px，保证当前窗口下能完整放置两条事件摘要 */
+    grid-template-rows: auto repeat(var(--cal-rows, 5), minmax(96px, 1fr));
     align-content: stretch;
   }
   .cal-day {
     height: auto;
-    min-height: 0;
+    min-height: 96px;
   }
   .day-details-card {
     display: block;
