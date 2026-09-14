@@ -17,7 +17,6 @@ import pytest
 
 from backend.app import create_app
 from backend.config import TestingConfig
-from backend.extensions import db as _db
 
 
 @pytest.fixture()

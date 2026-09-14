@@ -106,16 +106,15 @@ def _to_default_currency(amount_cny: int, default_currency: str, settings: dict)
     return amount_cny
 
 
-def _add_months_clamped(d: date, months: int) -> date:
-    return domain.add_months(d, months)
-
-
 def _month_end(d: date) -> date:
     return domain.add_months(d.replace(day=1), 1) - timedelta(days=1)
 
 
 def _fixed_cycle_days(sub: dict) -> int | None:
-    """返回可用整数天数直接计算的周期，避免每日订阅逐日迭代。"""
+    """返回可用整数天数直接计算的周期，避免每日订阅逐日迭代。
+
+    仅供已被 deprecated 的 ``_count_cycles_in_range`` 使用。
+    """
     if sub.get("period_type") != "custom":
         return None
     try:
@@ -130,11 +129,18 @@ def _fixed_cycle_days(sub: dict) -> int | None:
     return None
 
 
+# deprecated（保留待清理）：口径已被「按支付流水求和」取代——见下方
+# calculate_statistics 对 payments 的聚合。当前无生产调用，仅被
+# tests/test_regressions.py 用于守住「老日周期订阅不被迭代保护算成 0」
+# 的回归保护，请勿在新代码中引用。
 def _count_cycles_in_range(sub: dict, range_start: date, range_end: date) -> int:
     """统计订阅在 [range_start, range_end] 区间内到期的周期数。
 
     对日/周自定义周期使用整数运算，避免订阅历史较长时触发循环保护导致统计为 0；
     月/季度/年继续使用日期推进逻辑，以保持月末钳制行为兼容。
+
+    .. deprecated::
+        已被支付流水求和口径取代，无生产调用，仅供回归测试使用。
     """
     if sub["period_type"] == "once" or range_start > range_end:
         return 0

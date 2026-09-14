@@ -6,7 +6,6 @@ storage/repositories 的原子 UPSERT 实现；本模块保留业务算法与兼
 
 from __future__ import annotations
 
-import logging
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -18,14 +17,6 @@ claim_notification = repositories.claim_notification
 complete_notification = repositories.complete_notification
 has_channel_notified_today = repositories.has_channel_notified_today
 log_notification = repositories.log_notification
-
-LOGGER_NAME = "subscription"
-NOTIFICATION_CLAIM_TTL_SECONDS = 6 * 60 * 60
-
-
-def _logger() -> logging.Logger:
-    return logging.getLogger(LOGGER_NAME)
-
 
 def parse_clock(value: Any) -> int | None:
     """把 HH:MM 转成当天分钟数；非法配置返回 None。"""
@@ -166,7 +157,3 @@ def get_upcoming_notifications(user_id: str) -> list[dict]:
             )
     result.sort(key=lambda item: item["days_until"])
     return result
-
-
-# 兼容别名
-finish_notification = complete_notification

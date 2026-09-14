@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from typing import Any
 
 from sqlalchemy import text
@@ -566,10 +565,3 @@ def _migrate_payment_data(conn: Any) -> None:
         SET paused_at = updated_at
         WHERE lifecycle = 'paused' AND paused_at IS NULL
     """))
-
-
-# --------------------------------------------------------------------------- #
-# 正则工具（分类名校验在 services/categories 中使用同一份实现）
-# --------------------------------------------------------------------------- #
-
-_CATEGORY_ILLEGAL_RE = re.compile(r'[<>"\'&]')

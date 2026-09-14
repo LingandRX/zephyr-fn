@@ -45,6 +45,22 @@ def get_metadata():
     return db.metadata
 
 
+# 仅存在于数据库、已无 ORM 模型的表：显式排除，
+# 否则 autogenerate 会依据 metadata 差异生成 DROP TABLE 迁移。
+_IGNORED_TABLES = frozenset({"email_logs"})
+
+
+def include_object(object_, name, type_, reflected, compare_to):
+    """把已无 ORM 模型的存量表（及其列）排除在 autogenerate 比对之外。"""
+    if type_ == "table" and name in _IGNORED_TABLES:
+        return False
+    if type_ == "column":
+        table = getattr(object_, "table", None)
+        if table is not None and table.name in _IGNORED_TABLES:
+            return False
+    return True
+
+
 config.set_main_option("sqlalchemy.url", get_engine_url())
 target_db = current_app.extensions["migrate"].db
 
@@ -55,6 +71,7 @@ def run_migrations_offline() -> None:
     context.configure(
         url=url,
         target_metadata=get_metadata(),
+        include_object=include_object,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -77,6 +94,7 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=get_metadata(),
+            include_object=include_object,
             process_revision_directives=process_revision_directives,
             **current_app.extensions["migrate"].configure_args,
         )

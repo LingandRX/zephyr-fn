@@ -25,7 +25,6 @@ MAX_ID_LENGTH = 128
 MAX_TIMESTAMP_LENGTH = 80
 
 _CURRENCIES = {"CNY", "USD", "HKD"}
-_BILLING_STATUSES = {"normal", "paid", "overdue"}
 
 _PERIOD_ALIASES = {
     **{key: key for key in domain.PERIOD_TYPES},

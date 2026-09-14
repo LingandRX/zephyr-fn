@@ -6,7 +6,7 @@
 import templateData from "./subscriptionTemplates.json";
 
 // 模板分类
-export const TEMPLATE_CATEGORIES = templateData.categories;
+const TEMPLATE_CATEGORIES = templateData.categories;
 
 // 订阅模板列表
 export const subscriptionTemplates = templateData.templates;

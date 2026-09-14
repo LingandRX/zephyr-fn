@@ -82,11 +82,3 @@ class UnauthorizedError(ApiError):
     status_code = 401
     code = 401
     message = "未认证"
-
-
-class PayloadTooLargeError(ApiError):
-    """请求体过大（413）。"""
-
-    status_code = 413
-    code = 413
-    message = "请求体过大"

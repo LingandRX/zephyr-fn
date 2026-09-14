@@ -1,4 +1,4 @@
-"""通知日志仓储：通知幂等领取、邮件日志、通知结果记录。
+"""通知日志仓储：通知幂等领取、通知结果记录。
 
 领取（claim）使用 SQLite UPSERT 实现原子性；
 完成（complete）通过 UPDATE 状态转移或回退写入日志。
@@ -12,7 +12,7 @@ from sqlalchemy import select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from ..extensions import db
-from ..models import EmailLog, NotificationLog
+from ..models import NotificationLog
 from ._common import new_id, now_utc
 
 
@@ -58,21 +58,6 @@ def log_notification(
         )
     )
     db.session.execute(stmt)
-    db.session.commit()
-
-
-def log_email(to_address: str, subject: str, status: str, error_message: str | None = None) -> None:
-    db.session.add(
-        EmailLog(
-            id=new_id(),
-            to_address=to_address,
-            subject=subject,
-            status=status,
-            error_message=error_message,
-            sent_at=now_utc() if status == "sent" else None,
-            created_at=now_utc(),
-        )
-    )
     db.session.commit()
 
 

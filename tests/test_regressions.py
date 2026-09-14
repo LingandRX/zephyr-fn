@@ -30,6 +30,8 @@ class ServicesRegressionTests(unittest.TestCase):
         }
 
     def test_old_daily_subscription_is_counted_without_iteration_guard(self):
+        # 覆盖已 deprecated 的 _count_cycles_in_range（口径被支付流水求和取代）；
+        # 本断言是该遗留实现的唯一回归保护，清理死代码时请一并评估。
         sub = self._daily_sub()
         self.assertEqual(
             services._count_cycles_in_range(sub, date(2026, 8, 1), date(2026, 8, 31)),

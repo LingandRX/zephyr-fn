@@ -1,9 +1,8 @@
 """订阅参数校验 Schema。
 
-覆盖三种场景：
-- validate_create  : 创建（必填字段 + 严格校验 + 默认值）
-- validate_update  : 更新（仅归一化请求中出现的字段，允许部分更新）
-- validate_raw     : 外部原始行（导入/合并），字段完整或带默认值
+覆盖两种场景：
+- validate_create : 创建（必填字段 + 严格校验 + 默认值）
+- validate_update : 更新（仅归一化请求中出现的字段，允许部分更新）
 
 跨字段业务规则（续费策略解析、下次到期日重算、custom 周期互斥）在
 services/subscriptions 中处理。所有校验失败统一抛 ValidationError。
@@ -162,21 +161,6 @@ class SubscriptionSchema:
             if field in requested:
                 normalized[field] = _as_validation_error(_FIELD_NORMALIZERS[field], payload[field])
         return cls._build(payload, normalized, only_requested=requested)
-
-    @classmethod
-    def validate_raw(cls, sub: Any, user_id: str | None = None) -> dict:
-        """外部原始行（JSON/CSV/DB 备份导入）校验归一化。"""
-        if not isinstance(sub, Mapping):
-            raise ValidationError("订阅数据必须是对象")
-        payload = dict(sub)
-        reject_explicit_blank(payload, _REQUIRED_FIELDS)
-        try:
-            normalized = domain.normalize_subscription_data(payload, defaults=_CREATE_DEFAULTS)
-        except ValueError as exc:
-            raise ValidationError(str(exc)) from exc
-        if "user_id" not in payload or not str(payload.get("user_id") or "").strip():
-            payload["user_id"] = user_id or "local"
-        return cls._build(payload, normalized)
 
     @staticmethod
     def _build(

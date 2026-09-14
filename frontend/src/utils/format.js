@@ -1,6 +1,6 @@
 /** 展示格式化工具 */
 
-export const CURRENCY_SYMBOL = { CNY: "¥", USD: "$", HKD: "HK$" };
+const CURRENCY_SYMBOL = { CNY: "¥", USD: "$", HKD: "HK$" };
 export const PERIOD_LABEL = {
   month: "月付",
   quarter: "季付",

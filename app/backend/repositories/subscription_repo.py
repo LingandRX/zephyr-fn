@@ -1,10 +1,8 @@
-"""订阅仓储：订阅实体的 CRUD、软删除、恢复、续费、去重、备份等操作。"""
+"""订阅仓储：订阅实体的 CRUD、软删除、恢复、续费、去重等操作。"""
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Mapping
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
@@ -171,18 +169,6 @@ def replace_subscription_raw(normalized: Mapping[str, Any]) -> bool:
         db.session.add(Subscription(**candidate))
     db.session.commit()
     return True
-
-
-def export_db_copy(target_path: Path) -> None:
-    """在线备份数据库文件副本（sqlite3 backup API，锁安全）。"""
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    source = db.engine.raw_connection()
-    dest = sqlite3.connect(str(target_path))
-    try:
-        source.backup(dest)
-    finally:
-        dest.close()
-        source.close()
 
 
 def get_subscriptions_paginated(

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from .app_settings import AppSettings
 from .category import Category
-from .email_log import EmailLog
 from .notification_log import NotificationLog
 from .payment import Payment
 from .seeded_user import SeededUser
@@ -17,7 +16,6 @@ from .subscription import Subscription
 __all__ = [
     "AppSettings",
     "Category",
-    "EmailLog",
     "NotificationLog",
     "Payment",
     "SeededUser",

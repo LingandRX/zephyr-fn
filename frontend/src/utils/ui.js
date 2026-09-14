@@ -39,12 +39,6 @@ export function setTheme(theme) {
   applyTheme(theme);
 }
 
-export function toggleTheme() {
-  const themes = ["dark", "light", "system"];
-  const idx = themes.indexOf(ui.theme);
-  setTheme(themes[(idx + 1) % themes.length]);
-}
-
 // 初始化主题
 applyTheme(loadTheme());
 

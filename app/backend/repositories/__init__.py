@@ -21,9 +21,7 @@ from __future__ import annotations
 
 from ._common import (  # noqa: F401
     SETTINGS_FIELDS,
-    SUBSCRIPTION_COLUMNS,
     SUBSCRIPTION_FIELDS,
-    _SECRET_MASK_EXACT,
     _SECRET_SETTING_FIELDS,
     _to_int,
     is_secret_placeholder,
@@ -37,7 +35,6 @@ from ._common import (  # noqa: F401
 
 from .subscription_repo import (  # noqa: F401
     delete_subscription,
-    export_db_copy,
     get_all_subscriptions,
     get_all_subscriptions_raw,
     get_subscription_by_id,
@@ -83,7 +80,6 @@ from .notification_repo import (  # noqa: F401
     claim_notification,
     complete_notification,
     has_channel_notified_today,
-    log_email,
     log_notification,
 )
 
@@ -105,7 +101,6 @@ from .payment_repo import (  # noqa: F401
     get_all_payments,
     get_payments_by_date_range,
     get_payments_by_subscription,
-    insert_payment,
 )
 
 # --------------------------------------------------------------------------- #

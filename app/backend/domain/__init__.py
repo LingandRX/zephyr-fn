@@ -12,7 +12,6 @@ from .exceptions import (
     ConflictError,
     ForbiddenError,
     NotFoundError,
-    PayloadTooLargeError,
     UnauthorizedError,
     ValidationError,
 )
@@ -22,7 +21,6 @@ __all__ = [
     "ConflictError",
     "ForbiddenError",
     "NotFoundError",
-    "PayloadTooLargeError",
     "UnauthorizedError",
     "ValidationError",
 ]

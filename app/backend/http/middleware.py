@@ -34,7 +34,6 @@ class RequestIdentity:
     user_id: str
     is_admin: bool
     username: str | None = None
-    is_local: bool = False
 
 
 # 管理员专属路径：前缀匹配（含子路径）或精确匹配
@@ -49,8 +48,6 @@ _ADMIN_EXACT = frozenset(
         "/api/notifications/test-pushplus",
     }
 )
-
-_SECRET_SETTING_FIELDS = ("smtp_password", "pushplus_token", "pushplus_smtp_password")
 
 
 def _parse_admin_flag(raw_value: str | None) -> bool:
@@ -84,7 +81,6 @@ def parse_identity() -> None:
             user_id="local",
             is_admin=True,
             username=raw_username or "local",
-            is_local=True,
         )
         return
 
@@ -108,7 +104,6 @@ def parse_identity() -> None:
         user_id=user_id,
         is_admin=is_admin,
         username=username,
-        is_local=False,
     )
 
 

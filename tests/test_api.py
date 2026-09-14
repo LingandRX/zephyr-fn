@@ -6,10 +6,6 @@
 
 from __future__ import annotations
 
-import json
-
-import pytest
-
 
 def _json(response):
     """解析 JSON 响应体。"""

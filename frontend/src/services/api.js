@@ -8,7 +8,7 @@
  *   非 0 或 HTTP 错误统一抛 Error(message)
  */
 
-export const API_BASE = import.meta.env.DEV ? "/api" : "/app/subscription/api";
+const API_BASE = import.meta.env.DEV ? "/api" : "/app/subscription/api";
 
 export async function api(path, options = {}) {
   const opts = {
@@ -47,7 +47,7 @@ export async function api(path, options = {}) {
 }
 
 /** 直接下载端点（导出 CSV）：与页面同源，浏览器导航即可触发下载 */
-export function exportUrl(path) {
+function exportUrl(path) {
   return API_BASE + path;
 }
 export function download(path, filename) {
@@ -89,9 +89,6 @@ export const testEmailNotification = (body) =>
   api("/notifications/test-email", { method: "POST", body });
 export const testPushPlusNotification = (body) =>
   api("/notifications/test-pushplus", { method: "POST", body });
-
-// ---------- 日志 ----------
-export const getLogTail = (lines = 200) => api(`/logs/tail?lines=${lines}`);
 
 // ---------- 导入导出 ----------
 export const importCsv = (text) =>
