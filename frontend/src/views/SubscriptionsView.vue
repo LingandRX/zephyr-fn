@@ -65,6 +65,8 @@ onActivated(() => {
     openModal();
     ui.showAddModal = false;
   }
+  if (activationCount === 1) return;
+  loadAll();
 });
 
 // keep-alive 切走时关闭弹窗，避免返回后弹窗残留
@@ -223,6 +225,7 @@ async function confirmRenew() {
   }
 }
 
+// 首屏加载由 onMounted 负责（onActivated 跳过首次，见上）
 onMounted(loadAll);
 </script>
 

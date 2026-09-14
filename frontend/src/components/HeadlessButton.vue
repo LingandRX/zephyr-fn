@@ -4,7 +4,7 @@
  * 支持多种变体（default/primary/ghost/danger）、尺寸（sm/md/lg）、禁用状态、块级显示。
  * 使用 CSS 变量确保与设计系统一致。
  */
-const props = defineProps({
+defineProps({
   variant: {
     type: String,
     default: 'default',

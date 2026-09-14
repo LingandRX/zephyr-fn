@@ -18,8 +18,6 @@ import HeadlessListbox from "../components/HeadlessListbox.vue";
 import HeadlessTimePicker from "../components/HeadlessTimePicker.vue";
 import HeadlessSwitch from "../components/HeadlessSwitch.vue";
 import HeadlessButton from "../components/HeadlessButton.vue";
-import HeadlessInput from "../components/HeadlessInput.vue";
-import HeadlessCard from "../components/HeadlessCard.vue";
 
 const CURRENCY_OPTIONS = [
   { label: "CNY (¥)", value: "CNY" },
@@ -509,7 +507,7 @@ onMounted(loadAll);
 <template>
   <div class="page settings-page">
     <!-- 子页面导航栏 -->
-    <TabGroup :selectedIndex="activeTabIndex" @change="handleTabChange">
+    <TabGroup :selected-index="activeTabIndex" @change="handleTabChange">
       <TabList class="settings-tabs-nav">
         <Tab
           v-for="t in TABS"

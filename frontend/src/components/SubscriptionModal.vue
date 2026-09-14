@@ -159,17 +159,6 @@ function limitNotes(event) {
   form.value.notes = notes;
 }
 
-function isMobileDevice() {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia("(max-width: 860px)").matches;
-}
-
-function handleBackdropClick() {
-  if (isMobileDevice()) {
-    close();
-  }
-}
-
 function close() {
   emit("update:modelValue", false);
 }

@@ -38,12 +38,3 @@ export function yuanToCents(v) {
 export function centsToYuan(c) {
   return (Number(c) / 100).toFixed(2);
 }
-
-export function esc(s) {
-  return String(s ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}

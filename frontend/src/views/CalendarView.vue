@@ -85,9 +85,16 @@ const calendarPickerDate = computed({
     if (!val) return;
     const [y, m] = val.split("-").map(Number);
     const monthChanged = calYear.value !== y || calMonth.value !== m;
+    const now = new Date();
+    // 落到真实当月时选中「今天」，否则选中 1 号。
+    // 「清除」与下拉开面板里的「本月」都只经由这里切换，刷新只有下面这一次，
+    // 不能再额外挂 @clear 处理器，否则同一次点击会触发两轮 loadMonth。
+    const isCurrentMonth = y === now.getFullYear() && m === now.getMonth() + 1;
     calYear.value = y;
     calMonth.value = m;
-    selectedDateStr.value = `${y}-${String(m).padStart(2, "0")}-01`;
+    selectedDateStr.value = isCurrentMonth
+      ? toDateStr(now)
+      : `${y}-${String(m).padStart(2, "0")}-01`;
     if (monthChanged) {
       loadMonth();
     }
@@ -306,7 +313,6 @@ onActivated(() => {
             :clearable="true"
             :display-formatter="formatCalHeader"
             placeholder="选择月份"
-            @clear="goToday"
           />
         </div>
 

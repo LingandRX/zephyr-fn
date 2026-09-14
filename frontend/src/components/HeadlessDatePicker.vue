@@ -532,8 +532,10 @@ onBeforeUnmount(() => {
             >
               {{ type === 'month' ? '本月' : '今天' }}
             </button>
+            <!-- 月模式没有「清空」语义（hasValue 已把当月当作无值，清除=回到本月），
+                 与左侧「本月」完全等价，故只保留「本月」；日期模式的清除是真实清空，保留。 -->
             <button
-              v-if="canClear"
+              v-if="canClear && type !== 'month'"
               type="button"
               class="quick-btn clear"
               @click="handleClear($event)"
