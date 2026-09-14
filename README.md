@@ -21,9 +21,9 @@
 
 ## 技术栈
 
-- 后端：Python 3（标准库：http.server / sqlite3 / smtplib / urllib，无第三方依赖）
-- 前端：Vue 3 + Vite（默认，`frontend/`）；另保留原生 HTML/CSS/JS 零构建版（`app/www/`）作对照
-- 数据库：SQLite（WAL 模式，版本化迁移）
+- 后端：Python 3 + Flask（`Flask-SQLAlchemy` / `Flask-Migrate` / `SQLAlchemy`，见 `app/backend/requirements.txt`）；通知渠道使用标准库 `smtplib` / `urllib`
+- 前端：Vue 3 + Vite（`frontend/`），构建产物输出到 `app/www/`
+- 数据库：SQLite（WAL 模式，Alembic 版本化迁移）
 - 接入方式：飞牛统一网关（Unix Socket + 登录态校验，`X-Trim-Userid` 隔离用户数据）
 
 ## 目录结构
@@ -37,28 +37,29 @@
 │   └── resource              # data-share 共享备份目录
 ├── cmd/                      # 生命周期脚本
 │   ├── main                  # start / stop / status
-│   └── install_callback      # 初始化数据库（幂等）
+│   ├── install_callback      # 初始化数据库（幂等）
+│   └── upgrade_callback      # 升级回调（补迁数据库 schema）
 ├── wizard/install            # 安装向导（到期提醒提前天数）
 ├── app/
 │   ├── backend/              # Python 后端（分层架构）
-│   │   ├── server.py         # HTTP 服务 + API 路由（网关 Socket / TCP 双模式）
-│   │   ├── config.py         # 运行环境与路径配置
-│   │   ├── core/             # 核心领域层（领域模型、周期推进、状态派生、校验）
-│   │   │   └── domain.py
-│   │   ├── services/         # 业务应用服务层
-│   │   │   ├── statistics.py # 统计报表与日历事件
-│   │   │   ├── notifications.py # 到期提醒与通知派发
-│   │   │   ├── backup.py     # CSV 导入导出
-│   │   │   └── scheduler.py  # 定时调度（每天固定时刻推送）
-│   │   ├── storage/          # 持久化存储层
-│   │   │   └── db.py         # SQLite 连接、迁移与 CRUD
-│   │   ├── utils/            # 基础设施与通用工具层
-│   │   │   ├── channels/     # 通知渠道（Email、PushPlus）
-│   │   │   │   ├── email.py
-│   │   │   │   └── pushplus.py
+│   │   ├── server.py         # 进程入口（参数解析 / 日志 / UDS·TCP 监听）
+│   │   ├── app.py            # 应用工厂 create_app（装配配置/扩展/中间件/蓝图/迁移）
+│   │   ├── config.py         # Flask 配置类（按环境隔离）
+│   │   ├── paths.py          # 路径与环境变量解析
+│   │   ├── extensions.py     # Flask 扩展单例（db / migrate）
+│   │   ├── api/              # 路由层：每个资源一个蓝图
+│   │   ├── http/             # WSGI 网关前缀剥离中间件、统一响应封装
+│   │   ├── domain/           # 领域层（领域模型、周期推进、状态派生、异常）
+│   │   ├── services/         # 业务应用服务层（统计/通知/备份/订阅/分类/设置/调度）
+│   │   ├── repositories/     # 持久化访问层（各资源 CRUD、启动引导）
+│   │   ├── models/           # SQLAlchemy ORM 模型
+│   │   ├── schemas/          # 请求/响应数据校验
+│   │   ├── migrations/       # Alembic 迁移脚本（versions/ 按序编号）
+│   │   ├── utils/            # 基础设施层
+│   │   │   ├── channels/     # 通知渠道（email.py、pushplus.py）
 │   │   │   └── file_utils.py # 文件写入与落盘工具
-│   ├── www/                  # 前端产物目录（由 build.sh 同步生成）
-
+│   │   └── vendor/           # 打包预置的 Linux cp312 轮子（x86_64 / aarch64）
+│   ├── www/                  # 前端构建产物（后端静态服务根目录）
 │   └── ui/
 │       ├── config            # 统一网关入口（/app/subscription）
 │       └── images/           # 入口图标
@@ -68,11 +69,15 @@
 │   │   ├── views/            # 页面视图组件
 │   │   ├── components/       # 通用 UI 组件
 │   │   ├── services/         # 前端 API 业务服务
+│   │   ├── styles/           # 设计令牌与全局样式
 │   │   └── utils/            # 格式化、UI状态与交互工具
-├── dev.sh                    # 一键本地预览（Vue 或 vanilla）
+├── dev.sh / dev.ps1          # 一键本地预览（Flask 后端 + Vite 前端）
+├── package.sh / package.ps1  # 一键打包（fnpack）
 ├── tools/
 │   ├── seed_demo_data.py     # 演示数据生成与灌库脚本
-│   └── build.sh              # 打包前构建：Vite build → 同步 app/www → 清理 __pycache__
+│   ├── vendor_deps.py        # 预置 Linux cp312 轮子到 backend/vendor
+│   ├── fpk_stage.py          # 打包暂存目录准备与校验
+│   └── package/              # 内置 fnpack 二进制
 └── tests/                    # 测试套件（单元测试、安全测试、回归测试）
 
 ```
@@ -96,22 +101,17 @@ frontend/src/
 - 外壳锁死视口（`height:100vh`），**Sub Page 在主窗口内滚动**（`.page-host` 内部 `overflow-y:auto`），
   顶栏/侧边栏折叠按钮始终可见；滚动条已隐藏（Chromium WebView 与 Firefox 双兼容）；
 - 设计令牌集中管理（`src/styles/tokens.css`）：色板/间距/字号/圆角/阴影/z-index，页面样式禁止魔法数字；
-- 状态类由 `src/ui.js` 轻量 store 管理（未引入 vue-router / 状态库，保持轻依赖）；
+- 状态类由 `src/utils/ui.js` 轻量 store 管理（未引入 vue-router / 状态库，保持轻依赖）；
 - 新增 Sub Page 三步：`views/` 新建组件 → `layouts/BaseLayout.vue` 的 `NAV`/`PAGES` 注册 → 跑 `npm run check:views` 回归。
 
 ## 本地开发
 
-前端有两套实现，默认使用 **Vue 3 版**（`frontend/`），原生零构建版（`app/www/`）保留作对照：
-
 ```bash
-# 一键热更新开发（自动拉起 Python 后端 API 5001 + Vite dev 5173，支持 HMR 热更新）
+# 一键热更新开发（自动拉起 Flask 后端 :3001 + Vite dev :5173，支持 HMR 热更新）
 ./dev.sh
 # 访问地址 http://localhost:5173/
-
-# 静态构建预览（构建 dist 后由后端 8000 服务，与线上行为一致）
-BUILD=1 ./dev.sh
-# 默认地址 http://127.0.0.1:8000/app/subscription/
-# FRONTEND=vanilla ./dev.sh  可预览原生版；PORT=9000 / DB=/tmp/t.db 可自定义
+# PowerShell 等价脚本：.\dev.ps1
+# 可调参数：-b 后端端口（默认 3001）、-f 前端端口（默认 5173）、-d SQLite 路径（默认 ./data/subscription.db）
 
 # 前端回归检查（BaseLayout/Sub Page 隔离、折叠按钮、滚动容器断言）
 cd frontend && npm run check:views
@@ -180,19 +180,26 @@ appcenter-cli install-fpk subscription.fpk
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET/POST | `/api/subscriptions` | 列表 / 新增 |
-| GET/PUT/DELETE | `/api/subscriptions/{id}` | 详情 / 更新 / 删除 |
+| GET | `/api/health` | 健康检查（返回 `status` 与 `version`） |
+| GET/POST | `/api/subscriptions` | 列表 / 新增（新增成功返回 201）。列表默认全量；带 `?page` 时分页返回，支持 `per_page`(1-100，默认 20) / `lifecycle` / `category_id` 筛选 |
+| GET/PUT/DELETE | `/api/subscriptions/{id}` | 详情 / 更新 / 删除（软删除） |
+| POST | `/api/subscriptions/{id}/restore` | 恢复已软删除的订阅 |
 | POST | `/api/subscriptions/{id}/renew` | 续费（推进到下一期） |
 | GET/POST | `/api/categories` | 分类列表 / 新增 |
 | PUT/DELETE | `/api/categories/{id}` | 更新 / 删除分类 |
+| GET | `/api/payments` | 支付流水：按 `?subscription_id=` 查询，或 `?start_date=&end_date=`（均必填，`YYYY-MM-DD`）按区间查询；都不传则返回全部 |
 | GET/PUT | `/api/settings` | 读取 / 更新设置 |
-| GET | `/api/statistics?mode=nominal\|actual` | 统计 |
-| GET | `/api/calendar?year=&month=` | 日历事件 |
+| GET | `/api/statistics?mode=nominal\|actual` | 统计（`mode` 默认 `nominal`） |
+| GET | `/api/calendar?year=&month=` | 日历事件（默认当前年月） |
 | GET | `/api/export/csv` | 导出 CSV |
 | GET | `/api/backup/import-template` | 下载 CSV 导入模板 |
 | POST | `/api/backup/import-csv` | 导入 CSV（按名称+金额+周期去重） |
 | GET | `/api/notifications/upcoming` | 即将到期提醒 |
-| GET | `/api/logs/tail?lines=200` | 运行日志尾部读取 |
+| POST | `/api/notifications/test-email` | 测试邮件通知（设置页调用） |
+| POST | `/api/notifications/test-pushplus` | 测试 PushPlus 推送（设置页调用） |
+| GET | `/api/logs/tail?lines=200` | 运行日志尾部读取（`lines` 上限 1000） |
+
+统一响应为 `{code, message, data}`（`code == 0` 表示成功），CSV 导出端点直接返回文件流。非 API 路径由后端兜底服务前端静态资源：`/` 返回 `index.html`，命中静态文件则直出，否则回退 `index.html`（SPA fallback）。
 
 ## 常见问题
 
@@ -237,12 +244,12 @@ appcenter-cli install-fpk subscription.fpk
 
 | zephyr-tarui (Rust) | 本仓库 (Python) |
 | --- | --- |
-| `db/migrations.rs` | `db.py`（迁移 + CRUD） |
-| `domain/renewal.rs` `domain/dates.rs` `domain/calendar.rs` | `domain.py` |
-| `services.rs` | `services.py` |
-| `backup.rs` | `backup.py` |
-| `notification.rs` `email.rs` `pushplus.rs` `scheduler.rs` | `notifications.py` `email_sender.py` `pushplus.py` `scheduler.py` |
-| Tauri IPC command | `server.py` HTTP API |
+| `db/migrations.rs` | `migrations/`（Alembic）+ `repositories/`（CRUD） |
+| `domain/renewal.rs` `domain/dates.rs` `domain/calendar.rs` | `domain/domain.py` |
+| `services.rs` | `services/` |
+| `backup.rs` | `services/backup.py` |
+| `notification.rs` `email.rs` `pushplus.rs` `scheduler.rs` | `services/notifications.py` `utils/channels/email.py` `utils/channels/pushplus.py` `services/scheduler.py` |
+| Tauri IPC command | `server.py` 进程入口 + `api/` HTTP 路由 |
 
 ## 已知限制 / TODO
 

@@ -8,18 +8,24 @@
 在飞牛 fnOS 上由 cmd/main 拉起；网关校验登录态后把请求转发到
 $TRIM_APPDEST/app.sock，并注入 X-Trim-Userid / X-Trim-Isadmin / X-Trim-Username。
 
-API（与 zephyr-tarui 后端功能对齐）：
-  订阅  GET/POST      /api/subscriptions
+API（与 zephyr-tarui 后端功能对齐；路由实现在 app/backend/api/ 各蓝图）：
+  健康  GET           /api/health
+  订阅  GET/POST      /api/subscriptions          # GET 带 ?page 时分页，支持 per_page/lifecycle/category_id
         GET/PUT/DELETE /api/subscriptions/{id}
+        POST           /api/subscriptions/{id}/restore
         POST           /api/subscriptions/{id}/renew
   分类  GET/POST      /api/categories
         PUT/DELETE    /api/categories/{id}
+  流水  GET           /api/payments?subscription_id=|start_date=&end_date=
   设置  GET/PUT       /api/settings
   统计  GET           /api/statistics?mode=nominal|actual
   日历  GET           /api/calendar?year=&month=
   备份  POST          /api/backup/import-csv
         GET           /api/export/csv
+        GET           /api/backup/import-template
   通知  GET           /api/notifications/upcoming
+        POST          /api/notifications/test-email
+        POST          /api/notifications/test-pushplus
   日志  GET           /api/logs/tail?lines=200
 
 统一响应结构：{code, message, data}（code == 0 表示成功）。
