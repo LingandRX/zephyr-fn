@@ -89,7 +89,9 @@ fi
 DB_DIR="$(dirname "$DB")"
 [ -d "$DB_DIR" ] || mkdir -p "$DB_DIR"
 DB_ABS="$(cd "$DB_DIR" && pwd)/$(basename "$DB")"
-export DATABASE_URL="sqlite:///$DB_ABS"
+# 后端只认 DB_PATH（见 app/backend/paths.py:db_path()），且要的是文件路径而非
+# SQLAlchemy URI；原先导出 DATABASE_URL 不被任何代码读取，-d 属于空转。
+export DB_PATH="$DB_ABS"
 
 LOG_DIR="data/logs"
 [ -d "$LOG_DIR" ] || mkdir -p "$LOG_DIR"

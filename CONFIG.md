@@ -7,12 +7,13 @@
 ## 一、总体架构
 
 ```
-浏览器 ──5173────▶ Vite (frontend) ──proxy /api──▶ Python 后端 (Flask, 8000) ─▶ SQLite
+浏览器 ──5173────▶ Vite (frontend) ──proxy /api──▶ Python 后端 (Flask, 3001) ─▶ SQLite
         (dev 前端)                   └─ 生产/真机: 走网关前缀 /app/subscription ─▶ 后端
 ```
 
 - 前端 dev（Vite）默认 **5173**
-- 后端 API（Flask）默认 **8000**
+- **后端端口分两套**：dev 走一键脚本（`dev.sh` / `dev.ps1`）默认 **3001**（见第五节）；
+  生产入口 `server.py --http` 默认 **8000**（见第三节），UDS 模式下不占端口
 - 生产/真机：页面走网关前缀 `/app/subscription`，由后端直接服务
 
 ---
@@ -72,46 +73,88 @@
 
 ## 四、前端配置（`frontend/vite.config.mjs`）
 
-| 项 | 值 |
-|---|---|
-| `server.port` | **5173** |
-| `server.strictPort` | **true**（端口被占直接报错，不再静默跳到 5174） |
-| proxy `/api` | → `http://127.0.0.1:${BACKEND_PORT \|\| 8000}` |
-| `base` | dev=`/`；build=`/app/subscription/` |
-| `GATEWAY_PREFIX` | `/app/subscription`（须与后端 `gateway_prefix()` 一致） |
+配置以 `defineConfig(({ command }) => ...)` 按 `command`（`serve` / `build`）分支。
 
-前端 API 基准（`src/services/api.js`）：
+| 项 | dev（`serve`） | build | 说明 |
+|---|---|---|---|
+| `base` | `/` | `/app/subscription/` | dev 不能带前缀：Vite 6 下带前缀的 base 会被 proxy 吞掉，Vite 自身的模块请求会被转发给后端 |
+| `server.port` | `5173` | — | 可被 `vite --port` 覆盖（`dev.sh` / `dev.ps1` 即以此传参） |
+| `server.strictPort` | `true` | — | 端口被占直接报错，不静默跳到 5174 |
+| `build.outDir` | — | `dist`（`emptyOutDir: true`） | |
+
+proxy 只代理 `/api`：
+
+```js
+proxy: {
+  "/api": {
+    target: `http://127.0.0.1:${process.env.BACKEND_PORT || 5000}`,
+    changeOrigin: true,
+  },
+}
+```
+
+`BACKEND_PORT` 在前端进程启动时读取，由 `dev.sh` / `dev.ps1` 注入（见第五节）。
+**未注入时回退 5000**，与两个脚本默认的 3001 对不上，表现为前端满屏
+`ECONNREFUSED 127.0.0.1:5000` —— 单独跑 `npm run dev` 时必须自己带上：
+
+```
+bash      : BACKEND_PORT=3001 npm run dev
+PowerShell: $env:BACKEND_PORT=3001; npm run dev
+```
+
+`GATEWAY_PREFIX`（脚本常量）为 `/app/subscription`，须与后端
+`paths.gateway_prefix()` 及 `GATEWAY_PREFIX` 环境变量一致。
+
+前端 API 基准（`src/services/api.js:11`）：
 
 ```js
 API_BASE = import.meta.env.DEV ? "/api" : "/app/subscription/api"
 ```
 
-- dev：页面在根路径，`/api` 走 Vite proxy → 后端 8000
-- prod：页面在 `/app/subscription/`，`/api` 走网关前缀，由后端剥离前缀
+- dev：页面在根路径，`/api` 走 Vite proxy → 后端（`BACKEND_PORT`，脚本默认 3001）
+- prod：页面在 `/app/subscription/`，`/api` 走网关前缀，由后端中间件剥离前缀
+  （`app/backend/http/middleware.py`）
 
 ---
 
-## 五、一键开发脚本（`dev.sh`）端口编排
+## 五、一键开发脚本（`dev.sh` / `dev.ps1`）
 
-| 环境变量 | 默认 | 说明 |
+两个脚本提供等价的一键启动：`dev.sh`（bash，Linux/macOS）、`dev.ps1`（PowerShell，Windows）。
+都是「先起后端 → 探活通过 → 再起前端」，差异见下方「启动流程」第 3 点与「进程模型与清理」。
+
+| dev.sh | dev.ps1 | 默认 | 说明 |
+|---|---|---|---|
+| `-b, --backend-port` | `-BackendPort` | `3001` | 后端 API 端口 |
+| `-f, --frontend-port` | `-FrontendPort` | `5173` | Vite 端口 |
+| `-d, --database` | `-Database` | `./data/subscription.db` | SQLite 文件路径 |
+| `-h, --help` | — | — | 用法说明 |
+
+启动流程（两端一致）：
+
+1. **依赖自检**：缺 `flask` / `flask_sqlalchemy` / `flask_migrate` 或 `frontend/node_modules` 时自动安装（幂等）
+2. **注入环境变量**：`DB_PATH`（绝对路径）、`FLASK_APP=app.backend:create_app()`、`FLASK_DEBUG=1`、`FLASK_RUN_PORT`、`BACKEND_PORT`
+3. **数据库迁移**：`dev.sh` 每次都跑 `flask db upgrade` 预检，失败即中止（不启动前端）；`dev.ps1` 仅在库文件缺失时跑一次，其余交给应用工厂启动时的自动迁移
+4. **端口占用预检**：后端 / 前端端口被占即中止，并给出占用进程信息（`dev.ps1` 直接给出 PID 与释放命令）
+5. **启动后端**：`flask run --host=0.0.0.0 --port <后端端口>`
+6. **探活**：轮询 `http://127.0.0.1:<后端端口>/api/settings`（40 次 × 0.3s），后端进程提前退出立即中止；**探活失败不启动前端**，打印后端日志尾部后 `exit 1`
+7. **启动前端**：`vite --port <前端端口>`，同时把 `BACKEND_PORT` 传给 Vite 供 proxy 使用（见第四节）
+
+进程模型与清理：
+
+| | dev.sh | dev.ps1 |
 |---|---|---|
-| `FRONTEND` | `vue` | `vanilla`=原生版，`build`=打包版 |
-| `BUILD` | `0` | `1`=构建 `frontend/dist` 后由后端服务 |
-| `PORT` | `8000` | 生产/静态预览端口 |
-| `BACKEND_PORT` | `8000` | **dev 模式下后端 API 端口**（与 `server.py` 默认一致） |
-| `DB` | `./data/subscription.db` | 数据库 |
+| 后端 | 后台进程 `> >(tee "$log") 2>&1 &` | `Start-Process`（stdout/stderr 落盘） |
+| 前端 | 后台进程 + `wait` | 前台 `npx vite` |
+| 日志 | `data/logs/dev-backend.log`、`data/logs/dev-migrate.log` | `data/logs/dev-backend.log`、`data/logs/dev-backend.err.log` |
+| 清理 | `trap EXIT`：先 `pkill -P` 收子进程，再 `kill` 父进程 | `finally`：`taskkill /PID <pid> /T /F` 整棵树 |
 
-`dev.sh` 实际起两个进程：
-
-```
-后端: python server.py --http 8000 --db ... --www app/www
-前端: (cd frontend && BACKEND_PORT=8000 npm run dev)   # Vite on 5173
-```
+`FLASK_DEBUG=1` 下 werkzeug reloader 会派生真正监听端口的子进程，两个脚本都按
+**进程树**清理，避免孤儿进程继续占住后端端口。
 
 ---
 
 ## 六、常见排查
 
 - **前端跑到 5174**：`strictPort` 已改为 `true`，此后 Vite 不会静默换端口；若仍出现说明有多份 vite 进程占 5173。
-- **`/api` 请求失败（ECONNREFUSED）**：检查后端是否真的在 8000 监听（`netstat -ano | findstr 8000`）。
+- **`/api` 请求失败（ECONNREFUSED）**：先核对端口——dev 走脚本应为 **3001**，生产 `server.py` 默认 **8000**；再确认后端确实在该端口监听（`netstat -ano | findstr 3001`）。
 - **数据库迁移报 `duplicate column`**：`alembic_version` 与表结构脱节，属半迁移中间态；全新环境不受影响。
