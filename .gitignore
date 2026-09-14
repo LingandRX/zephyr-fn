@@ -20,6 +20,9 @@ $RECYCLE.BIN/
 *.log
 logs/
 
+# ===== AI 助手 / 本地工具配置 =====
+.codebuddy/
+
 # ===== Python =====
 __pycache__/
 *.py[cod]
