@@ -956,7 +956,7 @@ onMounted(loadAll);
 /* 首次测量完成前不显示，也不参与过渡，避免从 0 滑入 */
 .tabs-pill.is-ready {
   opacity: 1;
-  transition: transform var(--dur-slower) var(--ease-spring);
+  transition: transform var(--dur-medium) var(--ease-spring);
 }
 
 .tab-btn {
@@ -1013,7 +1013,7 @@ onMounted(loadAll);
   flex-direction: column;
   /* TabPanel 在未选中时会被 Headless UI 卸载、选中时重新挂载，
      因此用 animation（而非 transition）即可在每次切换时重放该入场动画 */
-  animation: tab-panel-in var(--dur-slower) var(--ease-decelerate) both;
+  animation: tab-panel-in var(--dur-medium) var(--ease-decelerate) both;
 }
 
 @keyframes tab-panel-in {
