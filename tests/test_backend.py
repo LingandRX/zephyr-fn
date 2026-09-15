@@ -701,7 +701,20 @@ class ServicesTests(AppTestCase):
         self.assertIn(sub_id, [s["id"] for s in restored_list])
 
     def test_calendar_events(self):
-        events = get_calendar_events("u1", 2026, 8)
+        """按月生成日历事件。夹具自建：共享夹具的扣费日相对今天，不落在固定月份。"""
+        sub_service.create_subscription(
+            "u_calendar",
+            {
+                "name": "Calendar Sub",
+                "amount": 1000,
+                "currency": "CNY",
+                "period_type": "month",
+                "auto_renew": True,
+                "start_date": "2026-07-15",
+                "next_due_date": "2026-08-15",
+            },
+        )
+        events = get_calendar_events("u_calendar", 2026, 8)
         self.assertTrue(events)
         self.assertTrue(all(e["date"].startswith("2026-08") for e in events))
 

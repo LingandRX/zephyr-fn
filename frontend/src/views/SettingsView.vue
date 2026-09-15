@@ -1,7 +1,7 @@
 <script setup>
 // 设置视图：常规 / 通知渠道 / 分类管理 / 备份与数据
 // 支持子页面（Tabs）切换展示
-import { ref, reactive, computed, watch, nextTick, onMounted } from "vue";
+import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import {
   TabGroup, TabList, Tab, TabPanels, TabPanel,
   Dialog, DialogPanel, DialogTitle,
@@ -55,6 +55,79 @@ const testEmailTarget = ref("");
 function handleTabChange(index) {
   activeTabIndex.value = index;
 }
+
+// ---------- 分段控件：滑动指示块 ----------
+// 位置来自真实布局测量（窄屏下 tab 会被 min-width 撑到容器之外，无法用百分比推算）。
+const navRef = ref(null);
+const pill = reactive({ x: 0, w: 0, ready: false });
+const pillStyle = computed(() => ({
+  width: `${pill.w}px`,
+  transform: `translateX(${pill.x}px)`,
+}));
+
+// TabList 是 Headless UI 组件，真正的 DOM 节点在 $el 上
+function navEl() {
+  const r = navRef.value;
+  if (!r) return null;
+  return r instanceof HTMLElement ? r : r.$el || null;
+}
+
+function activeTabEl() {
+  const nav = navEl();
+  if (!nav) return null;
+  return nav.querySelectorAll(".tab-btn")[activeTabIndex.value] || null;
+}
+
+function measurePill() {
+  const el = activeTabEl();
+  if (!el) return;
+  pill.x = el.offsetLeft;
+  pill.w = el.offsetWidth;
+}
+
+// 窄屏下 tab 区可横向滚动：仅当目标被滚出视野时才平滑滚动，避免指示块滑到看不见的位置
+function revealActiveTab() {
+  const nav = navEl();
+  const el = activeTabEl();
+  if (!nav || !el) return;
+  const pad = 6;
+  const left = el.offsetLeft - pad;
+  const right = el.offsetLeft + el.offsetWidth + pad;
+  if (left < nav.scrollLeft) {
+    nav.scrollTo({ left, behavior: "smooth" });
+  } else if (right > nav.scrollLeft + nav.clientWidth) {
+    nav.scrollTo({ left: right - nav.clientWidth, behavior: "smooth" });
+  }
+}
+
+let navResizeObserver = null;
+
+onMounted(() => {
+  const nav = navEl();
+  // 侧边栏折叠 / 窗口缩放都会改变各 tab 的宽度，需要重新测量
+  if (nav && typeof ResizeObserver !== "undefined") {
+    navResizeObserver = new ResizeObserver(measurePill);
+    navResizeObserver.observe(nav);
+  }
+  nextTick(() => {
+    measurePill();
+    // 先定位、再开启过渡，避免首次渲染时指示块从 0 滑入
+    requestAnimationFrame(() => {
+      pill.ready = true;
+    });
+  });
+});
+
+onBeforeUnmount(() => {
+  navResizeObserver?.disconnect();
+});
+
+watch(activeTabIndex, () => {
+  nextTick(() => {
+    measurePill();
+    revealActiveTab();
+  });
+});
 
 const form = reactive({
   default_currency: "CNY",
@@ -508,7 +581,13 @@ onMounted(loadAll);
   <div class="page settings-page">
     <!-- 子页面导航栏 -->
     <TabGroup :selected-index="activeTabIndex" @change="handleTabChange">
-      <TabList class="settings-tabs-nav">
+      <TabList ref="navRef" class="settings-tabs-nav">
+        <span
+          class="tabs-pill"
+          :class="{ 'is-ready': pill.ready }"
+          :style="pillStyle"
+          aria-hidden="true"
+        />
         <Tab
           v-for="t in TABS"
           :key="t.key"
@@ -842,6 +921,7 @@ onMounted(loadAll);
 
 /* ---------------- 顶部标签：iOS 分段控件 ---------------- */
 .settings-tabs-nav {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -858,7 +938,30 @@ onMounted(loadAll);
   display: none;
 }
 
+/* 选中态滑块：在 tab 之间滑动，替代逐个切换背景色 */
+.tabs-pill {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  z-index: 0;
+  opacity: 0;
+  border-radius: 9px;
+  background: var(--ios-card-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* 首次测量完成前不显示，也不参与过渡，避免从 0 滑入 */
+.tabs-pill.is-ready {
+  opacity: 1;
+  transition: transform var(--dur-slower) var(--ease-spring);
+}
+
 .tab-btn {
+  position: relative;
+  z-index: 1;
   flex: 1 1 0;
   display: flex;
   align-items: center;
@@ -882,11 +985,10 @@ onMounted(loadAll);
   color: var(--text);
 }
 
+/* 背景与阴影由 .tabs-pill 承担，这里只切换文字层级，避免与滑块抢视觉 */
 .tab-btn.active {
-  background: var(--ios-card-bg);
   color: var(--text);
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
 }
 
 /* 选中态本身就是焦点指示（自动激活模式下焦点跟随选中），不再额外画焦点环 */
@@ -909,6 +1011,20 @@ onMounted(loadAll);
 .settings-section {
   display: flex;
   flex-direction: column;
+  /* TabPanel 在未选中时会被 Headless UI 卸载、选中时重新挂载，
+     因此用 animation（而非 transition）即可在每次切换时重放该入场动画 */
+  animation: tab-panel-in var(--dur-slower) var(--ease-decelerate) both;
+}
+
+@keyframes tab-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .settings-section .card {
@@ -1478,6 +1594,13 @@ onMounted(loadAll);
   .tab-btn,
   .cat-chip button {
     transition: none;
+  }
+  .tabs-pill,
+  .tabs-pill.is-ready {
+    transition: none;
+  }
+  .settings-section {
+    animation: none;
   }
   .ch-collapse-enter-active,
   .ch-collapse-leave-active {
