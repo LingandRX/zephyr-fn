@@ -49,10 +49,7 @@ def _check_reminders(reminder_days: int | None = None) -> None:
     if notifications.is_do_not_disturb(settings):
         return
 
-    try:
-        subs = notifications.get_subscriptions_needing_notification(reminder_days=reminder_days)
-    except TypeError:
-        subs = notifications.get_subscriptions_needing_notification()
+    subs = notifications.get_subscriptions_needing_notification(reminder_days=reminder_days)
     if not subs:
         return
 
@@ -66,50 +63,22 @@ def _check_reminders(reminder_days: int | None = None) -> None:
             time.sleep(1)
 
 
-def _legacy_claim(subscription_id: str, channel: str) -> str | None:
-    try:
-        if notifications.has_channel_notified_today(subscription_id, channel):
-            return None
-    except Exception:  # noqa: BLE001
-        pass
-    return f"legacy:{subscription_id}:{channel}"
-
-
-def _complete_claim(
-    claim_id: str | None,
-    subscription_id: str,
-    channel: str,
-    status: str,
-    error_message: str | None = None,
-) -> None:
-    complete = getattr(notifications, "complete_notification", None)
-    if callable(complete):
-        complete(claim_id, subscription_id, channel, status, error_message)
-        return
-    if claim_id and claim_id.startswith("legacy:"):
-        try:
-            notifications.log_notification(subscription_id, channel, status, error_message)
-        except Exception:  # noqa: BLE001
-            _logger().exception("写入通知日志失败: %s/%s", subscription_id, channel)
-
-
 def _run_channel(sub_id: str, channel: str, sender: Callable[[], None], success_log: str) -> None:
-    claim = getattr(notifications, "claim_notification", None)
-    claim_id = claim(sub_id, channel) if callable(claim) else _legacy_claim(sub_id, channel)
+    claim_id = notifications.claim_notification(sub_id, channel)
     if not claim_id:
         return
     try:
         sender()
     except (ValueError, RuntimeError) as exc:
         # 永久性失败（配置错误）：记录为 abandoned，不再重试
-        _complete_claim(claim_id, sub_id, channel, "abandoned", str(exc))
+        notifications.complete_notification(claim_id, sub_id, channel, "abandoned", str(exc))
         _logger().warning("到期提醒 [%s] 配置错误，已标记为废弃: %s", channel, exc)
     except Exception as exc:  # noqa: BLE001
         # 暂时性失败（网络/SMTP 错误）：记录为 failed，下次可重试
-        _complete_claim(claim_id, sub_id, channel, "failed", str(exc))
+        notifications.complete_notification(claim_id, sub_id, channel, "failed", str(exc))
         _logger().warning("到期提醒 [%s] 发送失败（将重试）: %s", channel, exc)
     else:
-        _complete_claim(claim_id, sub_id, channel, "sent")
+        notifications.complete_notification(claim_id, sub_id, channel, "sent")
         _logger().info("到期提醒 [%s] %s", channel, success_log)
 
 

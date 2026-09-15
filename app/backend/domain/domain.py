@@ -26,7 +26,6 @@ __all__ = [
     "add_months",
     "add_one_period",
     "billing_anchor_day",
-    "calendar_due_event_type",
     "calendar_termination_date",
     "derive_status",
     "is_calendar_event_visible",
@@ -45,7 +44,6 @@ __all__ = [
     "normalize_subscription_data",
     "resolve_renewal_on_update",
     "should_auto_renew_on_wake",
-    "sub_one_period",
 ]
 
 PERIOD_TYPES = ("month", "quarter", "year", "once", "custom")
@@ -161,37 +159,6 @@ def add_one_period(
             return add_months(d, value, anchor_day=anchor_day)
         if unit == "year":
             return add_months(d, value * 12, anchor_day=anchor_day)
-    return None
-
-
-def sub_one_period(
-    d: date,
-    period_type: str,
-    custom_value: int | None = None,
-    custom_unit: str | None = None,
-    *,
-    anchor_day: int | None = None,
-) -> date | None:
-    """往回退一期；月末日期与 ``add_one_period`` 使用相同锚点规则。"""
-    if period_type == "month":
-        return add_months(d, -1, anchor_day=anchor_day)
-    if period_type == "quarter":
-        return add_months(d, -3, anchor_day=anchor_day)
-    if period_type == "year":
-        return add_months(d, -12, anchor_day=anchor_day)
-    if period_type == "once":
-        return None
-    if period_type == "custom":
-        value = max(1, int(custom_value or 1))
-        unit = custom_unit or "month"
-        if unit == "day":
-            return d - timedelta(days=value)
-        if unit == "week":
-            return d - timedelta(weeks=value)
-        if unit == "month":
-            return add_months(d, -value, anchor_day=anchor_day)
-        if unit == "year":
-            return add_months(d, -value * 12, anchor_day=anchor_day)
     return None
 
 
@@ -630,10 +597,6 @@ PERIOD_LABELS = {
 }
 
 CURRENCY_SYMBOLS = {"CNY": "¥", "USD": "$", "HKD": "HK$"}
-
-
-def calendar_due_event_type(renewal_policy: str) -> str:
-    return "service_end" if renewal_policy in ("stop", "stop_on_expiry") else "due_date"
 
 
 def is_calendar_trackable(lifecycle: str) -> bool:

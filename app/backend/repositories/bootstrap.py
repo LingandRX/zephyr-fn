@@ -553,15 +553,9 @@ def _migrate_payment_data(conn: Any) -> None:
         WHERE current_period_start IS NULL
     """))
     
-    # 根据lifecycle状态设置cancelled_at和paused_at
+    # 根据lifecycle状态设置cancelled_at（lifecycle 枚举无 paused，无需回填 paused_at）
     conn.execute(text("""
         UPDATE subscriptions
         SET cancelled_at = updated_at
         WHERE lifecycle = 'canceled' AND cancelled_at IS NULL
-    """))
-    
-    conn.execute(text("""
-        UPDATE subscriptions
-        SET paused_at = updated_at
-        WHERE lifecycle = 'paused' AND paused_at IS NULL
     """))

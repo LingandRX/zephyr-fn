@@ -12,7 +12,6 @@
 
 from __future__ import annotations
 
-import math
 from datetime import date, timedelta
 
 from ..domain import domain
@@ -108,125 +107,6 @@ def _to_default_currency(amount_cny: int, default_currency: str, settings: dict)
 
 def _month_end(d: date) -> date:
     return domain.add_months(d.replace(day=1), 1) - timedelta(days=1)
-
-
-def _fixed_cycle_days(sub: dict) -> int | None:
-    """返回可用整数天数直接计算的周期，避免每日订阅逐日迭代。
-
-    仅供已被 deprecated 的 ``_count_cycles_in_range`` 使用。
-    """
-    if sub.get("period_type") != "custom":
-        return None
-    try:
-        value = max(1, int(sub.get("custom_period_value") or 1))
-    except (TypeError, ValueError):
-        value = 1
-    unit = sub.get("custom_period_unit") or "month"
-    if unit == "day":
-        return value
-    if unit == "week":
-        return value * 7
-    return None
-
-
-# deprecated（保留待清理）：口径已被「按支付流水求和」取代——见下方
-# calculate_statistics 对 payments 的聚合。当前无生产调用，仅被
-# tests/test_regressions.py 用于守住「老日周期订阅不被迭代保护算成 0」
-# 的回归保护，请勿在新代码中引用。
-def _count_cycles_in_range(sub: dict, range_start: date, range_end: date) -> int:
-    """统计订阅在 [range_start, range_end] 区间内到期的周期数。
-
-    对日/周自定义周期使用整数运算，避免订阅历史较长时触发循环保护导致统计为 0；
-    月/季度/年继续使用日期推进逻辑，以保持月末钳制行为兼容。
-
-    .. deprecated::
-        已被支付流水求和口径取代，无生产调用，仅供回归测试使用。
-    """
-    if sub["period_type"] == "once" or range_start > range_end:
-        return 0
-    try:
-        start_date = date.fromisoformat(sub["start_date"])
-    except (TypeError, ValueError):
-        return 0
-    period_anchor = domain.billing_anchor_day(start_date)
-    first_due = domain.add_one_period(
-        start_date,
-        sub["period_type"],
-        sub["custom_period_value"],
-        sub["custom_period_unit"],
-        anchor_day=period_anchor,
-    )
-    if first_due is None:
-        return 0
-    try:
-        anchor = date.fromisoformat(sub["next_due_date"]) if sub.get("next_due_date") else first_due
-    except (TypeError, ValueError):
-        anchor = first_due
-
-    fixed_days = _fixed_cycle_days(sub)
-    if fixed_days:
-        lower = max(range_start, first_due, start_date + timedelta(days=1))
-        if lower > range_end:
-            return 0
-        first_k = max(0, math.ceil((lower - anchor).days / fixed_days))
-        last_k = math.floor((range_end - anchor).days / fixed_days)
-        return max(0, last_k - first_k + 1)
-
-    def step(d):
-        return domain.add_one_period(
-            d,
-            sub["period_type"],
-            sub["custom_period_value"],
-            sub["custom_period_unit"],
-            anchor_day=period_anchor,
-        )
-
-    def back(d):
-        return domain.sub_one_period(
-            d,
-            sub["period_type"],
-            sub["custom_period_value"],
-            sub["custom_period_unit"],
-            anchor_day=period_anchor,
-        )
-
-    guard = 0
-    while anchor > range_end:
-        guard += 1
-        if guard > 50000:
-            return 0
-        prev = back(anchor)
-        if prev is None:
-            return 0
-        anchor = prev
-    while anchor > range_start and anchor > start_date:
-        guard += 1
-        if guard > 50000:
-            return 0
-        prev = back(anchor)
-        if prev is None:
-            break
-        anchor = prev
-    while anchor < range_start:
-        guard += 1
-        if guard > 50000:
-            return 0
-        nxt = step(anchor)
-        if nxt is None:
-            return 0
-        anchor = nxt
-    count = 0
-    while anchor <= range_end:
-        guard += 1
-        if guard > 50000:
-            break
-        if anchor > start_date:
-            count += 1
-        nxt = step(anchor)
-        if nxt is None:
-            break
-        anchor = nxt
-    return count
 
 
 def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:

@@ -6,11 +6,10 @@ from collections.abc import Mapping
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 
 from ..extensions import db
 from ..models import Subscription
-from ._common import SUBSCRIPTION_COLUMNS, SUBSCRIPTION_FIELDS, new_id, now_utc
+from ._common import SUBSCRIPTION_COLUMNS, SUBSCRIPTION_FIELDS, now_utc
 
 
 def list_ordering() -> tuple:
@@ -27,21 +26,18 @@ def list_ordering() -> tuple:
     )
 
 
-def get_all_subscriptions(user_id: str, include_deleted: bool = False) -> list[dict]:
-    stmt = select(Subscription).where(Subscription.user_id == user_id)
-    if not include_deleted:
-        stmt = stmt.where(Subscription.deleted_at.is_(None))
-    rows = db.session.execute(stmt.order_by(*list_ordering())).scalars()
-    return [row.to_dict() for row in rows]
+def get_all_subscriptions(user_id: str) -> list[dict]:
+    stmt = (
+        select(Subscription)
+        .where(Subscription.user_id == user_id, Subscription.deleted_at.is_(None))
+        .order_by(*list_ordering())
+    )
+    return [row.to_dict() for row in db.session.execute(stmt).scalars()]
 
 
-def get_subscription_by_id(
-    sub_id: str, user_id: str, include_deleted: bool = False
-) -> dict | None:
+def get_subscription_by_id(sub_id: str, user_id: str) -> dict | None:
     row = db.session.get(Subscription, sub_id)
-    if row is None or row.user_id != user_id:
-        return None
-    if not include_deleted and row.deleted_at is not None:
+    if row is None or row.user_id != user_id or row.deleted_at is not None:
         return None
     return row.to_dict()
 
@@ -71,8 +67,8 @@ def update_subscription_fields(
     return row.to_dict()
 
 
-def delete_subscription(sub_id: str, user_id: str, hard: bool = False) -> bool:
-    """删除订阅。默认软删除（置 deleted_at）；hard=True 时物理删除。"""
+def delete_subscription(sub_id: str, user_id: str) -> bool:
+    """软删除订阅（置 deleted_at）。"""
     row = db.session.execute(
         select(Subscription).where(
             Subscription.id == sub_id,
@@ -82,11 +78,8 @@ def delete_subscription(sub_id: str, user_id: str, hard: bool = False) -> bool:
     ).scalar_one_or_none()
     if row is None:
         return False
-    if hard:
-        db.session.delete(row)
-    else:
-        row.deleted_at = now_utc()
-        row.updated_at = now_utc()
+    row.deleted_at = now_utc()
+    row.updated_at = now_utc()
     db.session.commit()
     return True
 
@@ -123,16 +116,12 @@ def renew_subscription(sub_id: str, user_id: str, next_due: str) -> dict | None:
     return row.to_dict()
 
 
-def get_all_subscriptions_raw(
-    user_id: str | None = None, include_deleted: bool = False
-) -> list[dict]:
-    """读取原始订阅；传入 user_id 时只返回该用户数据。默认过滤软删除。"""
-    stmt = select(Subscription).order_by(Subscription.id)
+def get_all_subscriptions_raw(user_id: str | None = None) -> list[dict]:
+    """读取原始订阅；传入 user_id 时只返回该用户数据（过滤软删除）。"""
+    stmt = select(Subscription).where(Subscription.deleted_at.is_(None))
     if user_id is not None:
         stmt = stmt.where(Subscription.user_id == user_id)
-    if not include_deleted:
-        stmt = stmt.where(Subscription.deleted_at.is_(None))
-    return [row.to_dict() for row in db.session.execute(stmt).scalars()]
+    return [row.to_dict() for row in db.session.execute(stmt.order_by(Subscription.id)).scalars()]
 
 
 def get_subscription_dedup_keys(user_id: str | None = None) -> set:
@@ -146,41 +135,6 @@ def get_subscription_dedup_keys(user_id: str | None = None) -> set:
         f"{name}|{amount}|{period_type}".lower()
         for name, amount, period_type in db.session.execute(stmt)
     }
-
-
-def insert_subscription_raw(normalized: Mapping[str, Any]) -> dict:
-    """安全插入外部订阅行，id 冲突时换新 id，绝不覆盖已有行。"""
-    candidate = {k: normalized[k] for k in SUBSCRIPTION_COLUMNS}
-    while True:
-        try:
-            row = Subscription(**candidate)
-            db.session.add(row)
-            db.session.commit()
-            return row.to_dict()
-        except IntegrityError:
-            db.session.rollback()
-            exists = db.session.get(Subscription, candidate["id"]) is not None
-            if not exists:
-                raise
-            candidate["id"] = new_id()
-
-
-def replace_subscription_raw(normalized: Mapping[str, Any]) -> bool:
-    """按 owner 安全替换订阅行，不允许跨用户覆盖。"""
-    candidate = {k: normalized[k] for k in SUBSCRIPTION_COLUMNS}
-    sub_id = candidate["id"]
-    owner = candidate["user_id"]
-    existing = db.session.get(Subscription, sub_id)
-    if existing is not None and existing.user_id != owner:
-        return False
-    if existing is not None:
-        for column in SUBSCRIPTION_COLUMNS:
-            if column not in ("id", "user_id"):
-                setattr(existing, column, candidate[column])
-    else:
-        db.session.add(Subscription(**candidate))
-    db.session.commit()
-    return True
 
 
 def get_subscriptions_paginated(

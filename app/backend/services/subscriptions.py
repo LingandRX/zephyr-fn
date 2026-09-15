@@ -226,8 +226,8 @@ def update_subscription(sub_id: str, user_id: str, data: dict) -> dict | None:
     return repositories.update_subscription_fields(sub_id, user_id, updates)
 
 
-def delete_subscription(sub_id: str, user_id: str, hard: bool = False) -> bool:
-    return repositories.delete_subscription(sub_id, user_id, hard=hard)
+def delete_subscription(sub_id: str, user_id: str) -> bool:
+    return repositories.delete_subscription(sub_id, user_id)
 
 
 def restore_subscription(sub_id: str, user_id: str) -> dict | None:
@@ -350,26 +350,3 @@ def _compute_updates(
             updates["current_period_end"] = derived_due
 
     return updates
-
-
-# --------------------------------------------------------------------------- #
-# 备份/导入导出辅助（全量读取与原始行写入）
-# --------------------------------------------------------------------------- #
-
-
-def get_all_subscriptions_raw(user_id: str | None = None) -> list[dict]:
-    return repositories.get_all_subscriptions_raw(user_id)
-
-
-def get_subscription_dedup_keys(user_id: str | None = None) -> set:
-    return repositories.get_subscription_dedup_keys(user_id)
-
-
-def insert_subscription_raw(sub: Mapping[str, Any], user_id: str | None = None) -> dict:
-    """安全插入外部订阅行（调用方需传入已归一化的全列字典）。"""
-    return repositories.insert_subscription_raw(sub)
-
-
-def replace_subscription_raw(sub: Mapping[str, Any], user_id: str | None = None) -> bool:
-    """按 owner 安全替换订阅行，不允许跨用户覆盖。"""
-    return repositories.replace_subscription_raw(sub)

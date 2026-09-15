@@ -59,7 +59,7 @@ class TestAddMonths:
 
 
 # --------------------------------------------------------------------------- #
-# add_one_period / sub_one_period
+# add_one_period
 # --------------------------------------------------------------------------- #
 
 
@@ -96,22 +96,6 @@ class TestAddOnePeriod:
         """custom 周期不指定 value/unit 时回退到 1 month。"""
         result = domain.add_one_period(date(2026, 3, 15), "custom")
         assert result == date(2026, 4, 15)
-
-    def test_sub_one_period_month(self):
-        assert domain.sub_one_period(date(2026, 3, 15), "month") == date(2026, 2, 15)
-
-    def test_sub_one_period_quarter(self):
-        assert domain.sub_one_period(date(2026, 4, 15), "quarter") == date(2026, 1, 15)
-
-    def test_sub_one_period_year(self):
-        assert domain.sub_one_period(date(2027, 3, 15), "year") == date(2026, 3, 15)
-
-    def test_sub_one_period_once(self):
-        assert domain.sub_one_period(date(2026, 3, 15), "once") is None
-
-    def test_sub_one_period_custom_day(self):
-        result = domain.sub_one_period(date(2026, 3, 20), "custom", custom_value=7, custom_unit="day")
-        assert result == date(2026, 3, 13)
 
 
 # --------------------------------------------------------------------------- #
@@ -487,8 +471,3 @@ class TestCalendarHelpers:
     def test_is_calendar_trackable_unsupported(self):
         """假设 unsupported 透传到 active。"""
         assert domain.is_calendar_trackable("active") is True
-
-    def test_calendar_due_event_type(self):
-        assert domain.calendar_due_event_type("auto") == "due_date"
-        assert domain.calendar_due_event_type("stop") == "service_end"
-        assert domain.calendar_due_event_type("stop_on_expiry") == "service_end"

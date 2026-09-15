@@ -48,7 +48,6 @@ class DomainTests(unittest.TestCase):
         feb = domain.add_months(start, 1)
         self.assertEqual(domain.add_months(feb, 1, anchor_day=30), date(2026, 3, 30))
         self.assertEqual(domain.add_one_period(feb, "month", anchor_day=30), date(2026, 3, 30))
-        self.assertEqual(domain.sub_one_period(feb, "month", anchor_day=30), start)
 
     def test_add_months_keeps_month_end_anchor(self):
         from datetime import date
@@ -105,13 +104,6 @@ class DomainTests(unittest.TestCase):
         self.assertEqual(
             domain.add_one_period(date(2026, 3, 1), "custom", 2, "month"), date(2026, 5, 1)
         )
-
-    def test_sub_is_inverse(self):
-        from datetime import date
-
-        d = date(2026, 5, 20)
-        fwd = domain.add_one_period(d, "month")
-        self.assertEqual(domain.sub_one_period(fwd, "month"), d)
 
     def test_normalize_renewal(self):
         self.assertEqual(domain.normalize_renewal_on_create(True, "stop"), (False, "stop"))

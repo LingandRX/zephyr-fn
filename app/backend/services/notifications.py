@@ -12,11 +12,9 @@ from typing import Any
 from ..domain import domain
 from .. import repositories
 
-# 兼容入口：调度器与外部调用方继续使用这些名字
+# 兼容入口：调度器（幂等领取/完成）与测试继续使用这些名字
 claim_notification = repositories.claim_notification
 complete_notification = repositories.complete_notification
-has_channel_notified_today = repositories.has_channel_notified_today
-log_notification = repositories.log_notification
 
 def parse_clock(value: Any) -> int | None:
     """把 HH:MM 转成当天分钟数；非法配置返回 None。"""

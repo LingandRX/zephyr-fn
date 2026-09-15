@@ -61,10 +61,6 @@ class SettingsSchema:
             else:
                 updates[field] = str(value) if value not in (None, "") else None
 
-        # 请求中出现的 *_configured 输出字段不允许回写
-        for key in list(updates):
-            if key.endswith("_configured"):
-                updates.pop(key, None)
         return updates
 
     @staticmethod

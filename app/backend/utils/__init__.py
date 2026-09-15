@@ -1,7 +1,3 @@
-"""通用基础设施与工具模块。"""
+"""通用基础设施与工具模块（通知渠道见 channels/ 子包）。"""
 
 from __future__ import annotations
-
-from .file_utils import atomic_write_json, fsync_directory
-
-__all__ = ["atomic_write_json", "fsync_directory"]

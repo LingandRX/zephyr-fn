@@ -2,7 +2,6 @@
 
 import sys
 import unittest
-from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
@@ -28,15 +27,6 @@ class ServicesRegressionTests(unittest.TestCase):
             "lifecycle": "active",
             "updated_at": "2000-01-01T00:00:00Z",
         }
-
-    def test_old_daily_subscription_is_counted_without_iteration_guard(self):
-        # 覆盖已 deprecated 的 _count_cycles_in_range（口径被支付流水求和取代）；
-        # 本断言是该遗留实现的唯一回归保护，清理死代码时请一并评估。
-        sub = self._daily_sub()
-        self.assertEqual(
-            services._count_cycles_in_range(sub, date(2026, 8, 1), date(2026, 8, 31)),
-            31,
-        )
 
     def test_old_daily_subscription_calendar_is_generated(self):
         # 针对 2000 年 1 月，start_date 为 2000-01-01，next_due_date 为 2000-01-02（自动续费订阅）

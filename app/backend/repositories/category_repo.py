@@ -9,7 +9,7 @@ from sqlalchemy import select, update
 
 from ..extensions import db
 from ..models import Category, Subscription
-from ._common import new_id, now_utc, _to_int
+from ._common import new_id, now_utc
 
 
 def get_all_categories(user_id: str) -> list[dict]:
@@ -80,30 +80,6 @@ def update_category(cat_id: str, user_id: str, updates: Mapping[str, Any]) -> di
             raise ConflictError("分类已存在") from exc
         raise
     return row.to_dict()
-
-
-def insert_category_raw(cat: Mapping[str, Any], user_id: str | None = None) -> bool:
-    """安全插入外部分类；id 冲突时忽略，不覆盖任何用户的分类。"""
-    if not isinstance(cat, Mapping):
-        raise ValueError("分类数据必须是对象")
-    cat_id = str(cat.get("id") or "").strip()
-    if not cat_id:
-        raise ValueError("分类 id 不能为空")
-    name = str(cat.get("name") or "未分类").strip() or "未分类"
-    owner = str(user_id if user_id is not None else cat.get("user_id", "local") or "local")
-    if db.session.get(Category, cat_id) is not None:
-        return False
-    db.session.add(
-        Category(
-            id=cat_id,
-            user_id=owner,
-            name=name,
-            icon=cat.get("icon"),
-            sort_order=_to_int(cat.get("sort_order"), 0),
-        )
-    )
-    db.session.commit()
-    return True
 
 
 def delete_category(cat_id: str, user_id: str) -> bool:

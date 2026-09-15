@@ -41,8 +41,6 @@ from .subscription_repo import (  # noqa: F401
     get_subscription_dedup_keys,
     get_subscriptions_paginated,
     insert_subscription,
-    insert_subscription_raw,
-    replace_subscription_raw,
     restore_subscription,
     renew_subscription,
     update_subscription_fields,
@@ -59,7 +57,6 @@ from .category_repo import (  # noqa: F401
     get_category_by_id,
     get_category_count,
     insert_category,
-    insert_category_raw,
     update_category,
 )
 

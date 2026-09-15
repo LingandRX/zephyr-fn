@@ -96,12 +96,3 @@ def _ensure_unique_name(user_id: str, name: str, exclude_id: str | None = None) 
             continue
         if cat["name"].lower() == normalized.lower():
             raise ConflictError("分类已存在")
-
-
-# --------------------------------------------------------------------------- #
-# 备份/导入导出辅助
-# --------------------------------------------------------------------------- #
-
-
-def insert_category_raw(cat: Mapping[str, Any], user_id: str | None = None) -> bool:
-    return repositories.insert_category_raw(cat, user_id)
