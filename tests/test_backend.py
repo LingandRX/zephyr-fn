@@ -130,9 +130,14 @@ class DomainTests(unittest.TestCase):
         today = date.today()
         soon = (today + timedelta(days=3)).isoformat()
         later = (today + timedelta(days=30)).isoformat()
+        past = (today - timedelta(days=1)).isoformat()
         self.assertEqual(domain.derive_status("active", soon), "expiring")
         self.assertEqual(domain.derive_status("active", later), "active")
         self.assertEqual(domain.derive_status("canceled", later), "canceled")
+        # 到期后按续费策略区分：默认 auto 仍是逾期，manual 为已到期，stop 类为已结束
+        self.assertEqual(domain.derive_status("active", past), "expired")
+        self.assertEqual(domain.derive_status("active", past, renewal_policy="manual"), "lapsed")
+        self.assertEqual(domain.derive_status("active", past, renewal_policy="stop"), "ended")
 
 
 class SubscriptionServiceTests(AppTestCase):
@@ -153,6 +158,29 @@ class SubscriptionServiceTests(AppTestCase):
         self.assertEqual(sub["renewal_policy"], "auto")
         got = sub_service.get_subscription(sub["id"], "u1")
         self.assertEqual(got["name"], "Netflix")
+
+    def test_with_status_is_renewal_policy_aware(self):
+        """with_status 应把 renewal_policy 传入派生状态（纯字典，无需数据库）。"""
+        from datetime import date, timedelta
+
+        past = (date.today() - timedelta(days=7)).isoformat()
+        lapsed = sub_service.with_status(
+            {"lifecycle": "active", "next_due_date": past, "renewal_policy": "manual"}
+        )
+        self.assertEqual(lapsed["status"], "lapsed")
+        self.assertEqual(lapsed["status_label"], "已到期")
+        self.assertEqual(lapsed["status_color"], "#6B7280")
+
+        ended = sub_service.with_status(
+            {"lifecycle": "active", "next_due_date": past, "renewal_policy": "stop"}
+        )
+        self.assertEqual(ended["status"], "ended")
+
+        expired = sub_service.with_status(
+            {"lifecycle": "active", "next_due_date": past, "renewal_policy": "auto"}
+        )
+        self.assertEqual(expired["status"], "expired")
+        self.assertEqual(expired["status_label"], "已过期")
 
     def test_multi_user_isolation(self):
         sub_service.create_subscription(
@@ -453,6 +481,10 @@ class ServicesTests(AppTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        # 扣费日相对今天生成：活跃订阅必须尚未到期，避免测试随日历漂移失效
+        from datetime import date, timedelta
+
+        due_soon = (date.today() + timedelta(days=30)).isoformat()
         with cls.ctx():
             cat = category_service.create_category("u1", {"name": "流媒体"})
             sub_service.create_subscription(
@@ -464,7 +496,7 @@ class ServicesTests(AppTestCase):
                     "period_type": "month",
                     "auto_renew": True,
                     "start_date": "2026-06-11",
-                    "next_due_date": "2026-08-15",
+                    "next_due_date": due_soon,
                     "category_id": cat["id"],
                 },
             )
@@ -477,7 +509,7 @@ class ServicesTests(AppTestCase):
                     "period_type": "year",
                     "auto_renew": True,
                     "start_date": "2026-05-01",
-                    "next_due_date": "2026-09-01",
+                    "next_due_date": due_soon,
                 },
             )
 
@@ -499,6 +531,47 @@ class ServicesTests(AppTestCase):
         # 验证月度趋势并不是每个月都相同
         trend_amounts = [m["amount"] for m in stats["monthly_trend"]]
         self.assertIsInstance(trend_amounts, list)
+
+    def test_statistics_exclude_past_due_subscriptions(self):
+        """到期未续费的订阅不计入活跃数，也不计入按月折算支出。"""
+        from datetime import date, timedelta
+
+        user_id = "u_stats_past_due"
+        past = (date.today() - timedelta(days=7)).isoformat()
+        future = (date.today() + timedelta(days=30)).isoformat()
+        for name, amount, auto_renew in (
+            ("已到期手动", 5000, False),
+            ("已过期自动", 3000, True),
+        ):
+            sub_service.create_subscription(
+                user_id,
+                {
+                    "name": name,
+                    "amount": amount,
+                    "currency": "CNY",
+                    "period_type": "month",
+                    "auto_renew": auto_renew,
+                    "start_date": past,
+                    "next_due_date": past,
+                },
+            )
+        sub_service.create_subscription(
+            user_id,
+            {
+                "name": "活跃",
+                "amount": 1000,
+                "currency": "CNY",
+                "period_type": "month",
+                "auto_renew": True,
+                "start_date": future,
+                "next_due_date": future,
+            },
+        )
+
+        stats = calculate_statistics(user_id, "nominal")
+        self.assertEqual(stats["active_count"], 1)
+        # 仅活跃订阅的 1000 分（CNY）按月折算计入
+        self.assertEqual(stats["monthly_expense"], 1000)
 
     def test_subscription_creation_creates_payment(self):
         sub = sub_service.create_subscription(

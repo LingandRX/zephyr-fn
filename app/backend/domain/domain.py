@@ -549,11 +549,22 @@ def should_auto_renew_on_wake(auto_renew_or_policy: Any, renewal_policy: str | N
     return policy == "auto"
 
 
-def derive_status(lifecycle: str, next_due_date: str | None, today: date | None = None) -> str:
+def derive_status(
+    lifecycle: str,
+    next_due_date: str | None,
+    today: date | None = None,
+    renewal_policy: str | None = "auto",
+) -> str:
     """派生订阅状态。
 
-    ``active`` 订阅在到期日之后显示为 ``expired``，而不是继续显示为
-    ``expiring``；数据库中明确的 ``ended`` 等生命周期状态保持原值。
+    ``active`` 订阅在到期日之后，按续费策略区分语义：
+
+    - ``auto``：真实的逾期未扣，返回 ``expired``；
+    - ``manual``：周期自然结束、无欠费，返回展示态 ``lapsed``；
+    - ``stop`` / ``stop_on_expiry``：服务按用户意愿结束，返回 ``ended``。
+
+    到期前 ``EXPIRING_THRESHOLD_DAYS`` 天内统一为 ``expiring``（仅描述周期
+    边界，不含欠费含义）；数据库中明确的 ``ended`` 等生命周期状态保持原值。
     """
     today = today or date.today()
     if lifecycle == "active":
@@ -566,7 +577,12 @@ def derive_status(lifecycle: str, next_due_date: str | None, today: date | None 
                 return "active"
             days = (due - today).days
             if days < 0:
-                return "expired"
+                policy = str(renewal_policy).strip().lower() if renewal_policy else "auto"
+                if policy in ("stop", "stop_on_expiry"):
+                    return "ended"
+                if policy == "auto":
+                    return "expired"
+                return "lapsed"
             if days <= EXPIRING_THRESHOLD_DAYS:
                 return "expiring"
         return "active"
@@ -591,6 +607,7 @@ STATUS_LABELS = {
     "canceled": "已取消",
     "ended": "已结束",
     "expired": "已过期",
+    "lapsed": "已到期",
 }
 
 STATUS_COLORS = {
@@ -601,6 +618,7 @@ STATUS_COLORS = {
     "canceled": "#6B7280",
     "ended": "#6B7280",
     "expired": "#EF4444",
+    "lapsed": "#6B7280",
 }
 
 PERIOD_LABELS = {

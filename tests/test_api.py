@@ -97,6 +97,39 @@ class TestSubscriptionAPI:
         names = [s["name"] for s in _json(resp)["data"]]
         assert names == ["Dated Soon", "Dated Later", "One Time"]
 
+    def test_manual_past_due_status_is_lapsed(self, client):
+        """回归：手动续费订阅到期后是「已到期」，不是「已过期/逾期」。"""
+        from datetime import date, timedelta
+
+        past = (date.today() - timedelta(days=7)).isoformat()
+        sub = _create_subscription(
+            client,
+            auto_renew=False,
+            renewal_policy="manual",
+            start_date=past,
+            first_payment_date=past,
+            next_due_date=past,
+        )
+        assert sub["status"] == "lapsed"
+        assert sub["status_label"] == "已到期"
+        assert sub["status_color"] == "#6B7280"
+
+    def test_stop_policy_past_due_status_is_ended(self, client):
+        """到期停止类策略到期后直接「已结束」，不含逾期语义。"""
+        from datetime import date, timedelta
+
+        past = (date.today() - timedelta(days=7)).isoformat()
+        sub = _create_subscription(
+            client,
+            auto_renew=False,
+            renewal_policy="stop_on_expiry",
+            start_date=past,
+            first_payment_date=past,
+            next_due_date=past,
+        )
+        assert sub["status"] == "ended"
+        assert sub["status_label"] == "已结束"
+
     def test_get_subscription(self, client):
         created = _create_subscription(client)
         sub_id = created["id"]

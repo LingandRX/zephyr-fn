@@ -185,6 +185,44 @@ class TestDeriveStatus:
         """脏日期宁可显示 active，不误判为即将到期。"""
         assert domain.derive_status("active", "not-a-date") == "active"
 
+    def test_past_due_status_follows_renewal_policy(self):
+        """到期后按续费策略区分：auto 逾期、manual 已到期、stop 类已结束。"""
+        past = (date.today() - timedelta(days=7)).isoformat()
+        assert domain.derive_status("active", past, renewal_policy="auto") == "expired"
+        assert domain.derive_status("active", past, renewal_policy="manual") == "lapsed"
+        assert domain.derive_status("active", past, renewal_policy="stop") == "ended"
+        assert domain.derive_status("active", past, renewal_policy="stop_on_expiry") == "ended"
+
+    def test_missing_policy_defaults_to_auto(self):
+        """缺失/None/空策略回落到改动前的行为（expired）。"""
+        past = (date.today() - timedelta(days=1)).isoformat()
+        assert domain.derive_status("active", past) == "expired"
+        assert domain.derive_status("active", past, renewal_policy=None) == "expired"
+        assert domain.derive_status("active", past, renewal_policy="") == "expired"
+
+    def test_policy_does_not_affect_upcoming_dates(self):
+        """到期前/未来状态对所有策略一致，策略只在过期后生效。"""
+        today = date.today()
+        soon = (today + timedelta(days=3)).isoformat()
+        later = (today + timedelta(days=30)).isoformat()
+        for policy in ("auto", "manual", "stop", "stop_on_expiry"):
+            assert domain.derive_status("active", soon, renewal_policy=policy) == "expiring"
+            assert domain.derive_status("active", later, renewal_policy=policy) == "active"
+            assert domain.derive_status("active", None, renewal_policy=policy) == "active"
+
+    def test_policy_ignored_for_non_active_lifecycle(self):
+        """非 active 的 lifecycle 直接透传，不看日期也不看策略。"""
+        past = (date.today() - timedelta(days=1)).isoformat()
+        assert domain.derive_status("canceled", past, renewal_policy="manual") == "canceled"
+        assert domain.derive_status("expired", None, renewal_policy="stop") == "expired"
+        assert domain.derive_status("grace_period", past, renewal_policy="auto") == "grace_period"
+
+    def test_lapsed_is_display_only(self):
+        """lapsed 是纯展示态：不得进入持久化的生命周期枚举。"""
+        assert "lapsed" not in domain.LIFECYCLES
+        assert domain.STATUS_LABELS["lapsed"] == "已到期"
+        assert domain.STATUS_COLORS["lapsed"] == "#6B7280"
+
 
 # --------------------------------------------------------------------------- #
 # normalize_bool

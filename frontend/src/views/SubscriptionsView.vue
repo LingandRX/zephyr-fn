@@ -32,6 +32,8 @@ const statusOptions = [
   { label: "宽限期", value: "grace_period" },
   { label: "已取消", value: "canceled" },
   { label: "已过期", value: "expired" },
+  { label: "已到期", value: "lapsed" },
+  { label: "已结束", value: "ended" },
 ];
 
 const catOptions = computed(() => [
@@ -102,7 +104,8 @@ function statusText(s) {
   const dl = daysLeft(s.next_due_date);
   if (s.lifecycle !== "active") return s.status_label;
   if (dl === null) return "";
-  if (dl < 0) return `已逾期 ${-dl} 天`;
+  // 仅自动续费的逾期才算欠费；已到期/已结束由状态胶囊表达，不再重复倒计时
+  if (dl < 0) return s.status === "expired" ? `已逾期 ${-dl} 天` : "";
   if (dl === 0) return "今天扣费";
   if (dl === 1) return "明天扣费";
   return `剩余 ${dl} 天`;
@@ -110,7 +113,9 @@ function statusText(s) {
 
 function statusClass(s) {
   const dl = daysLeft(s.next_due_date);
-  return dl !== null && dl < 0 ? "days-overdue" : dl !== null && dl <= 7 ? "days-soon" : "";
+  if (dl === null) return "";
+  if (dl < 0) return s.status === "expired" ? "days-overdue" : "";
+  return dl <= 7 ? "days-soon" : "";
 }
 
 const statCards = computed(() => {

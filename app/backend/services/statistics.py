@@ -275,7 +275,12 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
     yearly_expense = sum(_payment_cny_amount(p, settings) for p in yearly_payments)
 
     for sub in subs:
-        if sub["lifecycle"] not in ("active", "in_payment"):
+        status = domain.derive_status(
+            sub.get("lifecycle", "active"),
+            sub.get("next_due_date"),
+            renewal_policy=sub.get("renewal_policy"),
+        )
+        if status not in ("active", "expiring", "in_payment"):
             continue
         active_count += 1
 

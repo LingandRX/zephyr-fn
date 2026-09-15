@@ -50,7 +50,11 @@ _CANDIDATE_FIELDS = (
 def with_status(sub: dict) -> dict:
     """为订阅附加派生状态（即将到期/已过期等展示字段）。"""
     sub = dict(sub)
-    sub["status"] = domain.derive_status(sub.get("lifecycle", "active"), sub.get("next_due_date"))
+    sub["status"] = domain.derive_status(
+        sub.get("lifecycle", "active"),
+        sub.get("next_due_date"),
+        renewal_policy=sub.get("renewal_policy"),
+    )
     sub["status_label"] = domain.STATUS_LABELS.get(sub["status"], sub["status"])
     sub["status_color"] = domain.STATUS_COLORS.get(sub["status"], "#6B7280")
     return sub
