@@ -13,13 +13,25 @@ from ..models import Subscription
 from ._common import SUBSCRIPTION_COLUMNS, SUBSCRIPTION_FIELDS, new_id, now_utc
 
 
+def list_ordering() -> tuple:
+    """订阅列表统一排序键。
+
+    下次扣费日升序（最早的排最前）；一次性订阅的 ``next_due_date`` 为 NULL，
+    用 ``is_(None)`` 显式归到末位，避免 SQLite（NULL 在前）与 PostgreSQL（NULL 在后）
+    的方言差异；同一扣费日再按名称升序。
+    """
+    return (
+        Subscription.next_due_date.is_(None),
+        Subscription.next_due_date.asc(),
+        Subscription.name.asc(),
+    )
+
+
 def get_all_subscriptions(user_id: str, include_deleted: bool = False) -> list[dict]:
     stmt = select(Subscription).where(Subscription.user_id == user_id)
     if not include_deleted:
         stmt = stmt.where(Subscription.deleted_at.is_(None))
-    rows = db.session.execute(
-        stmt.order_by(Subscription.next_due_date.asc(), Subscription.name.asc())
-    ).scalars()
+    rows = db.session.execute(stmt.order_by(*list_ordering())).scalars()
     return [row.to_dict() for row in rows]
 
 
@@ -203,7 +215,7 @@ def get_subscriptions_paginated(
     total = db.session.execute(count_stmt).scalar_one()
 
     # 分页查询
-    stmt = stmt.order_by(Subscription.next_due_date.asc(), Subscription.name.asc())
+    stmt = stmt.order_by(*list_ordering())
     stmt = stmt.offset((page - 1) * per_page).limit(per_page)
     items = [row.to_dict() for row in db.session.execute(stmt).scalars()]
 

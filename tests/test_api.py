@@ -77,6 +77,26 @@ class TestSubscriptionAPI:
         _assert_ok(body)
         assert len(body["data"]) >= 2
 
+    def test_one_time_subscription_sorted_last(self, client):
+        """回归：一次性订阅（next_due_date 为 NULL）应排在所有有扣费日的订阅之后。"""
+        _create_subscription(
+            client, name="Dated Later", start_date="2030-06-01", first_payment_date="2030-06-01"
+        )
+        _create_subscription(
+            client,
+            name="One Time",
+            period_type="once",
+            start_date="2020-01-01",
+            first_payment_date="2020-01-01",
+        )
+        _create_subscription(
+            client, name="Dated Soon", start_date="2030-01-01", first_payment_date="2030-01-01"
+        )
+        resp = client.get("/api/subscriptions")
+        assert resp.status_code == 200
+        names = [s["name"] for s in _json(resp)["data"]]
+        assert names == ["Dated Soon", "Dated Later", "One Time"]
+
     def test_get_subscription(self, client):
         created = _create_subscription(client)
         sub_id = created["id"]
