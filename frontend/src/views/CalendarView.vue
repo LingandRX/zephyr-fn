@@ -25,8 +25,10 @@ const events = ref([]);
 const selectedDateStr = ref(null);
 // 窄屏明细底部抽屉（Headless UI Dialog）开合态
 const sheetOpen = ref(false);
-// 当月网格行数（5 或 6）：桌面端用它等分行高，6 行月份不再截断月末日期
-const calRows = ref(5);
+// 恒定 6 行 / 42 格模式：桌面端弹性等分行高，彻底避免 5/6 行切换晃动与月末日期截断
+const CAL_ROWS = 6;
+const TOTAL_CELLS = 42;
+const calRows = CAL_ROWS;
 
 /** 本地日期 → YYYY-MM-DD。不能用 toISOString()：UTC 偏移会让「今天」错一天 */
 function toDateStr(d) {
@@ -153,12 +155,8 @@ function buildGrid() {
   const startDow = first.getDay(); // 0 = 周日，与表头「日一二三四五六」一致
   const daysInMonth = new Date(year, month, 0).getDate();
 
-  // 行数按需 5 或 6 行（至少 5 行保持高度稳定）：
-  // 固定 35 格会让 startDow + 天数 > 35 的月份丢掉月末日期（如 2026-08 丢 30/31 日）
-  const rows = Math.max(5, Math.ceil((startDow + daysInMonth) / 7));
-  calRows.value = rows;
-  const totalCells = rows * 7;
-
+  // 方案 B：恒定 6 行 / 42 格模式（业界标准如 Google Calendar / iOS 原生日历）
+  // 保持行数与网格结构恒定，彻底避免 5/6 行切换时的卡片抖动与下边框裁切截断
   const cells = [];
   // 上月占位
   for (let i = 0; i < startDow; i++) {
@@ -174,7 +172,7 @@ function buildGrid() {
   const nextMonthYear = month === 12 ? year + 1 : year;
   const nextMonthNum = month === 12 ? 1 : month + 1;
   let nextDay = 1;
-  while (cells.length < totalCells) {
+  while (cells.length < TOTAL_CELLS) {
     const ds = `${nextMonthYear}-${String(nextMonthNum).padStart(2, "0")}-${String(nextDay).padStart(2, "0")}`;
     cells.push(makeCell(ds, nextDay, true, todayStr, byDate));
     nextDay++;
@@ -770,7 +768,7 @@ onActivated(() => {
 .cal-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  grid-template-rows: auto repeat(var(--cal-rows, 5), minmax(96px, 1fr));
+  grid-template-rows: auto repeat(var(--cal-rows, 6), minmax(0, 1fr));
   gap: 4px;
   width: 100%;
   min-height: 480px;
@@ -787,7 +785,7 @@ onActivated(() => {
 /* 单元格：无边框，靠圆角底色区分状态 */
 .cal-day {
   min-width: 0;
-  min-height: 96px;
+  min-height: 0;
   height: auto;
   padding: 6px;
   border-radius: 12px;
@@ -1309,20 +1307,21 @@ onActivated(() => {
     flex-direction: column;
     flex: 1 1 auto;
     min-width: 0;
-    min-height: 0;
+    min-height: 480px;
     height: 100%;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
   .cal-grid {
     flex: 1 1 auto;
     min-height: 0;
-    /* 首行周标题 auto，其余 5/6 行至少保留 96px，保证当前窗口下能完整放置两条事件摘要 */
-    grid-template-rows: auto repeat(var(--cal-rows, 5), minmax(96px, 1fr));
+    /* 首行周标题 auto，恒定 6 行弹性平分可用高度，彻底杜绝下边框截断 */
+    grid-template-rows: auto repeat(var(--cal-rows, 6), minmax(0, 1fr));
     align-content: stretch;
   }
   .cal-day {
     height: auto;
-    min-height: 96px;
+    min-height: 0;
   }
   .day-details-card {
     display: block;
@@ -1399,6 +1398,8 @@ onActivated(() => {
   }
   .cal-grid {
     gap: 2px;
+    min-height: 0;
+    grid-template-rows: auto repeat(var(--cal-rows, 6), 56px);
   }
   .cal-day {
     height: 56px;
