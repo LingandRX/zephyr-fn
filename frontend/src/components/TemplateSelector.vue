@@ -316,14 +316,14 @@ function close() {
 :global(.template-dialog-root) {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: var(--z-modal-nested);
 }
 
 :global(.template-dialog-backdrop) {
   position: fixed;
   inset: 0;
   /* Dialog 根节点是 Fragment，根类拿不到本组件的 scoped data-v，规则不生效；z-index 必须写在自己的元素上 */
-  z-index: 9999;
+  z-index: var(--z-modal-nested);
   background: rgba(0, 0, 0, 0.4);
   -webkit-backdrop-filter: blur(3px);
   backdrop-filter: blur(3px);
@@ -333,7 +333,7 @@ function close() {
 :global(.template-dialog-container) {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: var(--z-modal-nested);
   display: flex;
   align-items: center;
   justify-content: center;

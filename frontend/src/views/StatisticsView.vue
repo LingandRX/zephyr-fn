@@ -262,32 +262,6 @@ onActivated(() => {
  * 圆角毛玻璃卡片 / SF 风格排版 / 柔和渐变柱状图 / 悬浮气泡
  * ===================================================================== */
 
-/* iOS 系统色板
- * 注意：令牌必须挂在组件根元素 .stats-view 上，不能写进 scoped 的 `:root`。
- * scoped 会把 `:root` 编译成 `[data-v-xxx]:root`，而 <html> 拿不到 data-v 属性，
- * 整个变量块会失效（卡片背景/边框、柱状图与占比条渐变全部变透明）。 */
-.stats-view {
-  --ios-blue: #007aff;
-  --ios-blue-soft: rgba(0, 122, 255, 0.12);
-  --ios-green: #34c759;
-  --ios-orange: #ff9500;
-  --ios-red: #ff3b30;
-  --ios-purple: #af52de;
-  --ios-teal: #5ac8fa;
-  --ios-pink: #ff2d55;
-  --ios-indigo: #5856d6;
-  --ios-gray: #8e8e93;
-  --ios-separator: rgba(60, 60, 67, 0.12);
-  --ios-card-bg: rgba(255, 255, 255, 0.72);
-  --ios-card-border: rgba(255, 255, 255, 0.5);
-}
-
-:root[data-theme="dark"] .stats-view {
-  --ios-separator: rgba(255, 255, 255, 0.08);
-  --ios-card-bg: rgba(28, 28, 30, 0.72);
-  --ios-card-border: rgba(255, 255, 255, 0.08);
-}
-
 .stats-view {
   display: flex;
   flex-direction: column;
@@ -398,7 +372,7 @@ onActivated(() => {
 
 .trend-bar:hover,
 .trend-bar:focus-visible {
-  background: linear-gradient(180deg, #5ac8fa, var(--ios-blue));
+  background: linear-gradient(180deg, var(--ios-teal), var(--ios-blue));
   box-shadow: 0 4px 16px rgba(0, 122, 255, 0.3);
   transform: scaleY(1.05);
   transform-origin: bottom;
@@ -406,7 +380,7 @@ onActivated(() => {
 
 /* 当月 */
 .trend-col.is-current .trend-bar {
-  background: linear-gradient(180deg, #5ac8fa, #007aff);
+  background: linear-gradient(180deg, var(--ios-teal), var(--ios-blue));
   box-shadow: 0 4px 20px rgba(0, 122, 255, 0.35);
 }
 

@@ -268,15 +268,12 @@ onMounted(loadNotice);
 }
 .theme-toggle:hover {
   color: var(--text);
+  border-color: var(--primary);
+  background: var(--card);
 }
 .theme-toggle-icon {
   width: 18px;
   height: 18px;
-}
-
-.theme-toggle:hover {
-  border-color: var(--primary);
-  background: var(--card);
 }
 
 .theme-toggle:active {
@@ -301,7 +298,7 @@ onMounted(loadNotice);
   line-height: 1;
   cursor: pointer;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-  z-index: 29;
+  z-index: var(--z-fab, 25);
   transition: background var(--dur-fast) ease, transform var(--dur-fast) ease;
 }
 
@@ -322,12 +319,5 @@ onMounted(loadNotice);
   .fab-add:active {
     opacity: 1;
   }
-}
-
-/* 订阅列表侧边栏 SVG 图标 */
-.nav-item-icon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
 }
 </style>

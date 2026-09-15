@@ -991,9 +991,11 @@ onMounted(loadAll);
   font-weight: 600;
 }
 
-/* 选中态本身就是焦点指示（自动激活模式下焦点跟随选中），不再额外画焦点环 */
 .tab-btn:focus {
   outline: none;
+}
+.tab-btn:focus-visible {
+  box-shadow: 0 0 0 2px var(--ios-blue);
 }
 
 .tab-icon {

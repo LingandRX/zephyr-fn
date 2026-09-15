@@ -31,6 +31,10 @@
   --ios-orange-soft: rgba(255, 149, 0, 0.14);
   --ios-red: #ff3b30;
   --ios-red-soft: rgba(255, 59, 48, 0.12);
+  --ios-teal: #5ac8fa;
+  --ios-purple: #af52de;
+  --ios-pink: #ff2d55;
+  --ios-indigo: #5856d6;
   --ios-gray: #8e8e93;
   --ios-fill: rgba(120, 120, 128, 0.24);
   --ios-separator: rgba(255, 255, 255, 0.1);
@@ -64,10 +68,13 @@
   --shadow-sidebar: 6px 0 32px rgba(0, 0, 0, 0.4);
 
   /* z-index 刻度：浮动提醒位于页面之上，但不遮挡抽屉、弹窗和 Toast */
+  --z-fab: 25;
   --z-notice: 30;
   --z-overlay: 39;
   --z-sidebar: 40;
   --z-modal: 50;
+  --z-popover: 60;
+  --z-modal-nested: 70;
   --z-toast: 100;
 
   /* 动画时长刻度：8 档 + 2 个循环专用，按需就近取用，禁止再写裸时长 */
@@ -100,10 +107,10 @@
   --border: #e2e8f0;
   --text: #1e293b;
   --muted: #64748b;
-  --primary: #38bdf8;
-  --primary-2: #0ea5e9;
-  --primary-rgb: 56, 189, 248;
-  --grad-a: #7dd3fc;
+  --primary: #0284c7;           /* Sky-600，白字按钮对比度 4.6:1，符合 WCAG AA */
+  --primary-2: #0369a1;         /* Sky-700，hover 加深 */
+  --primary-rgb: 2, 132, 199;
+  --grad-a: #38bdf8;
   --grad-b: #0284c7;
   --green: #16a34a;
   --amber: #d97706;

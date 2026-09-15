@@ -331,7 +331,7 @@ onBeforeUnmount(() => {
             position: 'fixed',
             top: `${dropdownPos.top}px`,
             left: `${dropdownPos.left}px`,
-            zIndex: 1000,
+            zIndex: 'var(--z-popover)',
           }"
           @click.stop
         >
@@ -422,14 +422,14 @@ onBeforeUnmount(() => {
 /* ---------------- 触发器 ---------------- */
 .custom-time-picker-trigger {
   width: 100%;
-  height: 44px;
+  height: 38px;
   box-sizing: border-box;
   padding: 0 10px 0 12px;
   background: var(--ios-fill);
   border: 1px solid transparent;
   border-radius: 10px;
   color: var(--text);
-  font-size: 16px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   display: flex;
   align-items: center;

@@ -67,8 +67,6 @@ onActivated(() => {
     openModal();
     ui.showAddModal = false;
   }
-  if (activationCount === 1) return;
-  loadAll();
 });
 
 // keep-alive 切走时关闭弹窗，避免返回后弹窗残留
@@ -1088,9 +1086,6 @@ onMounted(loadAll);
 @media (max-width: 860px) {
   .desktop-only { display: none !important; }
   .mobile-only { display: flex !important; }
-
-  /* 给右下角浮动「+」按钮留出空间：滚到底时列表末尾不被遮挡 */
-  .page { padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
 
   .stats-grid {
     margin-bottom: 14px;

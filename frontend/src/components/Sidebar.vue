@@ -369,10 +369,6 @@ function closeMobile() {
 .nav-icon {
   width: 22px;
 }
-.nav-item-icon {
-  width: 20px;
-  height: 20px;
-}
 
 /* 底部折叠按钮 */
 .sidebar-footer {
@@ -404,11 +400,7 @@ function closeMobile() {
   padding: 0;
 }
 
-/* 移动抽屉：同一套底色 + 圆形关闭按钮 */
-:global(.mobile-sidebar) {
-  background: var(--card-2);
-  border-right: 1px solid var(--ios-separator);
-}
+/* 移动端关闭按钮 */
 .sidebar-mobile-close {
   width: 32px;
   height: 32px;
@@ -459,8 +451,8 @@ function closeMobile() {
   max-width: 85vw;
   height: 100vh;
   height: 100dvh;
-  background: var(--bg-2);
-  border-right: 1px solid var(--border);
+  background: var(--card-2);
+  border-right: 1px solid var(--ios-separator);
   box-shadow: var(--shadow-drawer);
   display: flex;
   flex-direction: column;

@@ -424,7 +424,7 @@ onBeforeUnmount(() => {
             position: 'fixed',
             top: `${dropdownPos.top}px`,
             left: `${dropdownPos.left}px`,
-            zIndex: 1000,
+            zIndex: 'var(--z-popover)',
           }"
           @click.stop
         >

@@ -573,35 +573,11 @@ onActivated(() => {
  * 毛玻璃卡片 / SF 排版 / 圆形日期 / 彩色事件胶囊 / 底部抽屉
  * ===================================================================== */
 
-/* iOS 系统色板
- * 注意：令牌必须挂在组件根元素 .cal-page 上，不能写进 scoped 的 `:root`。
- * scoped 会把 `:root` 编译成 `[data-v-xxx]:root`，而 <html> 拿不到 data-v 属性，
- * 整个变量块会失效（卡片背景、边框、日期圆形全部变透明）。 */
 .cal-page {
-  --ios-blue: #007aff;
-  --ios-blue-soft: rgba(0, 122, 255, 0.12);
-  --ios-green: #34c759;
-  --ios-orange: #ff9500;
-  --ios-orange-soft: rgba(255, 149, 0, 0.14);
-  --ios-red: #ff3b30;
-  --ios-red-soft: rgba(255, 59, 48, 0.12);
-  --ios-gray: #8e8e93;
-  --ios-fill: rgba(120, 120, 128, 0.08);
-  --ios-separator: rgba(60, 60, 67, 0.12);
-  --ios-card-bg: rgba(255, 255, 255, 0.72);
-  --ios-card-border: rgba(255, 255, 255, 0.5);
-
   display: flex;
   flex-direction: column;
   gap: 14px;
   min-width: 0;
-}
-
-:root[data-theme="dark"] .cal-page {
-  --ios-fill: rgba(120, 120, 128, 0.24);
-  --ios-separator: rgba(255, 255, 255, 0.1);
-  --ios-card-bg: rgba(28, 28, 30, 0.72);
-  --ios-card-border: rgba(255, 255, 255, 0.08);
 }
 
 /* ---------------- 顶部导航与图例 ---------------- */
