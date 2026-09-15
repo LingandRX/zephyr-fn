@@ -48,6 +48,26 @@ jobs:
       - name: Run tests
         run: python -m pytest tests/ -v
 
+      - name: Smoke test (real device entry point)
+        working-directory: app/backend
+        run: |
+          set -euo pipefail
+          export TRIM_PKGVAR="${RUNNER_TEMP}/sub-smoke"
+          mkdir -p "$TRIM_PKGVAR"
+          # 复现真机运行方式（cmd/install_callback、cmd/main 均以脚本启动 server.py）：
+          # 若 backend/ 下子包遮蔽标准库（如 backend/http 遮蔽标准库 http），此处会立即失败。
+          python server.py --init-db
+          python server.py --http 18099 &
+          SERVER_PID=$!
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18099/api/health >/dev/null 2>&1; then
+              break
+            fi
+            sleep 0.5
+          done
+          curl -fsS http://127.0.0.1:18099/api/health
+          kill "$SERVER_PID"
+
   frontend-lint:
     name: Frontend Lint (ESLint)
     runs-on: ubuntu-latest
