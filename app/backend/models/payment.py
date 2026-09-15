@@ -26,7 +26,9 @@ class Payment(db.Model):
     period_start = Column(String(10), nullable=False)
     period_end = Column(String(10), nullable=False)
     payment_type = Column(String(16), nullable=False)  # first/renewal/refund/adjustment
-    status = Column(String(16), nullable=False, default="success")  # pending/success/failed/refunded
+    status = Column(
+        String(16), nullable=False, default="success"
+    )  # pending/success/failed/refunded
     external_txn_id = Column(String(64), nullable=True)
     note = Column(String(200), nullable=True)
     created_at = Column(String(32), nullable=False)

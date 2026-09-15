@@ -9,12 +9,13 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from ..domain import domain
 from .. import repositories
+from ..domain import domain
 
 # 兼容入口：调度器（幂等领取/完成）与测试继续使用这些名字
 claim_notification = repositories.claim_notification
 complete_notification = repositories.complete_notification
+
 
 def parse_clock(value: Any) -> int | None:
     """把 HH:MM 转成当天分钟数；非法配置返回 None。"""

@@ -9,8 +9,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from ..schemas.settings import SettingsSchema
 from .. import repositories
+from ..schemas.settings import SettingsSchema
 
 _SECRET_SETTING_FIELDS = ("smtp_password", "pushplus_token", "pushplus_smtp_password")
 

@@ -10,9 +10,9 @@ services/subscriptions 中处理。所有校验失败统一抛 ValidationError�
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import date
-from typing import Any, Callable
+from typing import Any
 
 from ..domain import domain
 from ..domain.exceptions import ValidationError

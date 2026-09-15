@@ -18,13 +18,13 @@ def list_subscriptions():
         try:
             page = max(1, int(request.args.get("page", "1")))
         except (ValueError, TypeError):
-            raise ValidationError("page 必须是正整数")
+            raise ValidationError("page 必须是正整数") from None
 
         per_page_raw = request.args.get("per_page", "20")
         try:
             per_page = max(1, min(100, int(per_page_raw)))
         except (ValueError, TypeError):
-            raise ValidationError("per_page 必须是 1-100 的整数")
+            raise ValidationError("per_page 必须是 1-100 的整数") from None
 
         lifecycle = request.args.get("lifecycle") or None
         category_id = request.args.get("category_id") or None

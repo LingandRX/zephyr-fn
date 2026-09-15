@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from flask import Blueprint, g, request
 
+from .. import repositories
 from ..domain.exceptions import NotFoundError, ValidationError
 from ..http.response import ok
-from .. import repositories
 
-bp = Blueprint('api_payments', __name__, url_prefix='/api')
+bp = Blueprint("api_payments", __name__, url_prefix="/api")
 
 
-@bp.route('/payments', methods=['GET'])
+@bp.route("/payments", methods=["GET"])
 def list_payments():
     """查询支付流水。
 
@@ -20,9 +20,9 @@ def list_payments():
     2. start_date + end_date: 查询日期范围内的流水
     3. 不传参: 返回用户所有流水
     """
-    subscription_id = request.args.get('subscription_id') or None
-    start_date = request.args.get('start_date') or None
-    end_date = request.args.get('end_date') or None
+    subscription_id = request.args.get("subscription_id") or None
+    start_date = request.args.get("start_date") or None
+    end_date = request.args.get("end_date") or None
 
     # 模式1: 按订阅 ID 查询（严格校验归属权，防止越权访问）
     if subscription_id:
@@ -40,7 +40,7 @@ def list_payments():
             raise ValidationError("按日期范围查询时 start_date 和 end_date 都必填")
         # 简单日期格式校验
         for date_str, name in [(start_date, "start_date"), (end_date, "end_date")]:
-            if len(date_str) != 10 or date_str[4] != '-' or date_str[7] != '-':
+            if len(date_str) != 10 or date_str[4] != "-" or date_str[7] != "-":
                 raise ValidationError(f"{name} 格式必须为 YYYY-MM-DD")
         payments = repositories.get_payments_by_date_range(
             user_id=g.identity.user_id,

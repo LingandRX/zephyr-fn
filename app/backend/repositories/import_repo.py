@@ -47,9 +47,7 @@ def batch_import(
                 )
             )
         for sub in subscriptions:
-            db.session.add(
-                Subscription(**{col: sub.get(col) for col in SUBSCRIPTION_COLUMNS})
-            )
+            db.session.add(Subscription(**{col: sub.get(col) for col in SUBSCRIPTION_COLUMNS}))
         db.session.commit()
         return True, None, True
     except Exception as exc:  # noqa: BLE001

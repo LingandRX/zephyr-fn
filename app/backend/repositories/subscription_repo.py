@@ -165,6 +165,7 @@ def get_subscriptions_paginated(
 
     # 总数查询
     from sqlalchemy import func
+
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total = db.session.execute(count_stmt).scalar_one()
 

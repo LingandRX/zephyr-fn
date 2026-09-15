@@ -12,7 +12,6 @@ import pytest
 
 from backend.domain import domain
 
-
 # --------------------------------------------------------------------------- #
 # add_months
 # --------------------------------------------------------------------------- #
@@ -77,19 +76,27 @@ class TestAddOnePeriod:
         assert domain.add_one_period(date(2026, 3, 15), "once") is None
 
     def test_custom_day(self):
-        result = domain.add_one_period(date(2026, 3, 15), "custom", custom_value=14, custom_unit="day")
+        result = domain.add_one_period(
+            date(2026, 3, 15), "custom", custom_value=14, custom_unit="day"
+        )
         assert result == date(2026, 3, 29)
 
     def test_custom_week(self):
-        result = domain.add_one_period(date(2026, 3, 15), "custom", custom_value=2, custom_unit="week")
+        result = domain.add_one_period(
+            date(2026, 3, 15), "custom", custom_value=2, custom_unit="week"
+        )
         assert result == date(2026, 3, 29)
 
     def test_custom_month(self):
-        result = domain.add_one_period(date(2026, 3, 15), "custom", custom_value=3, custom_unit="month")
+        result = domain.add_one_period(
+            date(2026, 3, 15), "custom", custom_value=3, custom_unit="month"
+        )
         assert result == date(2026, 6, 15)
 
     def test_custom_year(self):
-        result = domain.add_one_period(date(2026, 3, 15), "custom", custom_value=1, custom_unit="year")
+        result = domain.add_one_period(
+            date(2026, 3, 15), "custom", custom_value=1, custom_unit="year"
+        )
         assert result == date(2027, 3, 15)
 
     def test_custom_default_values(self):
@@ -310,6 +317,7 @@ class TestNormalizeDate:
     def test_datetime_raises(self):
         """datetime 对象应拒绝（不能悄悄丢弃时分秒）。"""
         from datetime import datetime
+
         with pytest.raises(ValueError, match="YYYY-MM-DD"):
             domain.normalize_date(datetime(2026, 3, 15, 12, 0))
 
@@ -343,7 +351,9 @@ class TestNormalizeSubscriptionData:
 
     def test_defaults_applied(self):
         """金额不传时默认 0，货币不传时默认 CNY。"""
-        result = domain.normalize_subscription_data({"name": "测试", "period_type": "month", "start_date": "2026-01-01"})
+        result = domain.normalize_subscription_data(
+            {"name": "测试", "period_type": "month", "start_date": "2026-01-01"}
+        )
         assert result["amount"] == 0
         assert result["currency"] == "CNY"
 
@@ -376,15 +386,11 @@ class TestNormalizeSubscriptionData:
 
     def test_custom_period_without_values_raises(self):
         with pytest.raises(ValueError):
-            domain.normalize_subscription_data(
-                self._minimal_data(period_type="custom")
-            )
+            domain.normalize_subscription_data(self._minimal_data(period_type="custom"))
 
     def test_non_custom_with_custom_values_raises(self):
         with pytest.raises(ValueError, match="仅适用于custom"):
-            domain.normalize_subscription_data(
-                self._minimal_data(custom_period_value=14)
-            )
+            domain.normalize_subscription_data(self._minimal_data(custom_period_value=14))
 
     def test_renewal_confirmed_auto_default(self):
         """自动续费默认 renewal_confirmed = True。"""
@@ -393,9 +399,7 @@ class TestNormalizeSubscriptionData:
 
     def test_renewal_confirmed_manual_default(self):
         """手动续费默认 renewal_confirmed = False。"""
-        result = domain.normalize_subscription_data(
-            self._minimal_data(auto_renew=False)
-        )
+        result = domain.normalize_subscription_data(self._minimal_data(auto_renew=False))
         assert result["renewal_confirmed"] is False
 
 

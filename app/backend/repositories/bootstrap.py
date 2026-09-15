@@ -500,9 +500,10 @@ def _migrate_payment_data(conn: Any) -> None:
         conn.execute(text("SELECT 1 FROM payments LIMIT 1"))
     except Exception:
         return
-    
+
     # 为现有订阅创建首次支付记录
-    conn.execute(text("""
+    conn.execute(
+        text("""
         INSERT INTO payments (
             id,
             subscription_id,
@@ -537,10 +538,12 @@ def _migrate_payment_data(conn: Any) -> None:
               WHERE p.subscription_id = s.id
                 AND p.payment_type = 'first'
           )
-    """))
-    
+    """)
+    )
+
     # 更新订阅的当前周期信息
-    conn.execute(text("""
+    conn.execute(
+        text("""
         UPDATE subscriptions
         SET
             current_period_start = COALESCE(first_payment_date, start_date),
@@ -551,11 +554,14 @@ def _migrate_payment_data(conn: Any) -> None:
                 ELSE 1
             END
         WHERE current_period_start IS NULL
-    """))
-    
+    """)
+    )
+
     # 根据lifecycle状态设置cancelled_at（lifecycle 枚举无 paused，无需回填 paused_at）
-    conn.execute(text("""
+    conn.execute(
+        text("""
         UPDATE subscriptions
         SET cancelled_at = updated_at
         WHERE lifecycle = 'canceled' AND cancelled_at IS NULL
-    """))
+    """)
+    )

@@ -10,13 +10,13 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Callable
 
 from flask import Flask
 
-from ..services import notifications
 from .. import repositories
+from ..services import notifications
 from ..utils import channels
 from ..utils.channels.email import EMAIL_PATTERN
 
@@ -242,4 +242,3 @@ def stop_scheduler(timeout: float = 10.0) -> None:
         if _scheduler_thread is not None and _scheduler_thread.is_alive():
             _scheduler_thread.join(timeout=timeout)
         _scheduler_thread = None
-

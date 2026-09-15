@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from ..domain import domain
 from .. import repositories
+from ..domain import domain
 
 
 def _divide_round(amount: int, divisor: int) -> int:
@@ -128,7 +128,7 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
     active_count = 0
     cat_monthly: dict[str, int] = {}
     cat_yearly: dict[str, int] = {}
-    monthly_amounts: dict[str, int] = {ms.strftime('%Y-%m'): 0 for ms in month_starts}
+    monthly_amounts: dict[str, int] = {ms.strftime("%Y-%m"): 0 for ms in month_starts}
 
     month_start = now.replace(day=1)
     month_end = _month_end(now)
@@ -141,13 +141,13 @@ def calculate_statistics(user_id: str, mode: str = "nominal") -> dict:
     month_end_str = month_end.isoformat()
     year_start_str = year_start.isoformat()
     year_end_str = year_end.isoformat()
-    
+
     # 本月实际支付金额
     monthly_payments = repositories.get_payments_by_date_range(
         user_id, month_start_str, month_end_str, "success"
     )
     monthly_actual_expense = sum(_payment_cny_amount(p, settings) for p in monthly_payments)
-    
+
     # 本年实际支付金额
     yearly_payments = repositories.get_payments_by_date_range(
         user_id, year_start_str, year_end_str, "success"

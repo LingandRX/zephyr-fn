@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -69,7 +69,7 @@ def claim_notification(subscription_id: str, channel: str) -> str | None:
         return None
     today = date.today().isoformat()
     # TTL 截断线：pending 超过 6 小时视为失效，可被重新领取
-    ttl_cutoff = (datetime.now(timezone.utc) - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    ttl_cutoff = (datetime.now(UTC) - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     claim_id = new_id()
     stmt = (

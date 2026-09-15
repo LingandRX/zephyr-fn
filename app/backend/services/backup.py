@@ -13,8 +13,8 @@ from datetime import date
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
-from ..domain import domain
 from .. import repositories
+from ..domain import domain
 from ..schemas.category import normalize_sort_order as _safe_sort_order
 
 MAX_IMPORT_ROWS = 10_000
@@ -55,6 +55,7 @@ _LIFECYCLE_ALIASES = {
         if key in domain.LIFECYCLES
     },
 }
+
 
 def _period_label(period_type: str) -> str:
     return domain.PERIOD_LABELS.get(period_type, period_type)

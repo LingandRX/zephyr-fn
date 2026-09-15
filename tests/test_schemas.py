@@ -6,14 +6,12 @@
 
 from __future__ import annotations
 
-
 import pytest
 
-from backend.schemas.subscription import SubscriptionSchema
-from backend.schemas.settings import SettingsSchema
-from backend.schemas.category import normalize_category_name, normalize_icon
 from backend.domain.exceptions import ValidationError
-
+from backend.schemas.category import normalize_category_name, normalize_icon
+from backend.schemas.settings import SettingsSchema
+from backend.schemas.subscription import SubscriptionSchema
 
 # --------------------------------------------------------------------------- #
 # SubscriptionSchema.validate_create
@@ -67,19 +65,23 @@ class TestSubscriptionSchemaCreate:
             SubscriptionSchema.validate_create(self._valid_payload(amount=-100))
 
     def test_custom_period(self):
-        result = SubscriptionSchema.validate_create(self._valid_payload(
-            period_type="custom",
-            custom_period_value=14,
-            custom_period_unit="day",
-        ))
+        result = SubscriptionSchema.validate_create(
+            self._valid_payload(
+                period_type="custom",
+                custom_period_value=14,
+                custom_period_unit="day",
+            )
+        )
         assert result["period_type"] == "custom"
         assert result["custom_period_value"] == 14
 
     def test_category_and_notes_cleaned(self):
-        result = SubscriptionSchema.validate_create(self._valid_payload(
-            category_id="  cat-123  ",
-            notes="  some note  ",
-        ))
+        result = SubscriptionSchema.validate_create(
+            self._valid_payload(
+                category_id="  cat-123  ",
+                notes="  some note  ",
+            )
+        )
         assert result["category_id"] == "cat-123"
         assert result["notes"] == "some note"
 
@@ -163,10 +165,12 @@ class TestSettingsSchema:
 
     def test_configured_fields_filtered_out(self):
         """*_configured 输出字段不允许回写。"""
-        result = SettingsSchema.load({
-            "smtp_password_configured": True,
-            "notification_days": 7,
-        })
+        result = SettingsSchema.load(
+            {
+                "smtp_password_configured": True,
+                "notification_days": 7,
+            }
+        )
         assert "smtp_password_configured" not in result
 
     def test_non_mapping_raises(self):
@@ -205,7 +209,7 @@ class TestCategorySchema:
             normalize_category_name("   ")
 
     def test_illegal_chars_raises(self):
-        for ch in '<>"\'&':
+        for ch in "<>\"'&":
             with pytest.raises(ValidationError, match="不能包含"):
                 normalize_category_name(f"test{ch}")
 

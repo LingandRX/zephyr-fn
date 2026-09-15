@@ -16,13 +16,17 @@
 from __future__ import annotations
 
 # --------------------------------------------------------------------------- #
+# 便捷引用（供测试与其他模块直接使用）
+# --------------------------------------------------------------------------- #
+from ..extensions import db  # noqa: F401
+
+# --------------------------------------------------------------------------- #
 # 公共工具与常量（_common.py）
 # --------------------------------------------------------------------------- #
-
 from ._common import (  # noqa: F401
+    _SECRET_SETTING_FIELDS,
     SETTINGS_FIELDS,
     SUBSCRIPTION_FIELDS,
-    _SECRET_SETTING_FIELDS,
     _to_int,
     is_secret_placeholder,
     new_id,
@@ -30,26 +34,8 @@ from ._common import (  # noqa: F401
 )
 
 # --------------------------------------------------------------------------- #
-# 订阅仓储（subscription_repo.py）
-# --------------------------------------------------------------------------- #
-
-from .subscription_repo import (  # noqa: F401
-    delete_subscription,
-    get_all_subscriptions,
-    get_all_subscriptions_raw,
-    get_subscription_by_id,
-    get_subscription_dedup_keys,
-    get_subscriptions_paginated,
-    insert_subscription,
-    restore_subscription,
-    renew_subscription,
-    update_subscription_fields,
-)
-
-# --------------------------------------------------------------------------- #
 # 分类仓储（category_repo.py）
 # --------------------------------------------------------------------------- #
-
 from .category_repo import (  # noqa: F401
     delete_category,
     get_all_categories,
@@ -61,18 +47,13 @@ from .category_repo import (  # noqa: F401
 )
 
 # --------------------------------------------------------------------------- #
-# 设置仓储（settings_repo.py）
+# 批量导入仓储（import_repo.py）
 # --------------------------------------------------------------------------- #
-
-from .settings_repo import (  # noqa: F401
-    get_app_settings,
-    update_app_settings,
-)
+from .import_repo import batch_import  # noqa: F401
 
 # --------------------------------------------------------------------------- #
 # 通知/邮件日志仓储（notification_repo.py）
 # --------------------------------------------------------------------------- #
-
 from .notification_repo import (  # noqa: F401
     claim_notification,
     complete_notification,
@@ -81,18 +62,8 @@ from .notification_repo import (  # noqa: F401
 )
 
 # --------------------------------------------------------------------------- #
-# 用户播种仓储（seed_repo.py）
-# --------------------------------------------------------------------------- #
-
-from .seed_repo import (  # noqa: F401
-    is_user_seeded,
-    mark_user_seeded,
-)
-
-# --------------------------------------------------------------------------- #
 # 支付流水仓储（payment_repo.py）
 # --------------------------------------------------------------------------- #
-
 from .payment_repo import (  # noqa: F401
     create_payment_for_subscription,
     get_all_payments,
@@ -101,13 +72,33 @@ from .payment_repo import (  # noqa: F401
 )
 
 # --------------------------------------------------------------------------- #
-# 便捷引用（供测试与其他模块直接使用）
+# 用户播种仓储（seed_repo.py）
 # --------------------------------------------------------------------------- #
-
-from ..extensions import db  # noqa: F401
+from .seed_repo import (  # noqa: F401
+    is_user_seeded,
+    mark_user_seeded,
+)
 
 # --------------------------------------------------------------------------- #
-# 批量导入仓储（import_repo.py）
+# 设置仓储（settings_repo.py）
 # --------------------------------------------------------------------------- #
+from .settings_repo import (  # noqa: F401
+    get_app_settings,
+    update_app_settings,
+)
 
-from .import_repo import batch_import  # noqa: F401
+# --------------------------------------------------------------------------- #
+# 订阅仓储（subscription_repo.py）
+# --------------------------------------------------------------------------- #
+from .subscription_repo import (  # noqa: F401
+    delete_subscription,
+    get_all_subscriptions,
+    get_all_subscriptions_raw,
+    get_subscription_by_id,
+    get_subscription_dedup_keys,
+    get_subscriptions_paginated,
+    insert_subscription,
+    renew_subscription,
+    restore_subscription,
+    update_subscription_fields,
+)

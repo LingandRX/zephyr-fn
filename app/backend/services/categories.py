@@ -5,16 +5,16 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from .. import repositories
 from ..domain.exceptions import ConflictError, ValidationError
 from ..extensions import db
+from ..repositories.bootstrap import DEFAULT_CATEGORY_TEMPLATES
 from ..schemas.category import (
     MAX_CATEGORIES_PER_USER,
     normalize_category_name,
     normalize_icon,
     normalize_sort_order,
 )
-from .. import repositories
-from ..repositories.bootstrap import DEFAULT_CATEGORY_TEMPLATES
 
 # 进程内已播种用户缓存（按数据库文件隔离），避免每个 API 请求都查询 seeded_users。
 # 注意：此缓存仅在单进程内有效。当前 fnOS 部署为单进程模式，

@@ -13,10 +13,10 @@ import sys
 _APP_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "app")
 sys.path.insert(0, os.path.abspath(_APP_DIR))
 
-import pytest
+import pytest  # noqa: E402
 
-from backend.app import create_app
-from backend.config import TestingConfig
+from backend.app import create_app  # noqa: E402
+from backend.config import TestingConfig  # noqa: E402
 
 
 @pytest.fixture()

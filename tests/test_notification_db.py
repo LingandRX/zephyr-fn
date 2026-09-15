@@ -13,10 +13,10 @@ from datetime import date
 
 from helpers import AppTestCase
 
-from backend.extensions import db
-from backend.services import notifications
-from backend.repositories import bootstrap
 from backend import repositories
+from backend.extensions import db
+from backend.repositories import bootstrap
+from backend.services import notifications
 
 
 class NotificationDbTests(AppTestCase):

@@ -10,6 +10,7 @@ import os
 
 # 路径函数重导出（供现有代码 config.xxx() 调用）
 from .paths import (  # noqa: F401
+    _get,  # 内部使用，不导出
     app_root,
     app_version,
     data_dir,
@@ -21,7 +22,6 @@ from .paths import (  # noqa: F401
     sys_arch,
     www_dir,
 )
-from .paths import _get  # 内部使用，不导出
 
 MAX_REQUEST_BODY_BYTES = 5 * 1024 * 1024
 MAX_USER_ID_LENGTH = 128

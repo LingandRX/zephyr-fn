@@ -22,6 +22,7 @@ def _assert_ok(data, code=0):
 def _create_subscription(client, **overrides):
     """辅助：创建一个订阅并返回解析后的 JSON data。"""
     from datetime import date, timedelta
+
     _future = (date.today() + timedelta(days=30)).isoformat()
     payload = {
         "name": "测试订阅",
@@ -142,10 +143,13 @@ class TestSubscriptionAPI:
     def test_update_subscription(self, client):
         created = _create_subscription(client)
         sub_id = created["id"]
-        resp = client.put(f"/api/subscriptions/{sub_id}", json={
-            "name": "更新后名称",
-            "amount": 2990,
-        })
+        resp = client.put(
+            f"/api/subscriptions/{sub_id}",
+            json={
+                "name": "更新后名称",
+                "amount": 2990,
+            },
+        )
         assert resp.status_code == 200
         body = _json(resp)
         _assert_ok(body)
@@ -298,10 +302,13 @@ class TestSettingsAPI:
         assert "smtp_password_masked" in data
 
     def test_update_settings(self, client):
-        resp = client.put("/api/settings", json={
-            "notification_days": 14,
-            "default_currency": "USD",
-        })
+        resp = client.put(
+            "/api/settings",
+            json={
+                "notification_days": 14,
+                "default_currency": "USD",
+            },
+        )
         assert resp.status_code == 200
         body = _json(resp)
         _assert_ok(body)
@@ -332,9 +339,9 @@ class TestPermissions:
 
     def test_normal_user_cannot_import_csv(self, normal_client):
         """非管理员不能导入 CSV。"""
-        resp = normal_client.post("/api/backup/import-csv",
-                                  data="名称,金额\nTest,100",
-                                  content_type="text/csv")
+        resp = normal_client.post(
+            "/api/backup/import-csv", data="名称,金额\nTest,100", content_type="text/csv"
+        )
         assert resp.status_code == 403
 
 

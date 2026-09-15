@@ -12,7 +12,6 @@ import pytest
 
 from backend.services import notifications
 
-
 # --------------------------------------------------------------------------- #
 # parse_clock
 # --------------------------------------------------------------------------- #
@@ -143,17 +142,21 @@ class TestGenerateNotificationContent:
     def test_missing_due_date_raises(self):
         """缺少 next_due_date 应报错。"""
         with pytest.raises(ValueError, match="缺少下次到期日"):
-            notifications.generate_notification_content({
-                "name": "Test",
-                "amount": 100,
-                "currency": "CNY",
-            })
+            notifications.generate_notification_content(
+                {
+                    "name": "Test",
+                    "amount": 100,
+                    "currency": "CNY",
+                }
+            )
 
     def test_invalid_due_date_raises(self):
         with pytest.raises(ValueError, match="格式无效"):
-            notifications.generate_notification_content({
-                "name": "Test",
-                "amount": 100,
-                "currency": "CNY",
-                "next_due_date": "not-a-date",
-            })
+            notifications.generate_notification_content(
+                {
+                    "name": "Test",
+                    "amount": 100,
+                    "currency": "CNY",
+                    "next_due_date": "not-a-date",
+                }
+            )

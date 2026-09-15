@@ -52,6 +52,6 @@ class Subscription(db.Model):
     def to_dict(self) -> dict:
         data = {column.name: getattr(self, column.name) for column in self.__table__.columns}
         # 单一事实来源（SSOT）：auto_renew 为展示层/旧前端兼容字段，完全由 renewal_policy 派生
-        data["auto_renew"] = (self.renewal_policy == "auto")
+        data["auto_renew"] = self.renewal_policy == "auto"
         data["renewal_confirmed"] = bool(data["renewal_confirmed"])
         return data

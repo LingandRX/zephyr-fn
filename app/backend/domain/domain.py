@@ -469,7 +469,7 @@ def normalize_subscription_data(
         renewal_confirmed = normalize_bool(values["renewal_confirmed"], "续费已确认")
     else:
         # 单一事实来源（SSOT）：未显式指定时，自动续费默认为已确认(True)，手动/停止默认为未确认(False)
-        renewal_confirmed = (renewal_policy == "auto")
+        renewal_confirmed = renewal_policy == "auto"
     grace_period_ends_at = normalize_date(values.get("grace_period_ends_at"), "宽限期结束日期")
     cancelled_at = normalize_date(values.get("cancelled_at"), "取消日期")
     paused_at = normalize_date(values.get("paused_at"), "暂停日期")

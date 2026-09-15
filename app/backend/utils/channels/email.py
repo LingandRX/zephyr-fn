@@ -83,7 +83,9 @@ def send_email(
     msg["From"] = smtp_from
     msg["To"] = to_address
 
-    logger.info("准备发送邮件: from=%s, to=%s, host=%s:%s", smtp_from, to_address, smtp_host, smtp_port)
+    logger.info(
+        "准备发送邮件: from=%s, to=%s, host=%s:%s", smtp_from, to_address, smtp_host, smtp_port
+    )
 
     # 根据端口选择连接方式
     if smtp_port == 465:

@@ -12,9 +12,7 @@ from ._common import new_id, now_utc
 def get_all_payments(user_id: str) -> list[dict]:
     """获取用户的所有支付流水。"""
     rows = db.session.execute(
-        select(Payment)
-        .where(Payment.user_id == user_id)
-        .order_by(Payment.paid_at.desc())
+        select(Payment).where(Payment.user_id == user_id).order_by(Payment.paid_at.desc())
     ).scalars()
     return [row.to_dict() for row in rows]
 
@@ -24,17 +22,12 @@ def get_payments_by_subscription(subscription_id: str, user_id: str | None = Non
     stmt = select(Payment).where(Payment.subscription_id == subscription_id)
     if user_id is not None:
         stmt = stmt.where(Payment.user_id == user_id)
-    rows = db.session.execute(
-        stmt.order_by(Payment.paid_at.desc())
-    ).scalars()
+    rows = db.session.execute(stmt.order_by(Payment.paid_at.desc())).scalars()
     return [row.to_dict() for row in rows]
 
 
 def get_payments_by_date_range(
-    user_id: str,
-    start_date: str,
-    end_date: str,
-    status: str = "success"
+    user_id: str, start_date: str, end_date: str, status: str = "success"
 ) -> list[dict]:
     """获取指定日期范围内的支付流水（闭区间：start_date <= paid_at <= end_date）。"""
     rows = db.session.execute(
@@ -43,7 +36,7 @@ def get_payments_by_date_range(
             Payment.user_id == user_id,
             Payment.status == status,
             Payment.paid_at >= start_date,
-            Payment.paid_at <= end_date
+            Payment.paid_at <= end_date,
         )
         .order_by(Payment.paid_at.desc())
     ).scalars()

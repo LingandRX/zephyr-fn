@@ -17,6 +17,7 @@ from flask_migrate import upgrade
 from . import config as app_config
 from .api import register_blueprints
 from .domain import exceptions
+from .extensions import db, migrate
 from .http.middleware import (
     GatewayPrefixMiddleware,
     check_admin_only,
@@ -24,7 +25,6 @@ from .http.middleware import (
     parse_identity,
 )
 from .http.response import error as error_response
-from .extensions import db, migrate
 from .repositories import bootstrap
 
 # Alembic 迁移脚本目录（与 app.py 同级的 migrations/）

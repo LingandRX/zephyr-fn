@@ -10,10 +10,10 @@ from collections.abc import Mapping
 from datetime import date
 from typing import Any
 
+from .. import repositories
 from ..domain import domain
 from ..domain.exceptions import ValidationError
 from ..schemas.subscription import SubscriptionSchema
-from .. import repositories
 
 # 合并校验用的候选字段（更新场景：当前值 + 请求值）
 _CANDIDATE_FIELDS = (
@@ -80,27 +80,29 @@ def _derive_period_and_status(normalized: Mapping[str, Any]) -> dict[str, Any]:
     """自动推导账期字段和生命周期状态。"""
     start_date_str = normalized["start_date"]
     first_pay_str = normalized.get("first_payment_date") or start_date_str
-    
+
     # 1. 周期开始日：未显式传入则默认使用 first_payment_date 或 start_date
     current_period_start = normalized.get("current_period_start") or first_pay_str
-    
+
     # 2. 下次到期日
     next_due = _derive_next_due(normalized)
-    
+
     # 3. 周期结束日：未显式传入时等于下次到期日；若无到期日（如一次性），等于开始日
     current_period_end = normalized.get("current_period_end") or next_due or current_period_start
-    
+
     # 4. 最后付款日：未显式传入则默认使用首次付款日
     last_payment_date = normalized.get("last_payment_date") or first_pay_str
-    
+
     # 5. 自动续费/手动续费确认状态：由单一事实来源 renewal_policy 判定
     renewal_confirmed = normalized.get("renewal_confirmed")
     if renewal_confirmed is None:
-        policy = normalized.get("renewal_policy") or ("auto" if normalized.get("auto_renew") else "manual")
+        policy = normalized.get("renewal_policy") or (
+            "auto" if normalized.get("auto_renew") else "manual"
+        )
         renewal_confirmed = 1 if policy == "auto" else 0
     else:
         renewal_confirmed = int(renewal_confirmed)
-        
+
     return {
         "current_period_start": current_period_start,
         "current_period_end": current_period_end,
@@ -177,11 +179,11 @@ def list_subscriptions_paginated(
         category_id=category_id,
     )
     return {
-        'items': [with_status(s) for s in items],
-        'total': total,
-        'page': page,
-        'per_page': per_page,
-        'pages': ceil(total / per_page) if total > 0 else 0,
+        "items": [with_status(s) for s in items],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": ceil(total / per_page) if total > 0 else 0,
     }
 
 
@@ -198,7 +200,11 @@ def create_subscription(user_id: str, data: dict) -> dict:
     first_pay = created.get("first_payment_date") or created.get("start_date")
     if first_pay:
         p_start = created.get("current_period_start") or created.get("start_date")
-        p_end = created.get("current_period_end") or created.get("next_due_date") or created.get("start_date")
+        p_end = (
+            created.get("current_period_end")
+            or created.get("next_due_date")
+            or created.get("start_date")
+        )
         repositories.create_payment_for_subscription(
             subscription_id=created["id"],
             user_id=user_id,
@@ -250,7 +256,7 @@ def renew_subscription(sub_id: str, user_id: str) -> dict | None:
     )
     if next_due is None:
         return None
-    
+
     # 更新订阅状态
     updated = repositories.renew_subscription(sub_id, user_id, next_due.isoformat())
     if updated:
@@ -266,14 +272,18 @@ def renew_subscription(sub_id: str, user_id: str) -> dict | None:
             period_start=period_start,
             period_end=next_due.isoformat(),
             payment_type="renewal",
-            note=f"续费 {current['name']}"
+            note=f"续费 {current['name']}",
         )
         # 更新订阅的最后付款日期及当前账期
-        repositories.update_subscription_fields(sub_id, user_id, {
-            "last_payment_date": today_str,
-            "current_period_start": period_start,
-            "current_period_end": next_due.isoformat(),
-        })
+        repositories.update_subscription_fields(
+            sub_id,
+            user_id,
+            {
+                "last_payment_date": today_str,
+                "current_period_start": period_start,
+                "current_period_end": next_due.isoformat(),
+            },
+        )
     return updated
 
 
@@ -340,7 +350,9 @@ def _compute_updates(
     explicit_next_due = "next_due_date" in data
     if normalized["period_type"] == "once":
         updates["next_due_date"] = None
-        updates["current_period_end"] = updates.get("current_period_start") or current.get("current_period_start")
+        updates["current_period_end"] = updates.get("current_period_start") or current.get(
+            "current_period_start"
+        )
     elif (period_changed or custom_changed or "start_date" in data) and (
         not explicit_next_due or data.get("next_due_date") in (None, "")
     ):
