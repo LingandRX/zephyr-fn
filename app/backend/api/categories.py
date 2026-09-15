@@ -5,8 +5,8 @@ from __future__ import annotations
 from flask import Blueprint, g, request
 
 from ..domain.exceptions import NotFoundError
-from ..http.response import ok
 from ..services import categories as category_service
+from ..web.response import ok
 
 bp = Blueprint("api_categories", __name__, url_prefix="/api")
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from flask import Blueprint
 
 from .. import config
-from ..http.response import ok
+from ..web.response import ok
 
 bp = Blueprint("api_health", __name__, url_prefix="/api")
 

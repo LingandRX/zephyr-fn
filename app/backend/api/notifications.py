@@ -7,11 +7,11 @@ from datetime import date
 from flask import Blueprint, g, request
 
 from ..domain.exceptions import ValidationError
-from ..http.response import ok
 from ..services import notifications
 from ..services import settings as settings_service
 from ..utils.channels import email as email_sender
 from ..utils.channels import pushplus
+from ..web.response import ok
 
 bp = Blueprint("api_notifications", __name__, url_prefix="/api")
 

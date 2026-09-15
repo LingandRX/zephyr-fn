@@ -6,7 +6,7 @@ from flask import Blueprint, g, request
 
 from .. import repositories
 from ..domain.exceptions import NotFoundError, ValidationError
-from ..http.response import ok
+from ..web.response import ok
 
 bp = Blueprint("api_payments", __name__, url_prefix="/api")
 

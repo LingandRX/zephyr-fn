@@ -48,6 +48,12 @@ from pathlib import Path
 _BACKEND_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_BACKEND_DIR.parent))
 
+# 以脚本方式运行时，解释器会把脚本所在目录（app/backend）置于 sys.path[0]，
+# 使 backend/ 下的子包遮蔽同名标准库/第三方库（backend/http 曾遮蔽标准库 http，
+# 导致 werkzeug 的 http.server 导入失败，真机安装即崩溃）。
+# 显式移除该目录：backend 包本身仍经上一行的 app/ 目录正常导入。
+sys.path[:] = [p for p in sys.path if p and Path(p).resolve() != _BACKEND_DIR]
+
 
 def _prepend_vendor(backend_dir: Path) -> None:
     """NAS 上使用打包打进的 manylinux 轮子；本地 Windows/macOS 开发仍走自己的环境。"""

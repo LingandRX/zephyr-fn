@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from flask import Blueprint, Response, g, request
 
-from ..http.response import ok
 from ..services import backup as backup_service
+from ..web.response import ok
 
 bp = Blueprint("api_backup", __name__, url_prefix="/api")
 

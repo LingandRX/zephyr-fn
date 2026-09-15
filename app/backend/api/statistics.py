@@ -7,8 +7,8 @@ from datetime import date
 from flask import Blueprint, g, request
 
 from ..domain.exceptions import ValidationError
-from ..http.response import ok
 from ..services.statistics import calculate_statistics, get_calendar_events
+from ..web.response import ok
 
 bp = Blueprint("api_statistics", __name__, url_prefix="/api")
 

@@ -9,7 +9,7 @@
 - models/       : ORM 数据实体（Flask-SQLAlchemy）
 - repositories/ : 数据持久化（仓储 + bootstrap 旧库升级）
 - domain/       : 领域逻辑与业务异常
-- http/         : HTTP 基础设施（中间件、响应格式）
+- web/          : Web 基础设施（中间件、响应格式）
 - utils/        : 基础设施工具（通知渠道、文件 IO）
 - config.py     : 环境隔离配置
 - paths.py      : 路径解析
@@ -18,18 +18,18 @@
 
 from __future__ import annotations
 
-from . import config, domain, http, models, paths, repositories, schemas, services, utils
+from . import config, domain, models, paths, repositories, schemas, services, utils, web
 from .app import create_app
 
 __all__ = [
     "config",
     "create_app",
     "domain",
-    "http",
     "models",
     "paths",
     "repositories",
     "schemas",
     "services",
     "utils",
+    "web",
 ]

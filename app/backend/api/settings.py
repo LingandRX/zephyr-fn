@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from flask import Blueprint, request
 
-from ..http.response import ok
 from ..services import settings as settings_service
+from ..web.response import ok
 
 bp = Blueprint("api_settings", __name__, url_prefix="/api")
 

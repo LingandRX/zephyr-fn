@@ -113,7 +113,7 @@ API_BASE = import.meta.env.DEV ? "/api" : "/app/subscription/api"
 
 - dev：页面在根路径，`/api` 走 Vite proxy → 后端（`BACKEND_PORT`，脚本默认 3001）
 - prod：页面在 `/app/subscription/`，`/api` 走网关前缀，由后端中间件剥离前缀
-  （`app/backend/http/middleware.py`）
+  （`app/backend/web/middleware.py`）
 
 ---
 

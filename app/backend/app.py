@@ -18,14 +18,14 @@ from . import config as app_config
 from .api import register_blueprints
 from .domain import exceptions
 from .extensions import db, migrate
-from .http.middleware import (
+from .repositories import bootstrap
+from .web.middleware import (
     GatewayPrefixMiddleware,
     check_admin_only,
     ensure_default_categories,
     parse_identity,
 )
-from .http.response import error as error_response
-from .repositories import bootstrap
+from .web.response import error as error_response
 
 # Alembic 迁移脚本目录（与 app.py 同级的 migrations/）
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
