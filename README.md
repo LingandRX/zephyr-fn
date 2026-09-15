@@ -143,7 +143,7 @@ Windows 开发机上的 `app/backend/.venv`（含指向 `C:\...` 的符号链接
 # 跳过版本自增：.\package.ps1 -NoBump
 ```
 
-脚本流程：`build.sh`/`build.ps1` 构建前端 → 生成图标 →
+脚本流程：`build.sh`/`build.ps1` 构建前端并同步到 `app/www` →
 `tools/vendor_deps.py` 预置 Linux cp312 轮子到 `app/backend/vendor/`（x86_64 + aarch64）→
 拷到干净暂存目录（排除 `.venv` / `.idea` / `__pycache__`，`cmd/` 转为 LF；
 默认只在暂存目录自增 version，**打包失败不会改仓库 manifest**）→
