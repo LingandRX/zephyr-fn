@@ -87,17 +87,10 @@ const calendarPickerDate = computed({
     if (!val) return;
     const [y, m] = val.split("-").map(Number);
     const monthChanged = calYear.value !== y || calMonth.value !== m;
-    const now = new Date();
-    // 落到真实当月时选中「今天」，否则选中 1 号。
-    // 「清除」与下拉开面板里的「本月」都只经由这里切换，刷新只有下面这一次，
-    // 不能再额外挂 @clear 处理器，否则同一次点击会触发两轮 loadMonth。
-    const isCurrentMonth = y === now.getFullYear() && m === now.getMonth() + 1;
     calYear.value = y;
     calMonth.value = m;
-    selectedDateStr.value = isCurrentMonth
-      ? toDateStr(now)
-      : `${y}-${String(m).padStart(2, "0")}-01`;
     if (monthChanged) {
+      selectedDateStr.value = null;
       loadMonth();
     }
   },
@@ -131,15 +124,15 @@ async function loadMonth() {
 
 function makeCell(dateStr, day, other, todayStr, byDate) {
   const dayEvents = byDate[dateStr] || [];
-  const showCountBadge = dayEvents.length > 2;
+  const hasMore = dayEvents.length > 2;
   return {
     day,
     dateStr,
     other,
     today: dateStr === todayStr,
     events: dayEvents,
-    visibleEvents: showCountBadge ? [] : dayEvents.slice(0, 2),
-    more: showCountBadge ? dayEvents.length : Math.max(0, dayEvents.length - 2),
+    visibleEvents: hasMore ? dayEvents.slice(0, 1) : dayEvents.slice(0, 2),
+    more: hasMore ? dayEvents.length - 1 : 0,
   };
 }
 
@@ -179,20 +172,23 @@ function buildGrid() {
   }
   grid.value = cells;
 
-  // 切换月份时，如果之前未选中或者选中日期不在当月：
-  // 保持与之前类似的默认行为；但若之前明细已在打开状态，则寻找当月第一个有事件的日期并选中，
-  // 确保直接平滑更新内容而不经历 close->open 的动画断层。
+  // 优化默认选中逻辑：
+  // 若当月有事件，且“今天”没有事件，默认选中当月中第一个有事件的日期（例如 9月8日），确保初次进入页面或切月时，右侧明细栏立即呈现有意义的内容；
+  // 若整个月都没有事件，则选中“今天”并呈现空状态或允许收起。
   const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
   if (!selectedDateStr.value || !selectedDateStr.value.startsWith(monthPrefix)) {
-    if (detailsOpen.value) {
-      const firstEventCell = grid.value.find((c) => !c.other && c.events.length > 0);
-      if (firstEventCell) {
-        selectedDateStr.value = firstEventCell.dateStr;
+    const firstEventCell = grid.value.find((c) => !c.other && c.events.length > 0);
+    const todayInCurrentMonth = todayStr.startsWith(monthPrefix);
+    const todayHasEvents = (byDate[todayStr] || []).length > 0;
+
+    if (firstEventCell) {
+      if (todayInCurrentMonth && todayHasEvents) {
+        selectedDateStr.value = todayStr;
       } else {
-        selectedDateStr.value = todayStr.startsWith(monthPrefix) ? todayStr : null;
+        selectedDateStr.value = firstEventCell.dateStr;
       }
     } else {
-      selectedDateStr.value = todayStr.startsWith(monthPrefix) ? todayStr : null;
+      selectedDateStr.value = todayInCurrentMonth ? todayStr : `${monthPrefix}-01`;
     }
   }
 }
@@ -236,22 +232,51 @@ const isOnlyServiceEnd = computed(() => {
   return events.length > 0 && events.every((e) => e.event_type === "service_end");
 });
 
-// 明细展开态：选中且有事件的日期（供 details-collapsed 类驱动桌面侧栏开合）
-const detailsOpen = computed(() => !!selectedDateStr.value && selectedDayEvents.value.length > 0);
+// 明细标题与合计提示格式化：
+// 若包含 service_end（不产生扣款），合计处提示 共 X 笔（扣款合计 ...），如果全是服务到期则提示 共 X 笔到期
+function formatEventSummary(eventsList, totalFormatted) {
+  const list = eventsList || [];
+  const count = list.length;
+  if (!count) return "共 0 笔";
+  const allEnd = list.every((e) => e.event_type === "service_end");
+  if (allEnd) {
+    return `共 ${count} 笔到期`;
+  }
+  const hasEnd = list.some((e) => e.event_type === "service_end");
+  if (hasEnd && totalFormatted) {
+    return `共 ${count} 笔（扣款合计 ${totalFormatted}）`;
+  }
+  if (totalFormatted) {
+    return `共 ${count} 笔（合计 ${totalFormatted}）`;
+  }
+  return `共 ${count} 笔`;
+}
+
+function isToday(dateStr) {
+  return dateStr === toDateStr(new Date());
+}
+
+// 明细展开态：当用户选中某个日期（!!selectedDateStr.value）时保持展开，点击关闭按钮时置空 selectedDateStr 收起
+const detailsOpen = computed(() => !!selectedDateStr.value);
 
 // 桌面侧栏的渲染快照：关闭时不清空，供 var(--dur-medium) 收起动画期间继续渲染原内容，
 // 避免收起过程中出现「null / 空列表」一闪。
 const detailsSnapshot = ref({ date: null, events: [], onlyServiceEnd: false, totalFormatted: "" });
 
-watch([selectedDateStr, selectedDayEvents], ([date, events]) => {
-  if (!date || !events.length) return;
-  detailsSnapshot.value = {
-    date,
-    events,
-    onlyServiceEnd: events.every((e) => e.event_type === "service_end"),
-    totalFormatted: computeTotal(events),
-  };
-});
+watch(
+  [selectedDateStr, selectedDayEvents],
+  ([date, evts]) => {
+    if (!date) return;
+    const list = evts || [];
+    detailsSnapshot.value = {
+      date,
+      events: list,
+      onlyServiceEnd: list.length > 0 && list.every((e) => e.event_type === "service_end"),
+      totalFormatted: computeTotal(list),
+    };
+  },
+  { immediate: true },
+);
 
 function openSheet() {
   sheetOpen.value = true;
@@ -271,6 +296,7 @@ function prevMonth(delta) {
   calMonth.value += delta;
   if (calMonth.value < 1) { calMonth.value = 12; calYear.value--; }
   if (calMonth.value > 12) { calMonth.value = 1; calYear.value++; }
+  selectedDateStr.value = null;
   loadMonth();
 }
 
@@ -390,24 +416,18 @@ onActivated(() => {
 
             <!-- 桌面端/宽屏：事件胶囊 -->
             <div class="events-wrap desktop-events">
-              <template v-if="c.visibleEvents.length">
-                <div
-                  v-for="(e, j) in c.visibleEvents"
-                  :key="j"
-                  class="cal-event"
-                  :class="getEventMeta(e).eventClass"
-                  :title="`${e.name} ${getEventMeta(e).label} ${e.amount_formatted}`"
-                >
-                  <span class="event-avatar">{{ initialOf(e.name) }}</span>
-                  <span class="event-name">{{ e.name }}</span>
-                  <span class="event-type-pill">{{ getEventMeta(e).shortLabel }}</span>
-                  <span class="event-amt">{{ e.amount_formatted }}</span>
-                </div>
-                <div v-if="c.more" class="cal-event more-badge" :title="`还有 ${c.more} 项事件`">+{{ c.more }}</div>
-              </template>
-              <div v-else-if="c.events.length > 2" class="cal-event more-badge is-count" :title="`还有 ${c.events.length} 项事件`">
-                {{ c.events.length }}
+              <div
+                v-for="(e, j) in c.visibleEvents"
+                :key="j"
+                class="cal-event"
+                :class="getEventMeta(e).eventClass"
+                :title="`${e.name} ${getEventMeta(e).label} ${e.amount_formatted}`"
+              >
+                <span class="event-avatar">{{ initialOf(e.name) }}</span>
+                <span class="event-name">{{ e.name }}</span>
+                <span class="event-amt">{{ e.amount_formatted }}</span>
               </div>
+              <div v-if="c.more" class="cal-event more-badge" :title="`还有 ${c.more} 项事件`">+{{ c.more }} 项</div>
             </div>
 
             <!-- 移动端：圆点 -->
@@ -441,15 +461,14 @@ onActivated(() => {
                 {{ detailsSnapshot.date }} {{ detailsSnapshot.onlyServiceEnd ? '到期明细' : '扣费明细' }}
               </span>
               <span class="details-count">
-                共 {{ detailsSnapshot.events.length }} 笔
-                <template v-if="detailsSnapshot.totalFormatted"> (合计 {{ detailsSnapshot.totalFormatted }})</template>
+                {{ formatEventSummary(detailsSnapshot.events, detailsSnapshot.totalFormatted) }}
               </span>
             </div>
             <button
               type="button"
               class="details-close"
-              title="关闭扣费明细"
-              aria-label="关闭扣费明细"
+              title="关闭明细"
+              aria-label="关闭明细"
               @click="closeDetails"
             >
               <svg class="detail-close-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -457,7 +476,7 @@ onActivated(() => {
               </svg>
             </button>
           </div>
-          <div class="details-list">
+          <div v-if="detailsSnapshot.events.length" class="details-list">
             <div v-for="(e, idx) in detailsSnapshot.events" :key="idx" class="detail-item">
               <div class="detail-left">
                 <span class="detail-avatar">{{ initialOf(e.name) }}</span>
@@ -472,6 +491,14 @@ onActivated(() => {
                 <span class="detail-amount">{{ e.amount_formatted }}</span>
               </div>
             </div>
+          </div>
+          <div v-else class="details-empty">
+            <svg class="details-empty-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.8" />
+              <path d="M8 3v4M16 3v4M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              <path d="M9 15h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+            <p class="details-empty-text">{{ isToday(detailsSnapshot.date) ? '今日暂无扣费或到期事件' : '当日暂无扣费或到期事件' }}</p>
           </div>
         </div>
       </div>
@@ -525,10 +552,10 @@ onActivated(() => {
                 </button>
               </div>
               <p class="cal-sheet-sub">
-                共 {{ selectedDayEvents.length }} 笔<template v-if="selectedDayTotalFormatted"> · 合计 {{ selectedDayTotalFormatted }}</template>
+                {{ formatEventSummary(selectedDayEvents, selectedDayTotalFormatted) }}
               </p>
               <div :key="selectedDateStr" class="details-body">
-                <div class="details-list">
+                <div v-if="selectedDayEvents.length" class="details-list">
                   <div v-for="(e, idx) in selectedDayEvents" :key="idx" class="detail-item">
                     <div class="detail-left">
                       <span class="detail-avatar">{{ initialOf(e.name) }}</span>
@@ -543,6 +570,14 @@ onActivated(() => {
                       <span class="detail-amount">{{ e.amount_formatted }}</span>
                     </div>
                   </div>
+                </div>
+                <div v-else class="details-empty">
+                  <svg class="details-empty-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="3" y="5" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.8" />
+                    <path d="M8 3v4M16 3v4M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                    <path d="M9 15h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  </svg>
+                  <p class="details-empty-text">{{ isToday(selectedDateStr) ? '今日暂无扣费或到期事件' : '当日暂无扣费或到期事件' }}</p>
                 </div>
               </div>
             </DialogPanel>
@@ -768,7 +803,7 @@ onActivated(() => {
 .cal-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  grid-template-rows: auto repeat(var(--cal-rows, 6), minmax(0, 1fr));
+  grid-template-rows: auto repeat(var(--cal-rows, 6), minmax(82px, 1fr));
   gap: 4px;
   width: 100%;
   min-height: 480px;
@@ -785,15 +820,15 @@ onActivated(() => {
 /* 单元格：无边框，靠圆角底色区分状态 */
 .cal-day {
   min-width: 0;
-  min-height: 0;
+  min-height: 82px;
   height: auto;
-  padding: 6px;
+  padding: 4px 5px;
   border-radius: 12px;
   background: transparent;
   border: 1px solid transparent;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   box-sizing: border-box;
   overflow: hidden;
   cursor: pointer;
@@ -847,8 +882,8 @@ onActivated(() => {
   line-height: 1;
 }
 .cal-day-num {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
@@ -876,7 +911,7 @@ onActivated(() => {
 .events-wrap {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   overflow: hidden;
   flex: 1 1 auto;
   min-height: 0;
@@ -885,11 +920,11 @@ onActivated(() => {
 .cal-event {
   font-size: 11px;
   border-radius: 7px;
-  padding: 3px 6px;
+  padding: 2px 5px;
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto auto;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   min-width: 0;
   max-width: 100%;
   line-height: 1.25;
@@ -900,9 +935,9 @@ onActivated(() => {
 .cal-event.due { background: var(--ios-orange-soft); }
 .cal-event.end { background: var(--ios-red-soft); }
 .event-avatar {
-  width: 16px;
-  height: 16px;
-  border-radius: 5px;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.6);
   font-size: 9px;
   font-weight: 700;
@@ -926,25 +961,7 @@ onActivated(() => {
   font-weight: 600;
 }
 .event-type-pill {
-  font-size: 9px;
-  line-height: 1;
-  padding: 2px 4px;
-  border-radius: 4px;
-  font-weight: 600;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-.cal-event.new .event-type-pill {
-  color: var(--ios-blue);
-  background: rgba(0, 122, 255, 0.16);
-}
-.cal-event.due .event-type-pill {
-  color: var(--ios-orange);
-  background: rgba(255, 149, 0, 0.18);
-}
-.cal-event.end .event-type-pill {
-  color: var(--ios-red);
-  background: rgba(255, 59, 48, 0.16);
+  display: none;
 }
 .event-amt {
   flex-shrink: 0;
@@ -954,40 +971,25 @@ onActivated(() => {
   white-space: nowrap;
 }
 .more-badge {
+  display: flex;
+  align-items: center;
   justify-content: center;
   color: var(--ios-gray);
   font-size: 10px;
+  line-height: 1.25;
+  padding: 2px 5px;
   background: transparent;
   border: 1px dashed var(--ios-separator);
   white-space: nowrap;
 }
-.more-badge.is-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border-radius: 10px;
-  border: 1px solid rgba(0, 122, 255, 0.18);
-  background: rgba(0, 122, 255, 0.08);
-  color: var(--ios-blue);
-  font-weight: 600;
-  font-size: 8px;
-  letter-spacing: 0.02em;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
-  margin-inline: auto;
-}
 
 @media (max-width: 980px) {
-  .event-type-pill,
   .event-amt {
     display: none;
   }
 
   .cal-event {
-    grid-template-columns: 16px minmax(0, 1fr);
+    grid-template-columns: 14px minmax(0, 1fr);
   }
 }
 
@@ -1085,6 +1087,28 @@ onActivated(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.details-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 36px 16px;
+  color: var(--ios-gray);
+  text-align: center;
+}
+.details-empty-icon {
+  width: 32px;
+  height: 32px;
+  opacity: 0.5;
+  color: var(--ios-gray);
+}
+.details-empty-text {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--ios-gray);
+  line-height: 1.5;
 }
 .detail-item {
   display: flex;
@@ -1315,13 +1339,13 @@ onActivated(() => {
   .cal-grid {
     flex: 1 1 auto;
     min-height: 0;
-    /* 首行周标题 auto，恒定 6 行弹性平分可用高度，彻底杜绝下边框截断 */
-    grid-template-rows: auto repeat(var(--cal-rows, 6), minmax(0, 1fr));
+    /* 首行周标题 auto，恒定 6 行保底行高弹性平分可用高度，彻底杜绝下边框截断 */
+    grid-template-rows: auto repeat(var(--cal-rows, 6), minmax(82px, 1fr));
     align-content: stretch;
   }
   .cal-day {
     height: auto;
-    min-height: 0;
+    min-height: 82px;
   }
   .day-details-card {
     display: block;
