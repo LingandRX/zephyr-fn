@@ -87,10 +87,15 @@ const calendarPickerDate = computed({
     if (!val) return;
     const [y, m] = val.split("-").map(Number);
     const monthChanged = calYear.value !== y || calMonth.value !== m;
+    const now = new Date();
+    const isCurrentMonth = y === now.getFullYear() && m === now.getMonth() + 1;
     calYear.value = y;
     calMonth.value = m;
     if (monthChanged) {
-      selectedDateStr.value = null;
+      if (!detailsOpen.value) {
+        selectedDateStr.value = isCurrentMonth ? toDateStr(now) : null;
+      }
+      buildGrid();
       loadMonth();
     }
   },
@@ -172,23 +177,20 @@ function buildGrid() {
   }
   grid.value = cells;
 
-  // 优化默认选中逻辑：
-  // 若当月有事件，且“今天”没有事件，默认选中当月中第一个有事件的日期（例如 9月8日），确保初次进入页面或切月时，右侧明细栏立即呈现有意义的内容；
-  // 若整个月都没有事件，则选中“今天”并呈现空状态或允许收起。
+  // 切换月份时，如果之前未选中或者选中日期不在当月：
+  // 若之前明细已在打开状态，则寻找当月第一个有事件的日期并选中（确保直接平滑更新内容而不经历 close->open 的动画断层）；
+  // 若之前明细未打开，当月包含「今天」时选中今天（明细保持关闭），否则置空（避免无事件月份误开侧栏或误选 1 号）。
   const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
   if (!selectedDateStr.value || !selectedDateStr.value.startsWith(monthPrefix)) {
-    const firstEventCell = grid.value.find((c) => !c.other && c.events.length > 0);
-    const todayInCurrentMonth = todayStr.startsWith(monthPrefix);
-    const todayHasEvents = (byDate[todayStr] || []).length > 0;
-
-    if (firstEventCell) {
-      if (todayInCurrentMonth && todayHasEvents) {
-        selectedDateStr.value = todayStr;
-      } else {
+    if (detailsOpen.value) {
+      const firstEventCell = cells.find((c) => !c.other && c.events.length > 0);
+      if (firstEventCell) {
         selectedDateStr.value = firstEventCell.dateStr;
+      } else {
+        selectedDateStr.value = todayStr.startsWith(monthPrefix) ? todayStr : null;
       }
     } else {
-      selectedDateStr.value = todayInCurrentMonth ? todayStr : `${monthPrefix}-01`;
+      selectedDateStr.value = todayStr.startsWith(monthPrefix) ? todayStr : null;
     }
   }
 }
@@ -199,6 +201,7 @@ function selectDay(cell) {
     calYear.value = y;
     calMonth.value = m;
     selectedDateStr.value = cell.dateStr;
+    buildGrid();
     loadMonth();
     return;
   }
@@ -252,12 +255,8 @@ function formatEventSummary(eventsList, totalFormatted) {
   return `共 ${count} 笔`;
 }
 
-function isToday(dateStr) {
-  return dateStr === toDateStr(new Date());
-}
-
-// 明细展开态：当用户选中某个日期（!!selectedDateStr.value）时保持展开，点击关闭按钮时置空 selectedDateStr 收起
-const detailsOpen = computed(() => !!selectedDateStr.value);
+// 明细展开态：选中且有事件的日期（供 details-collapsed 类驱动桌面侧栏开合）
+const detailsOpen = computed(() => !!selectedDateStr.value && selectedDayEvents.value.length > 0);
 
 // 桌面侧栏的渲染快照：关闭时不清空，供 var(--dur-medium) 收起动画期间继续渲染原内容，
 // 避免收起过程中出现「null / 空列表」一闪。
@@ -266,13 +265,12 @@ const detailsSnapshot = ref({ date: null, events: [], onlyServiceEnd: false, tot
 watch(
   [selectedDateStr, selectedDayEvents],
   ([date, evts]) => {
-    if (!date) return;
-    const list = evts || [];
+    if (!date || !evts || !evts.length) return;
     detailsSnapshot.value = {
       date,
-      events: list,
-      onlyServiceEnd: list.length > 0 && list.every((e) => e.event_type === "service_end"),
-      totalFormatted: computeTotal(list),
+      events: evts,
+      onlyServiceEnd: evts.every((e) => e.event_type === "service_end"),
+      totalFormatted: computeTotal(evts),
     };
   },
   { immediate: true },
@@ -296,7 +294,7 @@ function prevMonth(delta) {
   calMonth.value += delta;
   if (calMonth.value < 1) { calMonth.value = 12; calYear.value--; }
   if (calMonth.value > 12) { calMonth.value = 1; calYear.value++; }
-  selectedDateStr.value = null;
+  buildGrid();
   loadMonth();
 }
 
@@ -305,6 +303,7 @@ function goToday() {
   calYear.value = n.getFullYear();
   calMonth.value = n.getMonth() + 1;
   selectedDateStr.value = toDateStr(n);
+  buildGrid();
   loadMonth();
 }
 
@@ -394,7 +393,7 @@ onActivated(() => {
           <div v-for="(d, i) in ['日', '一', '二', '三', '四', '五', '六']" :key="'dow-' + i" class="cal-dow">{{ d }}</div>
           <div
             v-for="(c, i) in grid"
-            :key="c.dateStr"
+            :key="`${calYear}-${calMonth}-${c.dateStr}`"
             class="cal-day"
             role="button"
             tabindex="0"
@@ -476,7 +475,7 @@ onActivated(() => {
               </svg>
             </button>
           </div>
-          <div v-if="detailsSnapshot.events.length" class="details-list">
+          <div class="details-list">
             <div v-for="(e, idx) in detailsSnapshot.events" :key="idx" class="detail-item">
               <div class="detail-left">
                 <span class="detail-avatar">{{ initialOf(e.name) }}</span>
@@ -491,14 +490,6 @@ onActivated(() => {
                 <span class="detail-amount">{{ e.amount_formatted }}</span>
               </div>
             </div>
-          </div>
-          <div v-else class="details-empty">
-            <svg class="details-empty-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <rect x="3" y="5" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.8" />
-              <path d="M8 3v4M16 3v4M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-              <path d="M9 15h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-            </svg>
-            <p class="details-empty-text">{{ isToday(detailsSnapshot.date) ? '今日暂无扣费或到期事件' : '当日暂无扣费或到期事件' }}</p>
           </div>
         </div>
       </div>
@@ -555,7 +546,7 @@ onActivated(() => {
                 {{ formatEventSummary(selectedDayEvents, selectedDayTotalFormatted) }}
               </p>
               <div :key="selectedDateStr" class="details-body">
-                <div v-if="selectedDayEvents.length" class="details-list">
+                <div class="details-list">
                   <div v-for="(e, idx) in selectedDayEvents" :key="idx" class="detail-item">
                     <div class="detail-left">
                       <span class="detail-avatar">{{ initialOf(e.name) }}</span>
@@ -570,14 +561,6 @@ onActivated(() => {
                       <span class="detail-amount">{{ e.amount_formatted }}</span>
                     </div>
                   </div>
-                </div>
-                <div v-else class="details-empty">
-                  <svg class="details-empty-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <rect x="3" y="5" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.8" />
-                    <path d="M8 3v4M16 3v4M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                    <path d="M9 15h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                  </svg>
-                  <p class="details-empty-text">{{ isToday(selectedDateStr) ? '今日暂无扣费或到期事件' : '当日暂无扣费或到期事件' }}</p>
                 </div>
               </div>
             </DialogPanel>
@@ -1088,28 +1071,6 @@ onActivated(() => {
   flex-direction: column;
   gap: 8px;
 }
-.details-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 36px 16px;
-  color: var(--ios-gray);
-  text-align: center;
-}
-.details-empty-icon {
-  width: 32px;
-  height: 32px;
-  opacity: 0.5;
-  color: var(--ios-gray);
-}
-.details-empty-text {
-  margin: 0;
-  font-size: var(--fs-xs);
-  color: var(--ios-gray);
-  line-height: 1.5;
-}
 .detail-item {
   display: flex;
   align-items: center;
@@ -1426,6 +1387,7 @@ onActivated(() => {
     grid-template-rows: auto repeat(var(--cal-rows, 6), 56px);
   }
   .cal-day {
+    min-height: 56px;
     height: 56px;
     padding: 4px;
   }
