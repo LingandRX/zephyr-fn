@@ -18,6 +18,7 @@ import HeadlessListbox from "../components/HeadlessListbox.vue";
 import HeadlessTimePicker from "../components/HeadlessTimePicker.vue";
 import HeadlessSwitch from "../components/HeadlessSwitch.vue";
 import HeadlessButton from "../components/HeadlessButton.vue";
+import HeadlessEmailInput from "../components/HeadlessEmailInput.vue";
 
 const CURRENCY_OPTIONS = [
   { label: "CNY (¥)", value: "CNY" },
@@ -325,6 +326,17 @@ function onUsernameBlur() {
 function onFromAddressBlur() {
   const val = String(form.smtp_from_address || "").trim();
   if (val && (selectedEmailPreset.value === "custom" || !form.smtp_host)) {
+    tryMatchPresetByDomain(val);
+  }
+}
+
+function onEmailSelected(field, val) {
+  if (field === "username") {
+    if (!form.smtp_from_address) {
+      form.smtp_from_address = val;
+    }
+  }
+  if (selectedEmailPreset.value === "custom" || !form.smtp_host) {
     tryMatchPresetByDomain(val);
   }
 }
@@ -893,11 +905,12 @@ onMounted(loadAll);
             <div class="form-row">
               <label class="field">
                 <span>用户名</span>
-                <input
+                <HeadlessEmailInput
                   v-model="form.smtp_username"
                   :placeholder="presetUsernamePlaceholder"
                   @input="onUsernameInput"
                   @blur="onUsernameBlur"
+                  @select="onEmailSelected('username', $event)"
                 />
               </label>
               <label class="field">
@@ -912,16 +925,20 @@ onMounted(loadAll);
             </div>
             <label class="field">
               <span>发件人地址</span>
-              <input
+              <HeadlessEmailInput
                 v-model="form.smtp_from_address"
                 :placeholder="presetUsernamePlaceholder"
                 @blur="onFromAddressBlur"
+                @select="onEmailSelected('from', $event)"
               />
             </label>
             <div class="test-row">
               <label class="field test-target-field">
                 <span>测试收件邮箱（选填，默认同发件人/用户名）</span>
-                <input v-model="testEmailTarget" placeholder="test@example.com" />
+                <HeadlessEmailInput
+                  v-model="testEmailTarget"
+                  placeholder="test@example.com"
+                />
               </label>
               <HeadlessButton
                 :disabled="testingEmail || (!form.smtp_host && !form.smtp_username)"
@@ -980,7 +997,10 @@ onMounted(loadAll);
                   <div class="form-row">
                     <label class="field">
                       <span>用户名</span>
-                      <input v-model="form.pushplus_smtp_username" />
+                      <HeadlessEmailInput
+                        v-model="form.pushplus_smtp_username"
+                        placeholder="user@example.com"
+                      />
                     </label>
                     <label class="field">
                       <span>密码 / 授权码</span>
@@ -994,7 +1014,10 @@ onMounted(loadAll);
                   </div>
                   <label class="field">
                     <span>发件人地址</span>
-                    <input v-model="form.pushplus_smtp_from_address" placeholder="user@example.com" />
+                    <HeadlessEmailInput
+                      v-model="form.pushplus_smtp_from_address"
+                      placeholder="user@example.com"
+                    />
                   </label>
                 </div>
               </details>
@@ -1246,9 +1269,16 @@ onMounted(loadAll);
   padding: 16px 18px;
 }
 
-.settings-section .card:has([data-headlessui-state*="open"]) {
+.settings-section .card:has([data-headlessui-state*="open"]),
+.settings-section .card:has(.email-input-wrapper.is-open) {
   position: relative;
-  z-index: 10;
+  z-index: 20;
+}
+
+.form-row:has(.email-input-wrapper.is-open),
+.field:has(.email-input-wrapper.is-open) {
+  position: relative;
+  z-index: 30;
 }
 
 .settings-section .card h3 {
@@ -1591,6 +1621,10 @@ onMounted(loadAll);
   border: none;
   border-radius: 12px;
   overflow: hidden;
+}
+
+.smtp-details[open] {
+  overflow: visible;
 }
 
 .smtp-details summary {
