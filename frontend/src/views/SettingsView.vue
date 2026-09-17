@@ -25,6 +25,89 @@ const CURRENCY_OPTIONS = [
   { label: "HKD (HK$)", value: "HKD" },
 ];
 
+const EMAIL_PRESET_OPTIONS = [
+  {
+    label: "QQ 邮箱 (smtp.qq.com)",
+    value: "qq",
+    host: "smtp.qq.com",
+    port: 465,
+    domain: "qq.com",
+    help: "QQ 邮箱需在 设置 → 账户 中开启 POP3/SMTP 服务并生成「授权码」作为密码",
+  },
+  {
+    label: "网易 163 邮箱 (smtp.163.com)",
+    value: "163",
+    host: "smtp.163.com",
+    port: 465,
+    domain: "163.com",
+    help: "网易 163 邮箱需在 设置 → POP3/SMTP/IMAP 中开启服务并使用「授权密码」",
+  },
+  {
+    label: "网易 126 邮箱 (smtp.126.com)",
+    value: "126",
+    host: "smtp.126.com",
+    port: 465,
+    domain: "126.com",
+    help: "网易 126 邮箱需在 设置 中开启 POP3/SMTP 服务并使用「授权密码」",
+  },
+  {
+    label: "Gmail (smtp.gmail.com)",
+    value: "gmail",
+    host: "smtp.gmail.com",
+    port: 587,
+    domain: "gmail.com",
+    help: "Gmail 需在 Google 账户安全设置中开启两步验证并生成「应用专用密码」",
+  },
+  {
+    label: "Outlook / Hotmail (smtp-mail.outlook.com)",
+    value: "outlook",
+    host: "smtp-mail.outlook.com",
+    port: 587,
+    domain: "outlook.com",
+    help: "使用 Microsoft 账户密码或应用密码，端口 587 (STARTTLS)",
+  },
+  {
+    label: "腾讯企业邮 (smtp.exmail.qq.com)",
+    value: "exmail",
+    host: "smtp.exmail.qq.com",
+    port: 465,
+    domain: "exmail.qq.com",
+    help: "企业微信 / 腾讯企业邮请使用客户端专用密码",
+  },
+  {
+    label: "阿里企业邮箱 (smtp.qiye.aliyun.com)",
+    value: "aliyun",
+    host: "smtp.qiye.aliyun.com",
+    port: 465,
+    domain: "aliyun.com",
+    help: "阿里云企业邮请使用客户端授权密码",
+  },
+  {
+    label: "新浪邮箱 (smtp.sina.com)",
+    value: "sina",
+    host: "smtp.sina.com",
+    port: 465,
+    domain: "sina.com",
+    help: "新浪邮箱需在 设置 → 客户端 POP/IMAP/SMTP 中开启并使用授权码",
+  },
+  {
+    label: "139 邮箱 (smtp.139.com)",
+    value: "139",
+    host: "smtp.139.com",
+    port: 465,
+    domain: "139.com",
+    help: "139 邮箱需在 设置 中开启 SMTP 并使用授权密码",
+  },
+  {
+    label: "自定义配置",
+    value: "custom",
+    host: "",
+    port: null,
+    domain: "",
+    help: "",
+  },
+];
+
 const TABS = [
   { key: "general", label: "常规设置", svg: [
     "M904.533333 422.4l-85.333333-14.933333-17.066667-38.4 49.066667-70.4c14.933333-21.333333 12.8-49.066667-6.4-68.266667l-53.333333-53.333333c-19.2-19.2-46.933333-21.333333-68.266667-6.4l-70.4 49.066666-38.4-17.066666-14.933333-85.333334c-2.133333-23.466667-23.466667-42.666667-49.066667-42.666666h-74.666667c-25.6 0-46.933333 19.2-53.333333 44.8l-14.933333 85.333333-38.4 17.066667L296.533333 170.666667c-21.333333-14.933333-49.066667-12.8-68.266666 6.4l-53.333334 53.333333c-19.2 19.2-21.333333 46.933333-6.4 68.266667l49.066667 70.4-17.066667 38.4-85.333333 14.933333c-21.333333 4.266667-40.533333 25.6-40.533333 51.2v74.666667c0 25.6 19.2 46.933333 44.8 53.333333l85.333333 14.933333 17.066667 38.4L170.666667 727.466667c-14.933333 21.333333-12.8 49.066667 6.4 68.266666l53.333333 53.333334c19.2 19.2 46.933333 21.333333 68.266667 6.4l70.4-49.066667 38.4 17.066667 14.933333 85.333333c4.266667 25.6 25.6 44.8 53.333333 44.8h74.666667c25.6 0 46.933333-19.2 53.333333-44.8l14.933334-85.333333 38.4-17.066667 70.4 49.066667c21.333333 14.933333 49.066667 12.8 68.266666-6.4l53.333334-53.333334c19.2-19.2 21.333333-46.933333 6.4-68.266666l-49.066667-70.4 17.066667-38.4 85.333333-14.933334c25.6-4.266667 44.8-25.6 44.8-53.333333v-74.666667c-4.266667-27.733333-23.466667-49.066667-49.066667-53.333333z m-19.2 117.333333l-93.866666 17.066667c-10.666667 2.133333-19.2 8.533333-23.466667 19.2l-29.866667 70.4c-4.266667 10.666667-2.133333 21.333333 4.266667 29.866667l53.333333 76.8-40.533333 40.533333-76.8-53.333333c-8.533333-6.4-21.333333-8.533333-29.866667-4.266667L576 768c-10.666667 4.266667-17.066667 12.8-19.2 23.466667l-17.066667 93.866666h-57.6l-17.066666-93.866666c-2.133333-10.666667-8.533333-19.2-19.2-23.466667l-70.4-29.866667c-10.666667-4.266667-21.333333-2.133333-29.866667 4.266667l-76.8 53.333333-40.533333-40.533333 53.333333-76.8c6.4-8.533333 8.533333-21.333333 4.266667-29.866667L256 576c-4.266667-10.666667-12.8-17.066667-23.466667-19.2l-93.866666-17.066667v-57.6l93.866666-17.066666c10.666667-2.133333 19.2-8.533333 23.466667-19.2l29.866667-70.4c4.266667-10.666667 2.133333-21.333333-4.266667-29.866667l-53.333333-76.8 40.533333-40.533333 76.8 53.333333c8.533333 6.4 21.333333 8.533333 29.866667 4.266667L448 256c10.666667-4.266667 17.066667-12.8 19.2-23.466667l17.066667-93.866666h57.6l17.066666 93.866666c2.133333 10.666667 8.533333 19.2 19.2 23.466667l70.4 29.866667c10.666667 4.266667 21.333333 2.133333 29.866667-4.266667l76.8-53.333333 40.533333 40.533333-53.333333 76.8c-6.4 8.533333-8.533333 21.333333-4.266667 29.866667L768 448c4.266667 10.666667 12.8 17.066667 23.466667 19.2l93.866666 17.066667v55.466666z",
@@ -158,6 +241,101 @@ const form = reactive({
   pushplus_smtp_from_address: "",
 });
 
+// ---------- 邮件模板与自动填充 ----------
+const selectedEmailPreset = ref("custom");
+
+const currentPreset = computed(() => {
+  return EMAIL_PRESET_OPTIONS.find((opt) => opt.value === selectedEmailPreset.value);
+});
+
+const currentPresetHelp = computed(() => {
+  return currentPreset.value?.help || "";
+});
+
+const presetUsernamePlaceholder = computed(() => {
+  const p = currentPreset.value;
+  if (p && p.domain) {
+    return `如 user@${p.domain}`;
+  }
+  return "user@example.com";
+});
+
+function syncTemplateFromHost() {
+  const host = String(form.smtp_host || "").trim().toLowerCase();
+  if (!host) {
+    selectedEmailPreset.value = "custom";
+    return;
+  }
+  const matched = EMAIL_PRESET_OPTIONS.find(
+    (opt) => opt.host && opt.host.toLowerCase() === host
+  );
+  selectedEmailPreset.value = matched ? matched.value : "custom";
+}
+
+function handleEmailPresetChange(val) {
+  selectedEmailPreset.value = val;
+  const tpl = EMAIL_PRESET_OPTIONS.find((opt) => opt.value === val);
+  if (tpl && tpl.value !== "custom") {
+    form.smtp_host = tpl.host;
+    form.smtp_port = tpl.port;
+    if (tpl.domain && form.smtp_username && !form.smtp_username.includes("@")) {
+      form.smtp_username = `${form.smtp_username.trim()}@${tpl.domain}`;
+    }
+    if (form.smtp_username && !form.smtp_from_address) {
+      form.smtp_from_address = form.smtp_username;
+    }
+  }
+}
+
+function tryMatchPresetByDomain(email) {
+  if (!email || typeof email !== "string" || !email.includes("@")) return false;
+  const parts = email.trim().split("@");
+  if (parts.length !== 2) return false;
+  const domain = parts[1].toLowerCase();
+  const matched = EMAIL_PRESET_OPTIONS.find(
+    (opt) => opt.domain && (opt.domain.toLowerCase() === domain || domain.endsWith("." + opt.domain.toLowerCase()))
+  );
+  if (matched) {
+    selectedEmailPreset.value = matched.value;
+    form.smtp_host = matched.host;
+    form.smtp_port = matched.port;
+    return true;
+  }
+  return false;
+}
+
+function onUsernameInput(e) {
+  const val = e.target.value;
+  if (val && val.includes("@") && (selectedEmailPreset.value === "custom" || !form.smtp_host)) {
+    tryMatchPresetByDomain(val);
+  }
+}
+
+function onUsernameBlur() {
+  const val = String(form.smtp_username || "").trim();
+  if (!val) return;
+  if (!form.smtp_from_address) {
+    form.smtp_from_address = val;
+  }
+  if (selectedEmailPreset.value === "custom" || !form.smtp_host) {
+    tryMatchPresetByDomain(val);
+  }
+}
+
+function onFromAddressBlur() {
+  const val = String(form.smtp_from_address || "").trim();
+  if (val && (selectedEmailPreset.value === "custom" || !form.smtp_host)) {
+    tryMatchPresetByDomain(val);
+  }
+}
+
+watch(
+  () => form.smtp_host,
+  () => {
+    syncTemplateFromHost();
+  }
+);
+
 const newCat = reactive({ name: "" });
 const adding = ref(false);
 const nameErr = ref("");
@@ -242,6 +420,7 @@ async function loadAll() {
     });
     savedForm = snapshotForm();
     cats.value = c;
+    syncTemplateFromHost();
     await nextTick();
     loaded.value = true;
   } catch (err) {
@@ -687,6 +866,20 @@ onMounted(loadAll);
         </div>
         <Transition name="ch-collapse">
           <div v-if="form.email_enabled" class="fields-group">
+            <div class="field">
+              <span>邮件模板</span>
+              <HeadlessListbox
+                v-model="selectedEmailPreset"
+                :options="EMAIL_PRESET_OPTIONS"
+                :clearable="false"
+                placeholder="选择邮件模板快速填充"
+                @change="handleEmailPresetChange"
+              />
+            </div>
+            <div v-if="currentPresetHelp" class="email-preset-tip">
+              <span class="preset-tip-icon" aria-hidden="true">💡</span>
+              <span>{{ currentPresetHelp }}</span>
+            </div>
             <div class="form-row">
               <label class="field flex-2">
                 <span>SMTP 服务器</span>
@@ -700,7 +893,12 @@ onMounted(loadAll);
             <div class="form-row">
               <label class="field">
                 <span>用户名</span>
-                <input v-model="form.smtp_username" />
+                <input
+                  v-model="form.smtp_username"
+                  :placeholder="presetUsernamePlaceholder"
+                  @input="onUsernameInput"
+                  @blur="onUsernameBlur"
+                />
               </label>
               <label class="field">
                 <span>密码 / 授权码</span>
@@ -714,7 +912,11 @@ onMounted(loadAll);
             </div>
             <label class="field">
               <span>发件人地址</span>
-              <input v-model="form.smtp_from_address" placeholder="user@example.com" />
+              <input
+                v-model="form.smtp_from_address"
+                :placeholder="presetUsernamePlaceholder"
+                @blur="onFromAddressBlur"
+              />
             </label>
             <div class="test-row">
               <label class="field test-target-field">
@@ -909,7 +1111,6 @@ onMounted(loadAll);
         </div>
       </Dialog>
     </TransitionRoot>
-
   </div>
 </template>
 
@@ -1240,6 +1441,26 @@ onMounted(loadAll);
   color: var(--ios-gray);
 }
 
+/* 邮件模板提示 */
+.email-preset-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--ios-fill);
+  border-radius: 10px;
+  margin-top: -6px;
+  margin-bottom: 14px;
+  font-size: var(--fs-xs);
+  color: var(--ios-gray);
+  line-height: 1.4;
+}
+
+.preset-tip-icon {
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1.2;
+}
 
 /* 测试按钮行 */
 .test-row {
