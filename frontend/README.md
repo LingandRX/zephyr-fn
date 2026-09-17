@@ -13,8 +13,10 @@ BaseLayout.vue（公共壳：侧边栏 + 顶栏 + 提醒横幅 + Toast）
         └── <component :is>   ← 切换导航即切换这里的 Sub Page
 ```
 
-- **切换导航 = 切换 Sub Page**：`ui.view`（src/ui.js）决定渲染哪个页面；
+- **切换导航 = 切换 Sub Page**：`ui.view`（src/utils/ui.js）决定渲染哪个页面；
   `keep-alive` 保留各页状态（日历月份、列表数据、滚动位置）。
+- **轻量 Hash 路由（零依赖）**：`ui.view` 与 `window.location.hash`（如 `#/calendar`、`#/statistics`）双向绑定，
+  实现页面刷新保活并完整支持浏览器前进、后退操作，且不增加第三方路由库打包体积。
 - **Sub Page 在主窗口内滚动**：外壳 `height:100vh + overflow:hidden`，
   仅 `.page-host`（`flex:1 + min-height:0 + overflow-y:auto`）滚动，顶栏/侧边栏固定。
 - 侧边栏折叠状态持久化到 `localStorage`；公共布局只在 BaseLayout 写一次。
@@ -23,11 +25,12 @@ BaseLayout.vue（公共壳：侧边栏 + 顶栏 + 提醒横幅 + Toast）
 
 ```text
 frontend/
-├── package.json            # vue3 + vite；scripts: dev / build / check:views
+├── package.json            # vue3 + vite；scripts: dev / build / check / check:views / check:hash
 ├── vite.config.mjs         # base=/app/subscription/（build） + /api 代理（dev）
 ├── index.html
 ├── scripts/
-│   └── check-views.mjs     # 回归检查：Sub Page 隔离 / 折叠按钮 / 滚动容器 / 零警告
+│   ├── check-views.mjs     # 回归检查：Sub Page 隔离 / 折叠按钮 / 滚动容器 / 零警告
+│   └── check-hash-routing.mjs # 路由检查：Hash 解析规范化 / 双向绑定 / 刷新保活 / 前进后退模拟
 └── src/
     ├── main.js             # 入口
     ├── App.vue             # 仅挂载 BaseLayout
@@ -66,8 +69,8 @@ npm install
 npm run dev
 # 访问 http://localhost:5173/  （/api 代理 → 127.0.0.1:5001）
 
-# 3. 回归检查（BaseLayout/Sub Page 结构断言）
-npm run check:views
+# 3. 回归检查（BaseLayout/Sub Page 结构与 Hash 路由双向绑定断言）
+npm run check
 ```
 
 > dev 模式页面在根路径 `/`、API 走 `/api` 代理；build 产物以 `base=/app/subscription/`

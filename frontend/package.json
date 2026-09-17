@@ -8,6 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "check:views": "node scripts/check-views.mjs",
+    "check:hash": "node scripts/check-hash-routing.mjs",
+    "check": "node scripts/check-views.mjs && node scripts/check-hash-routing.mjs",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs",
     "lint:fix": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix"
   },
