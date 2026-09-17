@@ -129,21 +129,21 @@ class NotificationDbTests(AppTestCase):
         self.assertEqual(columns, ["subscription_id", "notification_date", "channel"])
 
     def test_log_notification_is_single_row_upsert_and_sent_is_terminal(self):
-        repositories.log_notification("sub", "email", "failed", "first")
-        repositories.log_notification("sub", "email", "failed", "second")
+        notifications.log_notification("sub", "email", "failed", "first")
+        notifications.log_notification("sub", "email", "failed", "second")
         self.assertEqual(len(self._rows()), 1)
         self.assertEqual(self._rows()[0]["error_message"], "second")
 
-        repositories.log_notification("sub", "email", "sent")
-        repositories.log_notification("sub", "email", "sent")
-        repositories.log_notification("sub", "email", "failed", "late failure")
+        notifications.log_notification("sub", "email", "sent")
+        notifications.log_notification("sub", "email", "sent")
+        notifications.log_notification("sub", "email", "failed", "late failure")
         rows = self._rows()
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["status"], "sent")
         self.assertTrue(repositories.has_channel_notified_today("sub", "email"))
 
     def test_claim_reuses_failed_and_expired_rows_without_conflict(self):
-        repositories.log_notification("sub", "email", "failed", "send failed")
+        notifications.log_notification("sub", "email", "failed", "send failed")
         claim_id = notifications.claim_notification("sub", "email")
         self.assertIsNotNone(claim_id)
         self.assertFalse(str(claim_id).startswith(("memory:", "legacy:")))
@@ -158,7 +158,7 @@ class NotificationDbTests(AppTestCase):
         self.assertEqual(len(self._rows()), 1)
 
         # 模拟旧领取者超时：expired -> pending 仍走 UPSERT，不新增 identity 行。
-        repositories.log_notification("expired", "push", "pending")
+        notifications.log_notification("expired", "push", "pending")
         raw = self._raw()
         raw.execute(
             "UPDATE notification_logs SET created_at=? WHERE subscription_id=?",

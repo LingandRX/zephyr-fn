@@ -13,6 +13,7 @@ from typing import Any
 from .. import repositories
 from ..domain import domain
 from ..domain.exceptions import ValidationError
+from ..extensions import db
 from ..schemas.subscription import SubscriptionSchema
 
 # 合并校验用的候选字段（更新场景：当前值 + 请求值）
@@ -194,97 +195,102 @@ def get_subscription(sub_id: str, user_id: str) -> dict | None:
 def create_subscription(user_id: str, data: dict) -> dict:
     normalized = SubscriptionSchema.validate_create(data)
     row_data = _build_full_row(user_id, normalized)
-    created = repositories.insert_subscription(row_data)
+    with db.session.begin():
+        created = repositories.insert_subscription(row_data)
 
-    # 自动创建首笔支付流水（如果存在有效的付款日/开始日）
-    first_pay = created.get("first_payment_date") or created.get("start_date")
-    if first_pay:
-        p_start = created.get("current_period_start") or created.get("start_date")
-        p_end = (
-            created.get("current_period_end")
-            or created.get("next_due_date")
-            or created.get("start_date")
-        )
-        repositories.create_payment_for_subscription(
-            subscription_id=created["id"],
-            user_id=user_id,
-            amount=created["amount"],
-            currency=created["currency"],
-            paid_at=first_pay,
-            period_start=p_start,
-            period_end=p_end,
-            payment_type="first",
-            note=f"初始支付 {created['name']}",
-        )
+        # 自动创建首笔支付流水（如果存在有效的付款日/开始日）
+        first_pay = created.get("first_payment_date") or created.get("start_date")
+        if first_pay:
+            p_start = created.get("current_period_start") or created.get("start_date")
+            p_end = (
+                created.get("current_period_end")
+                or created.get("next_due_date")
+                or created.get("start_date")
+            )
+            repositories.create_payment_for_subscription(
+                subscription_id=created["id"],
+                user_id=user_id,
+                amount=created["amount"],
+                currency=created["currency"],
+                paid_at=first_pay,
+                period_start=p_start,
+                period_end=p_end,
+                payment_type="first",
+                note=f"初始支付 {created['name']}",
+            )
     return created
 
 
 def update_subscription(sub_id: str, user_id: str, data: dict) -> dict | None:
-    current = repositories.get_subscription_by_id(sub_id, user_id)
-    if current is None:
-        return None
-    requested = {field for field in repositories.SUBSCRIPTION_FIELDS if field in data}
-    if not requested:
-        return current
-    updates = _compute_updates(current, data, requested)
-    if not updates:
-        return current
-    return repositories.update_subscription_fields(sub_id, user_id, updates)
+    with db.session.begin():
+        current = repositories.get_subscription_by_id(sub_id, user_id)
+        if current is None:
+            return None
+        requested = {field for field in repositories.SUBSCRIPTION_FIELDS if field in data}
+        if not requested:
+            return current
+        updates = _compute_updates(current, data, requested)
+        if not updates:
+            return current
+        return repositories.update_subscription_fields(sub_id, user_id, updates)
 
 
 def delete_subscription(sub_id: str, user_id: str) -> bool:
-    return repositories.delete_subscription(sub_id, user_id)
+    with db.session.begin():
+        return repositories.delete_subscription(sub_id, user_id)
 
 
 def restore_subscription(sub_id: str, user_id: str) -> dict | None:
-    return repositories.restore_subscription(sub_id, user_id)
+    with db.session.begin():
+        return repositories.restore_subscription(sub_id, user_id)
 
 
 def renew_subscription(sub_id: str, user_id: str) -> dict | None:
     """续费：把 next_due_date 推进到下一期（一次性订阅不支持）。"""
-    current = repositories.get_subscription_by_id(sub_id, user_id)
-    if current is None or current["period_type"] == "once":
-        return None
-    due = date.fromisoformat(current["next_due_date"] or current["start_date"])
-    start = date.fromisoformat(current["start_date"])
-    next_due = domain.add_one_period(
-        due,
-        current["period_type"],
-        current["custom_period_value"],
-        current["custom_period_unit"],
-        anchor_day=domain.billing_anchor_day(start),
-    )
-    if next_due is None:
-        return None
+    with db.session.begin():
+        current = repositories.get_subscription_by_id(sub_id, user_id)
+        if current is None or current["period_type"] == "once":
+            return None
+        due = date.fromisoformat(current["next_due_date"] or current["start_date"])
+        start = date.fromisoformat(current["start_date"])
+        next_due = domain.add_one_period(
+            due,
+            current["period_type"],
+            current["custom_period_value"],
+            current["custom_period_unit"],
+            anchor_day=domain.billing_anchor_day(start),
+        )
+        if next_due is None:
+            return None
 
-    # 更新订阅状态
-    updated = repositories.renew_subscription(sub_id, user_id, next_due.isoformat())
-    if updated:
-        today_str = date.today().isoformat()
-        period_start = current["current_period_end"] or current["start_date"]
-        # 创建支付流水
-        repositories.create_payment_for_subscription(
-            subscription_id=sub_id,
-            user_id=user_id,
-            amount=current["amount"],
-            currency=current["currency"],
-            paid_at=today_str,
-            period_start=period_start,
-            period_end=next_due.isoformat(),
-            payment_type="renewal",
-            note=f"续费 {current['name']}",
-        )
-        # 更新订阅的最后付款日期及当前账期
-        repositories.update_subscription_fields(
-            sub_id,
-            user_id,
-            {
-                "last_payment_date": today_str,
-                "current_period_start": period_start,
-                "current_period_end": next_due.isoformat(),
-            },
-        )
-    return updated
+        # 更新订阅状态
+        updated = repositories.renew_subscription(sub_id, user_id, next_due.isoformat())
+        if updated:
+            today_str = date.today().isoformat()
+            period_start = current["current_period_end"] or current["start_date"]
+            # 创建支付流水
+            repositories.create_payment_for_subscription(
+                subscription_id=sub_id,
+                user_id=user_id,
+                amount=current["amount"],
+                currency=current["currency"],
+                paid_at=today_str,
+                period_start=period_start,
+                period_end=next_due.isoformat(),
+                payment_type="renewal",
+                note=f"续费 {current['name']}",
+            )
+            # 更新订阅的最后付款日期及当前账期
+            updated = repositories.update_subscription_fields(
+                sub_id,
+                user_id,
+                {
+                    "last_payment_date": today_str,
+                    "current_period_start": period_start,
+                    "current_period_end": next_due.isoformat(),
+                },
+            )
+        return updated
 
 
 # --------------------------------------------------------------------------- #

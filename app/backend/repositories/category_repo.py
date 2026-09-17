@@ -49,9 +49,8 @@ def insert_category(user_id: str, name: str, icon: str | None, sort_order: int) 
     row = Category(id=new_id(), user_id=user_id, name=name, icon=icon, sort_order=sort_order)
     db.session.add(row)
     try:
-        db.session.commit()
+        db.session.flush()
     except IntegrityError as exc:
-        db.session.rollback()
         if "idx_cat_user_name" in str(exc) or "UNIQUE" in str(exc):
             from ..domain.exceptions import ConflictError
 
@@ -71,9 +70,8 @@ def update_category(cat_id: str, user_id: str, updates: Mapping[str, Any]) -> di
     for key, value in updates.items():
         setattr(row, key, value)
     try:
-        db.session.commit()
+        db.session.flush()
     except IntegrityError as exc:
-        db.session.rollback()
         if "idx_cat_user_name" in str(exc) or "UNIQUE" in str(exc):
             from ..domain.exceptions import ConflictError
 
@@ -93,8 +91,8 @@ def delete_category(cat_id: str, user_id: str) -> bool:
         select(Category).where(Category.id == cat_id, Category.user_id == user_id)
     ).scalar_one_or_none()
     if row is None:
-        db.session.commit()
+        db.session.flush()
         return False
     db.session.delete(row)
-    db.session.commit()
+    db.session.flush()
     return True

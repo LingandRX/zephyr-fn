@@ -46,7 +46,7 @@ def insert_subscription(normalized: Mapping[str, Any]) -> dict:
     """插入订阅行（调用方需传入已归一化的全列字典）。"""
     row = Subscription(**{k: normalized.get(k) for k in SUBSCRIPTION_COLUMNS})
     db.session.add(row)
-    db.session.commit()
+    db.session.flush()
     return row.to_dict()
 
 
@@ -63,7 +63,7 @@ def update_subscription_fields(
     for k, v in allowed.items():
         setattr(row, k, v)
     row.updated_at = now_utc()
-    db.session.commit()
+    db.session.flush()
     return row.to_dict()
 
 
@@ -80,7 +80,7 @@ def delete_subscription(sub_id: str, user_id: str) -> bool:
         return False
     row.deleted_at = now_utc()
     row.updated_at = now_utc()
-    db.session.commit()
+    db.session.flush()
     return True
 
 
@@ -97,7 +97,7 @@ def restore_subscription(sub_id: str, user_id: str) -> dict | None:
         return None
     row.deleted_at = None
     row.updated_at = now_utc()
-    db.session.commit()
+    db.session.flush()
     return row.to_dict()
 
 
@@ -112,7 +112,7 @@ def renew_subscription(sub_id: str, user_id: str, next_due: str) -> dict | None:
     row.billing_status = "normal"
     row.renewal_confirmed = 0
     row.updated_at = now_utc()
-    db.session.commit()
+    db.session.flush()
     return row.to_dict()
 
 

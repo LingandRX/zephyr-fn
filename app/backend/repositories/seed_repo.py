@@ -13,4 +13,4 @@ def is_user_seeded(user_id: str) -> bool:
 
 def mark_user_seeded(user_id: str) -> None:
     db.session.add(SeededUser(user_id=user_id, seeded_at=now_utc()))
-    db.session.commit()
+    db.session.flush()

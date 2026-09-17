@@ -36,20 +36,19 @@ def batch_import(
     if not categories and not subscriptions:
         return True, None, True
     try:
-        for category in categories:
-            db.session.add(
-                Category(
-                    id=category["id"],
-                    user_id=category["user_id"],
-                    name=category["name"],
-                    icon=category.get("icon"),
-                    sort_order=category.get("sort_order", 0),
+        with db.session.begin():
+            for category in categories:
+                db.session.add(
+                    Category(
+                        id=category["id"],
+                        user_id=category["user_id"],
+                        name=category["name"],
+                        icon=category.get("icon"),
+                        sort_order=category.get("sort_order", 0),
+                    )
                 )
-            )
-        for sub in subscriptions:
-            db.session.add(Subscription(**{col: sub.get(col) for col in SUBSCRIPTION_COLUMNS}))
-        db.session.commit()
+            for sub in subscriptions:
+                db.session.add(Subscription(**{col: sub.get(col) for col in SUBSCRIPTION_COLUMNS}))
         return True, None, True
     except Exception as exc:  # noqa: BLE001
-        db.session.rollback()
         return False, str(exc), True

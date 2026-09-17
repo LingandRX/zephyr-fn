@@ -11,10 +11,32 @@ from typing import Any
 
 from .. import repositories
 from ..domain import domain
+from ..extensions import db
 
-# 兼容入口：调度器（幂等领取/完成）与测试继续使用这些名字
-claim_notification = repositories.claim_notification
-complete_notification = repositories.complete_notification
+
+def claim_notification(subscription_id: str, channel: str) -> str | None:
+    with db.session.begin():
+        return repositories.claim_notification(subscription_id, channel)
+
+
+def complete_notification(
+    claim_id: str | None,
+    subscription_id: str,
+    channel: str,
+    status: str,
+    error_message: str | None = None,
+) -> None:
+    with db.session.begin():
+        repositories.complete_notification(
+            claim_id, subscription_id, channel, status, error_message
+        )
+
+
+def log_notification(
+    subscription_id: str, channel: str, status: str, error_message: str | None = None
+) -> None:
+    with db.session.begin():
+        repositories.log_notification(subscription_id, channel, status, error_message)
 
 
 def parse_clock(value: Any) -> int | None:

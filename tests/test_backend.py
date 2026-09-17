@@ -442,7 +442,7 @@ class ReminderDaysSeedTests(unittest.TestCase):
         # 模拟旧版残留 3 + 重装时向导再次传入 -> 应覆盖为 4
         config.override("wizard_reminder_days", None)
         app = self._build_app(self.root / "upsert.db")
-        with app.app_context():
+        with app.app_context(), repositories.db.session.begin():
             repositories.update_app_settings({"notification_days": 3})
         self._dispose(app)
         config.override("wizard_reminder_days", "4")
@@ -457,7 +457,7 @@ class ReminderDaysSeedTests(unittest.TestCase):
         # 升级/普通启动无向导值 -> 不得覆盖用户已有设置
         config.override("wizard_reminder_days", None)
         app = self._build_app(self.root / "preserve.db")
-        with app.app_context():
+        with app.app_context(), repositories.db.session.begin():
             repositories.update_app_settings({"notification_days": 5})
         self._dispose(app)
         app2 = self._build_app(self.root / "preserve.db")
@@ -690,6 +690,102 @@ class ServicesTests(AppTestCase):
         self.assertIsNotNone(sub_service.get_subscription(sub_id, user_id))
         restored_list = sub_service.list_subscriptions(user_id)
         self.assertIn(sub_id, [s["id"] for s in restored_list])
+
+    def test_create_subscription_atomic_rollback_on_payment_failure(self):
+        """测试创建订阅时若流水插入失败，整笔操作原子回滚，不产生半更新。"""
+        from unittest.mock import patch
+
+        user_id = "u_atomic_create_test"
+        with (
+            patch(
+                "backend.repositories.create_payment_for_subscription",
+                side_effect=RuntimeError("Simulated payment failure"),
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            sub_service.create_subscription(
+                user_id,
+                {
+                    "name": "Atomic Fail Sub",
+                    "amount": 1000,
+                    "currency": "CNY",
+                    "period_type": "month",
+                    "auto_renew": True,
+                    "start_date": "2026-01-01",
+                    "next_due_date": "2026-02-01",
+                },
+            )
+
+        # 验证订阅完全未落库
+        subs = sub_service.list_subscriptions(user_id)
+        self.assertEqual(len(subs), 0)
+        payments = repositories.get_all_payments(user_id)
+        self.assertEqual(len(payments), 0)
+
+    def test_renew_subscription_atomic_rollback_on_payment_failure(self):
+        """测试续费时若流水插入失败，续费状态原子回滚（不推进到期日，不产生流水）。"""
+        from unittest.mock import patch
+
+        user_id = "u_atomic_renew_test"
+        sub = sub_service.create_subscription(
+            user_id,
+            {
+                "name": "Atomic Renew Sub",
+                "amount": 2000,
+                "currency": "CNY",
+                "period_type": "month",
+                "auto_renew": True,
+                "start_date": "2026-01-01",
+                "next_due_date": "2026-02-01",
+            },
+        )
+        sub_id = sub["id"]
+        initial_payments = repositories.get_payments_by_subscription(sub_id)
+        self.assertEqual(len(initial_payments), 1)
+
+        # 模拟续费流水插入失败
+        with (
+            patch(
+                "backend.repositories.create_payment_for_subscription",
+                side_effect=RuntimeError("Simulated renewal payment failure"),
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            sub_service.renew_subscription(sub_id, user_id)
+
+        # 验证订阅下次扣费日未被推进（仍为 2026-02-01）
+        current = sub_service.get_subscription(sub_id, user_id)
+        self.assertEqual(current["next_due_date"], "2026-02-01")
+
+        # 验证未生成新的支付流水
+        payments_after = repositories.get_payments_by_subscription(sub_id)
+        self.assertEqual(len(payments_after), 1)
+
+    def test_repository_write_does_not_commit_automatically(self):
+        """测试 Repository 写操作不再主动 commit，可被外部事务显式 rollback。"""
+        from backend.extensions import db
+
+        user_id = "u_no_commit_test"
+        norm = {
+            "name": "Direct Repo Sub",
+            "amount": 999,
+            "currency": "CNY",
+            "period_type": "month",
+            "auto_renew": 1,
+            "start_date": "2026-01-01",
+            "lifecycle": "active",
+            "renewal_policy": "auto",
+            "billing_status": "normal",
+        }
+        row_data = sub_service._build_full_row(user_id, norm)
+        repositories.insert_subscription(row_data)
+
+        # 显式回滚会话
+        db.session.rollback()
+
+        # 验证数据已被回滚，数据库中不存在该条目
+        subs = repositories.get_all_subscriptions(user_id)
+        self.assertEqual(len(subs), 0)
 
     def test_calendar_events(self):
         """按月生成日历事件。夹具自建：共享夹具的扣费日相对今天，不落在固定月份。"""

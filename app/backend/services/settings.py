@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from .. import repositories
+from ..extensions import db
 from ..schemas.settings import SettingsSchema
 
 _SECRET_SETTING_FIELDS = ("smtp_password", "pushplus_token", "pushplus_smtp_password")
@@ -39,4 +40,6 @@ def update_settings(data: Mapping[str, Any]) -> dict:
     updates = SettingsSchema.load(dict(data))
     if not updates:
         return get_public_settings()
-    return _mask_secrets(repositories.update_app_settings(updates))
+    with db.session.begin():
+        updated = repositories.update_app_settings(updates)
+    return _mask_secrets(updated)

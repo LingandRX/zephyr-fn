@@ -58,7 +58,7 @@ def log_notification(
         )
     )
     db.session.execute(stmt)
-    db.session.commit()
+    db.session.flush()
 
 
 def claim_notification(subscription_id: str, channel: str) -> str | None:
@@ -106,7 +106,7 @@ def claim_notification(subscription_id: str, channel: str) -> str | None:
         )
     )
     result = db.session.execute(stmt)
-    db.session.commit()
+    db.session.flush()
     if result.rowcount == 0:
         return None
     return claim_id
@@ -133,7 +133,7 @@ def complete_notification(
             .where(NotificationLog.id == claim)
             .values(status=status, error_message=error_message)
         )
-        db.session.commit()
+        db.session.flush()
         if result.rowcount:
             return
 

@@ -192,7 +192,7 @@ def install_platform(platform: str, pinned: list[str]) -> None:
             "cp",
             "--only-binary",
             ":all:",
-            "--no-deps",       # versions are already fully resolved from uv.lock
+            "--no-deps",  # versions are already fully resolved from uv.lock
             "--no-compile",
             "--disable-pip-version-check",
             "--no-warn-script-location",

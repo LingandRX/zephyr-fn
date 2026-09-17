@@ -34,18 +34,18 @@ def ensure_default_categories_for_user(user_id: str) -> bool:
     key = (_db_key(), target)
     if key in _seeded_cache:
         return False
-    if repositories.is_user_seeded(target):
-        _seeded_cache.add(key)
-        return False
-    for name, icon, sort_order in DEFAULT_CATEGORY_TEMPLATES:
-        try:
+    with db.session.begin():
+        if repositories.is_user_seeded(target):
+            _seeded_cache.add(key)
+            return False
+        existing_names = {c["name"].lower() for c in repositories.get_all_categories_raw(target)}
+        for name, icon, sort_order in DEFAULT_CATEGORY_TEMPLATES:
+            if name.lower() in existing_names:
+                continue
             repositories.insert_category(target, name, icon, sort_order)
-        except ValueError:
-            # 并发/数据异常时跳过重复分类，不阻塞补种
-            continue
-    repositories.mark_user_seeded(target)
-    _seeded_cache.add(key)
-    return True
+        repositories.mark_user_seeded(target)
+        _seeded_cache.add(key)
+        return True
 
 
 # --------------------------------------------------------------------------- #
@@ -61,31 +61,34 @@ def create_category(user_id: str, data: Mapping[str, Any]) -> dict:
     name = normalize_category_name(data.get("name"))
     icon = normalize_icon(data.get("icon"))
     sort_order = normalize_sort_order(data.get("sort_order"))
-    _ensure_unique_name(user_id, name, exclude_id=None)
-    if repositories.get_category_count(user_id) >= MAX_CATEGORIES_PER_USER:
-        raise ConflictError(f"分类数量已达上限({MAX_CATEGORIES_PER_USER})")
-    return repositories.insert_category(user_id, name, icon, sort_order)
+    with db.session.begin():
+        _ensure_unique_name(user_id, name, exclude_id=None)
+        if repositories.get_category_count(user_id) >= MAX_CATEGORIES_PER_USER:
+            raise ConflictError(f"分类数量已达上限({MAX_CATEGORIES_PER_USER})")
+        return repositories.insert_category(user_id, name, icon, sort_order)
 
 
 def update_category(cat_id: str, user_id: str, data: Mapping[str, Any]) -> dict | None:
     if not isinstance(data, Mapping):
         raise ValidationError("请求数据必须是对象")
     updates: dict[str, Any] = {}
-    if "name" in data:
-        name = normalize_category_name(data.get("name"))
-        _ensure_unique_name(user_id, name, exclude_id=cat_id)
-        updates["name"] = name
-    if "icon" in data:
-        updates["icon"] = normalize_icon(data.get("icon"))
-    if "sort_order" in data:
-        updates["sort_order"] = normalize_sort_order(data.get("sort_order"))
-    if not updates:
-        return repositories.get_category_by_id(cat_id, user_id)
-    return repositories.update_category(cat_id, user_id, updates)
+    with db.session.begin():
+        if "name" in data:
+            name = normalize_category_name(data.get("name"))
+            _ensure_unique_name(user_id, name, exclude_id=cat_id)
+            updates["name"] = name
+        if "icon" in data:
+            updates["icon"] = normalize_icon(data.get("icon"))
+        if "sort_order" in data:
+            updates["sort_order"] = normalize_sort_order(data.get("sort_order"))
+        if not updates:
+            return repositories.get_category_by_id(cat_id, user_id)
+        return repositories.update_category(cat_id, user_id, updates)
 
 
 def delete_category(cat_id: str, user_id: str) -> bool:
-    return repositories.delete_category(cat_id, user_id)
+    with db.session.begin():
+        return repositories.delete_category(cat_id, user_id)
 
 
 def _ensure_unique_name(user_id: str, name: str, exclude_id: str | None = None) -> None:

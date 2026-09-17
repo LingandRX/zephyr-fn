@@ -75,7 +75,7 @@ def insert_payment(payment_data: dict) -> dict:
 
     row = Payment(**data)
     db.session.add(row)
-    db.session.commit()
+    db.session.flush()
     return row.to_dict()
 
 

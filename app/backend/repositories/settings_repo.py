@@ -16,7 +16,7 @@ def get_app_settings() -> dict:
         # 兜底：bootstrap 已保证单行存在，这里防御性补种
         row = AppSettings(id=1, created_at=now_utc(), updated_at=now_utc())
         db.session.add(row)
-        db.session.commit()
+        db.session.flush()
     return row.to_dict()
 
 
@@ -30,5 +30,5 @@ def update_app_settings(updates: Mapping[str, Any]) -> dict:
     for key, value in allowed.items():
         setattr(row, key, value)
     row.updated_at = now_utc()
-    db.session.commit()
+    db.session.flush()
     return row.to_dict()
