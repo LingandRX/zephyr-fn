@@ -1,6 +1,12 @@
 <script setup>
 import { ref, computed, watch, nextTick, onBeforeUnmount } from "vue";
-import { Dialog, DialogPanel, DialogTitle } from "@headlessui/vue";
+import {
+  Dialog,
+  DialogPanel,
+  DialogTitle,
+  TransitionRoot,
+  TransitionChild,
+} from "@headlessui/vue";
 import {
   subscriptionTemplates,
   getPopularTemplates,
@@ -140,25 +146,45 @@ function close() {
 </script>
 
 <template>
-  <Dialog
-    :open="modelValue"
-    :initial-focus="sheetRef"
-    @close="close"
-    class="template-dialog-root"
-  >
-    <div class="template-dialog-backdrop" aria-hidden="true" />
+  <TransitionRoot :show="modelValue" as="template">
+    <Dialog
+      as="div"
+      :initial-focus="sheetRef"
+      @close="close"
+      class="template-dialog-root"
+    >
+      <TransitionChild
+        as="template"
+        enter="ts-backdrop-enter"
+        enter-from="ts-backdrop-from"
+        enter-to="ts-backdrop-to"
+        leave="ts-backdrop-leave"
+        leave-from="ts-backdrop-to"
+        leave-to="ts-backdrop-from"
+      >
+        <div class="template-dialog-backdrop" aria-hidden="true" />
+      </TransitionChild>
 
-    <div class="template-dialog-container">
-      <DialogPanel ref="sheetRef" class="template-sheet">
-        <!-- 移动端抓手 -->
-        <div class="sheet-grabber" aria-hidden="true" />
+      <div class="template-dialog-container">
+        <TransitionChild
+          as="template"
+          enter="ts-panel-enter"
+          enter-from="ts-panel-from"
+          enter-to="ts-panel-to"
+          leave="ts-panel-leave"
+          leave-from="ts-panel-to"
+          leave-to="ts-panel-from"
+        >
+          <DialogPanel ref="sheetRef" class="template-sheet">
+            <!-- 移动端抓手 -->
+            <div class="sheet-grabber" aria-hidden="true" />
 
-        <!-- 顶部导航：取消 + 标题 -->
-        <header class="sheet-header">
-          <button type="button" class="sheet-cancel" @click="close">取消</button>
-          <DialogTitle as="h2" class="sheet-title">选择模板</DialogTitle>
-          <span class="sheet-header-spacer" aria-hidden="true" />
-        </header>
+            <!-- 顶部导航：取消 + 标题 -->
+            <header class="sheet-header">
+              <button type="button" class="sheet-cancel" @click="close">取消</button>
+              <DialogTitle as="h2" class="sheet-title">选择模板</DialogTitle>
+              <span class="sheet-header-spacer" aria-hidden="true" />
+            </header>
 
         <!-- 搜索框 -->
         <div class="sheet-search">
@@ -301,9 +327,11 @@ function close() {
             <p class="sheet-empty-hint">换个关键词试试</p>
           </div>
         </div>
-      </DialogPanel>
-    </div>
-  </Dialog>
+          </DialogPanel>
+        </TransitionChild>
+      </div>
+    </Dialog>
+  </TransitionRoot>
 </template>
 
 <style scoped>
@@ -327,7 +355,24 @@ function close() {
   background: rgba(0, 0, 0, 0.4);
   -webkit-backdrop-filter: blur(3px);
   backdrop-filter: blur(3px);
-  animation: ts-fade-in var(--dur-base) ease-out;
+}
+
+/* ---------------- 遮罩过渡 ---------------- */
+:global(.ts-backdrop-enter),
+.ts-backdrop-enter {
+  transition: opacity var(--dur-base) ease-out;
+}
+:global(.ts-backdrop-from),
+.ts-backdrop-from {
+  opacity: 0;
+}
+:global(.ts-backdrop-to),
+.ts-backdrop-to {
+  opacity: 1;
+}
+:global(.ts-backdrop-leave),
+.ts-backdrop-leave {
+  transition: opacity var(--dur-quick) ease-in;
 }
 
 :global(.template-dialog-container) {
@@ -357,7 +402,33 @@ function close() {
   border-radius: 18px;
   box-shadow: var(--ios-shadow-panel);
   overflow: hidden;
-  animation: ts-pop-in var(--dur-slow) var(--ease-sheet);
+}
+
+/* ---------------- 面板过渡（桌面端居中弹窗） ---------------- */
+:global(.ts-panel-enter),
+.ts-panel-enter {
+  transition: opacity var(--dur-slow) var(--ease-sheet),
+              transform var(--dur-slow) var(--ease-sheet);
+}
+:global(.ts-panel-from),
+.ts-panel-from {
+  opacity: 0;
+  transform: scale(0.95) translateY(10px);
+}
+:global(.ts-panel-to),
+.ts-panel-to {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+:global(.ts-panel-leave),
+.ts-panel-leave {
+  transition: opacity var(--dur-fast) var(--ease-accelerate),
+              transform var(--dur-fast) var(--ease-accelerate);
+}
+:global(.ts-panel-leave-to),
+.ts-panel-leave-to {
+  opacity: 0;
+  transform: scale(0.96) translateY(8px);
 }
 
 /* 移动端抓手（桌面隐藏） */
@@ -753,22 +824,6 @@ function close() {
   font-size: 13px;
 }
 
-/* ---------------- 动画 ---------------- */
-@keyframes ts-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes ts-pop-in {
-  from { opacity: 0; transform: scale(0.96) translateY(10px); }
-  to { opacity: 1; transform: none; }
-}
-
-@keyframes ts-sheet-up {
-  from { transform: translateY(100%); }
-  to { transform: none; }
-}
-
 /* ---------------- 移动端：底部 Sheet ---------------- */
 @media (max-width: 860px) {
   :global(.template-dialog-container) {
@@ -783,7 +838,27 @@ function close() {
     max-height: 90vh;
     max-height: 90dvh;
     border-radius: 18px 18px 0 0;
-    animation: ts-sheet-up var(--dur-slower) var(--ease-sheet);
+  }
+
+  :global(.ts-panel-enter),
+  .ts-panel-enter {
+    transition: transform var(--dur-slower) var(--ease-sheet);
+  }
+  :global(.ts-panel-from),
+  .ts-panel-from {
+    transform: translateY(100%);
+  }
+  :global(.ts-panel-to),
+  .ts-panel-to {
+    transform: translateY(0);
+  }
+  :global(.ts-panel-leave),
+  .ts-panel-leave {
+    transition: transform var(--dur-quick) var(--ease-accelerate);
+  }
+  :global(.ts-panel-leave-to),
+  .ts-panel-leave-to {
+    transform: translateY(100%);
   }
 
   .sheet-grabber {
@@ -796,9 +871,15 @@ function close() {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :global(.template-dialog-backdrop),
-  .template-sheet {
-    animation: none;
+  :global(.ts-backdrop-enter),
+  :global(.ts-backdrop-leave),
+  :global(.ts-panel-enter),
+  :global(.ts-panel-leave),
+  .ts-backdrop-enter,
+  .ts-backdrop-leave,
+  .ts-panel-enter,
+  .ts-panel-leave {
+    transition: none !important;
   }
   .chip,
   .ios-row {

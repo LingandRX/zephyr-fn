@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch, onDeactivated, onActivated } from "vue";
+import { ref, computed, onMounted, watch, onDeactivated, onActivated, onBeforeUnmount } from "vue";
 import {
   getSubscriptions, getCategories, getStatistics,
   createSubscription, updateSubscription, deleteSubscription, renewSubscription,
@@ -70,7 +70,16 @@ onActivated(() => {
 });
 
 // keep-alive 切走时关闭弹窗，避免返回后弹窗残留
-onDeactivated(() => { modalOpen.value = false; editingSub.value = null; });
+onDeactivated(() => {
+  modalOpen.value = false;
+  editingSub.value = null;
+  if (newlyAddedTimer) clearTimeout(newlyAddedTimer);
+  newlyAddedId.value = null;
+});
+
+onBeforeUnmount(() => {
+  if (newlyAddedTimer) clearTimeout(newlyAddedTimer);
+});
 
 // 弹窗关闭时重置编辑对象
 watch(modalOpen, (open) => { if (!open) editingSub.value = null; });
@@ -137,6 +146,9 @@ function initialOf(name) {
 }
 
 // ---------- 操作 ----------
+const newlyAddedId = ref(null);
+let newlyAddedTimer = null;
+
 function openModal(sub = null) {
   editingSub.value = sub || null;
   modalOpen.value = true;
@@ -144,16 +156,26 @@ function openModal(sub = null) {
 
 async function handleModalSave({ isEdit, id, body, clearDraft }) {
   try {
+    let createdItem = null;
     if (isEdit && id) {
       await updateSubscription(id, body);
     } else {
-      await createSubscription(body);
+      createdItem = await createSubscription(body);
       clearDraft();
     }
     toast(isEdit ? "已保存" : "已新增");
     modalOpen.value = false;
     editingSub.value = null;
     await loadAll();
+
+    // 新增成功后高亮新记录
+    if (!isEdit && createdItem?.id) {
+      newlyAddedId.value = createdItem.id;
+      if (newlyAddedTimer) clearTimeout(newlyAddedTimer);
+      newlyAddedTimer = setTimeout(() => {
+        newlyAddedId.value = null;
+      }, 2400);
+    }
   } catch (err) {
     toast(err.message, "err");
   }
@@ -290,7 +312,12 @@ onMounted(loadAll);
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in filtered" :key="s.id" class="sub-table-row">
+            <tr
+              v-for="s in filtered"
+              :key="s.id"
+              class="sub-table-row"
+              :class="{ 'is-newly-added': s.id === newlyAddedId }"
+            >
               <td>
                 <div class="sub-cell">
                   <div class="sub-avatar">{{ initialOf(s.name) }}</div>
@@ -344,7 +371,12 @@ onMounted(loadAll);
 
       <!-- 移动端卡片视图 (< 768px) -->
       <div class="mobile-only sub-cards-list">
-        <div v-for="s in filtered" :key="s.id" class="sub-item-card">
+        <div
+          v-for="s in filtered"
+          :key="s.id"
+          class="sub-item-card"
+          :class="{ 'is-newly-added': s.id === newlyAddedId }"
+        >
           <div class="item-header">
             <div class="item-brand">
               <span class="item-avatar">{{ initialOf(s.name) }}</span>
@@ -782,6 +814,27 @@ onMounted(loadAll);
   color: var(--ios-red);
 }
 
+/* 新增订阅成功后高亮聚焦动效 */
+.sub-table-row.is-newly-added,
+.sub-item-card.is-newly-added {
+  animation: new-sub-highlight 2.4s var(--ease-decelerate);
+}
+
+@keyframes new-sub-highlight {
+  0% {
+    background-color: var(--ios-blue-soft);
+    box-shadow: inset 0 0 0 1.5px var(--ios-blue);
+  }
+  60% {
+    background-color: var(--ios-blue-soft);
+    box-shadow: inset 0 0 0 1.5px var(--ios-blue);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
 /* ---------------- 移动端卡片列表 ---------------- */
 .sub-cards-list {
   flex-direction: column;
@@ -1131,6 +1184,9 @@ onMounted(loadAll);
   .sub-dialog-backdrop,
   .sub-dialog-panel {
     transition: none !important;
+  }
+  .is-newly-added {
+    animation: none !important;
   }
 }
 </style>

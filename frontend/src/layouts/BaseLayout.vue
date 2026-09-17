@@ -310,6 +310,21 @@ onMounted(loadNotice);
   transform: scale(0.94);
 }
 
+.fab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--dur-medium) var(--ease-spring);
+}
+
+.fab-add:hover .fab-icon {
+  transform: rotate(90deg) scale(1.08);
+}
+
+.fab-add:active .fab-icon {
+  transform: rotate(90deg) scale(0.92);
+}
+
 /* 窄屏：内容会从浮动按钮下方滚过，稍微降低不透明度以免完全挡住卡片文字 */
 @media (max-width: 860px) {
   .fab-add {
@@ -318,6 +333,16 @@ onMounted(loadNotice);
   .fab-add:hover,
   .fab-add:active {
     opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fab-icon {
+    transition: none !important;
+  }
+  .fab-add:hover .fab-icon,
+  .fab-add:active .fab-icon {
+    transform: none !important;
   }
 }
 </style>

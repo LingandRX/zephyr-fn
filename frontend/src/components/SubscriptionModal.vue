@@ -1,9 +1,11 @@
 <script setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onBeforeUnmount } from "vue";
 import {
   Dialog,
   DialogPanel,
   DialogTitle,
+  TransitionRoot,
+  TransitionChild,
 } from "@headlessui/vue";
 import { CUSTOM_UNIT_LABEL, yuanToCents, centsToYuan } from "../utils/format.js";
 import { toast } from "../utils/ui.js";
@@ -62,6 +64,12 @@ const isEditing = computed(() => !!props.subscription);
 const form = ref(emptyForm());
 const saving = ref(false);
 const showTemplateSelector = ref(false);
+const templateApplied = ref(false);
+let templateTimer = null;
+
+onBeforeUnmount(() => {
+  if (templateTimer) clearTimeout(templateTimer);
+});
 
 function todayStr() {
   const d = new Date();
@@ -255,155 +263,205 @@ function handleTemplateSelect(template) {
   if (template.notes) {
     form.value.notes = template.notes;
   }
+  // 触发模板套用动效反馈
+  templateApplied.value = true;
+  if (templateTimer) clearTimeout(templateTimer);
+  templateTimer = setTimeout(() => {
+    templateApplied.value = false;
+  }, 1200);
 }
 </script>
 
 <template>
-  <Dialog
-    :open="modelValue"
-    @close="close"
-    class="modal-dialog-root"
-  >
-    <div class="modal-dialog-backdrop" aria-hidden="true" />
+  <TransitionRoot :show="modelValue" as="template">
+    <Dialog
+      as="div"
+      @close="close"
+      class="modal-dialog-root"
+    >
+      <TransitionChild
+        as="template"
+        enter="modal-backdrop-enter"
+        enter-from="modal-backdrop-from"
+        enter-to="modal-backdrop-to"
+        leave="modal-backdrop-leave"
+        leave-from="modal-backdrop-to"
+        leave-to="modal-backdrop-from"
+      >
+        <div class="modal-dialog-backdrop" aria-hidden="true" />
+      </TransitionChild>
 
-    <div class="modal-dialog-container">
-      <DialogPanel class="modal-card">
-        <div class="modal-head">
-          <DialogTitle as="h2">{{ modalTitle }}</DialogTitle>
-          <button type="button" class="modal-close" @click="close" aria-label="关闭弹窗">
-            <svg width="16" height="16" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true">
-              <path d="M556.8 512L832 236.8c12.8-12.8 12.8-32 0-44.8-12.8-12.8-32-12.8-44.8 0L512 467.2l-275.2-277.333333c-12.8-12.8-32-12.8-44.8 0-12.8 12.8-12.8 32 0 44.8l275.2 277.333333-277.333333 275.2c-12.8 12.8-12.8 32 0 44.8 6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333L512 556.8 787.2 832c6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466666-8.533333c12.8-12.8 12.8-32 0-44.8L556.8 512z"/>
-            </svg>
-          </button>
-        </div>
-      <form class="modal-form" @submit.prevent="save">
-        <div class="modal-scroll">
-          <div class="form-grid">
-            <div class="field span-2">
-              <span>名称 *</span>
-              <div class="name-input-group">
-                <input v-model="form.name" required placeholder="如 Netflix" class="name-input" />
-                <HeadlessButton
-                  v-if="!isEditing"
-                  @click="showTemplateSelector = true"
-                  class="template-btn"
-                  title="从模板选择"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-                    <rect x="3" y="3" width="7" height="7" rx="2" />
-                    <rect x="14" y="3" width="7" height="7" rx="2" />
-                    <rect x="3" y="14" width="7" height="7" rx="2" />
-                    <rect x="14" y="14" width="7" height="7" rx="2" />
-                  </svg>
-                  模板
-                </HeadlessButton>
+      <div class="modal-dialog-container">
+        <TransitionChild
+          as="template"
+          enter="modal-panel-enter"
+          enter-from="modal-panel-from"
+          enter-to="modal-panel-to"
+          leave="modal-panel-leave"
+          leave-from="modal-panel-to"
+          leave-to="modal-panel-from"
+        >
+          <DialogPanel class="modal-card">
+            <!-- 移动端抓手（桌面隐藏） -->
+            <div class="modal-grabber" aria-hidden="true" />
+
+            <div class="modal-head">
+              <DialogTitle as="h2">{{ modalTitle }}</DialogTitle>
+              <button type="button" class="modal-close" @click="close" aria-label="关闭弹窗">
+                <svg width="16" height="16" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true">
+                  <path d="M556.8 512L832 236.8c12.8-12.8 12.8-32 0-44.8-12.8-12.8-32-12.8-44.8 0L512 467.2l-275.2-277.333333c-12.8-12.8-32-12.8-44.8 0-12.8 12.8-12.8 32 0 44.8l275.2 277.333333-277.333333 275.2c-12.8 12.8-12.8 32 0 44.8 6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466667-8.533333L512 556.8 787.2 832c6.4 6.4 14.933333 8.533333 23.466666 8.533333s17.066667-2.133333 23.466666-8.533333c12.8-12.8 12.8-32 0-44.8L556.8 512z"/>
+                </svg>
+              </button>
+            </div>
+            <form class="modal-form" @submit.prevent="save">
+              <div class="modal-scroll">
+                <div class="form-grid">
+                  <div class="field span-2">
+                    <span>名称 *</span>
+                    <div class="name-input-group">
+                      <input
+                        v-model="form.name"
+                        required
+                        placeholder="如 Netflix"
+                        class="name-input"
+                        :class="{ 'input-template-highlight': templateApplied }"
+                      />
+                      <HeadlessButton
+                        v-if="!isEditing"
+                        @click="showTemplateSelector = true"
+                        class="template-btn"
+                        title="从模板选择"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                          <rect x="3" y="3" width="7" height="7" rx="2" />
+                          <rect x="14" y="3" width="7" height="7" rx="2" />
+                          <rect x="3" y="14" width="7" height="7" rx="2" />
+                          <rect x="14" y="14" width="7" height="7" rx="2" />
+                        </svg>
+                        模板
+                      </HeadlessButton>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <span>分类</span>
+                    <HeadlessListbox
+                      v-model="form.category_id"
+                      :options="formCatOptions"
+                      placeholder="未分类"
+                    />
+                  </div>
+                  <div class="field">
+                    <span>货币</span>
+                    <HeadlessListbox
+                      v-model="form.currency"
+                      :options="CURRENCY_OPTIONS"
+                      :clearable="false"
+                    />
+                  </div>
+                  <label class="field">
+                    <span>金额（{{ form.currency === 'USD' ? '美元' : form.currency === 'HKD' ? '港币' : '元' }}）*</span>
+                    <input
+                      v-model="form.amount"
+                      type="number"
+                      required
+                      min="0"
+                      step="0.01"
+                      placeholder="68"
+                      :class="{ 'input-template-highlight': templateApplied }"
+                    />
+                  </label>
+                  <div class="field">
+                    <span>周期</span>
+                    <HeadlessListbox
+                      v-model="form.period_type"
+                      :options="periodTypeOptions"
+                      :clearable="false"
+                    />
+                  </div>
+                  <Transition name="modal-field-expand">
+                    <div v-if="form.period_type === 'custom'" class="field span-2 custom-period-field">
+                      <span>自定义周期</span>
+                      <span class="inline">
+                        <input v-model="form.custom_value" type="number" min="1" />
+                        <HeadlessListbox
+                          v-model="form.custom_unit"
+                          :options="customUnitOptions"
+                          :clearable="false"
+                        />
+                      </span>
+                    </div>
+                  </Transition>
+                  <HeadlessSwitch
+                    v-model="form.auto_renew"
+                    label="自动续费"
+                    class="span-2"
+                  />
+                  <div class="field">
+                    <span>开始日期 *</span>
+                    <HeadlessDatePicker
+                      v-model="form.start_date"
+                      placeholder="选择开始日期"
+                      :clearable="false"
+                    />
+                  </div>
+                  <div class="field">
+                    <span>首次付款日</span>
+                    <HeadlessDatePicker
+                      v-model="form.first_payment_date"
+                      placeholder="首次付款日"
+                      :clearable="true"
+                    />
+                  </div>
+                  <div class="field span-2">
+                    <span>下次扣费日</span>
+                    <HeadlessDatePicker
+                      v-model="form.next_due_date"
+                      placeholder="下次扣费日"
+                      :clearable="true"
+                    />
+                  </div>
+                  <label class="field span-2 notes-field">
+                    <span>备注</span>
+                    <textarea
+                      v-model="form.notes"
+                      class="notes-input"
+                      rows="3"
+                      maxlength="120"
+                      placeholder="可选"
+                      @input="limitNotes"
+                    ></textarea>
+                    <span class="notes-counter" :class="{ 'is-limit': notesLength >= NOTES_MAX_LENGTH }">
+                      {{ notesLength }}/{{ NOTES_MAX_LENGTH }}
+                    </span>
+                  </label>
+                </div>
               </div>
-            </div>
-            <div class="field">
-              <span>分类</span>
-              <HeadlessListbox
-                v-model="form.category_id"
-                :options="formCatOptions"
-                placeholder="未分类"
-              />
-            </div>
-            <div class="field">
-              <span>货币</span>
-              <HeadlessListbox
-                v-model="form.currency"
-                :options="CURRENCY_OPTIONS"
-                :clearable="false"
-              />
-            </div>
-            <label class="field">
-              <span>金额（{{ form.currency === 'USD' ? '美元' : form.currency === 'HKD' ? '港币' : '元' }}）*</span>
-              <input v-model="form.amount" type="number" required min="0" step="0.01" placeholder="68" />
-            </label>
-            <div class="field">
-              <span>周期</span>
-              <HeadlessListbox
-                v-model="form.period_type"
-                :options="periodTypeOptions"
-                :clearable="false"
-              />
-            </div>
-            <div v-if="form.period_type === 'custom'" class="field span-2">
-              <span>自定义周期</span>
-              <span class="inline">
-                <input v-model="form.custom_value" type="number" min="1" />
-                <HeadlessListbox
-                  v-model="form.custom_unit"
-                  :options="customUnitOptions"
-                  :clearable="false"
-                />
-              </span>
-            </div>
-            <HeadlessSwitch
-              v-model="form.auto_renew"
-              label="自动续费"
-              class="span-2"
-            />
-            <div class="field">
-              <span>开始日期 *</span>
-              <HeadlessDatePicker
-                v-model="form.start_date"
-                placeholder="选择开始日期"
-                :clearable="false"
-              />
-            </div>
-            <div class="field">
-              <span>首次付款日</span>
-              <HeadlessDatePicker
-                v-model="form.first_payment_date"
-                placeholder="首次付款日"
-                :clearable="true"
-              />
-            </div>
-            <div class="field span-2">
-              <span>下次扣费日</span>
-              <HeadlessDatePicker
-                v-model="form.next_due_date"
-                placeholder="下次扣费日"
-                :clearable="true"
-              />
-            </div>
-            <label class="field span-2 notes-field">
-              <span>备注</span>
-              <textarea
-                v-model="form.notes"
-                class="notes-input"
-                rows="3"
-                maxlength="120"
-                placeholder="可选"
-                @input="limitNotes"
-              ></textarea>
-              <span class="notes-counter" :class="{ 'is-limit': notesLength >= NOTES_MAX_LENGTH }">
-                {{ notesLength }}/{{ NOTES_MAX_LENGTH }}
-              </span>
-            </label>
-          </div>
-        </div>
-        <div class="modal-foot">
-          <HeadlessButton @click="resetForm">重置</HeadlessButton>
-          <div class="modal-foot-actions">
-            <HeadlessButton @click="close">取消</HeadlessButton>
-            <HeadlessButton type="submit" variant="primary" :disabled="saving">保存</HeadlessButton>
-          </div>
-        </div>
-      </form>
-      </DialogPanel>
-    </div>
+              <div class="modal-foot">
+                <HeadlessButton @click="resetForm">重置</HeadlessButton>
+                <div class="modal-foot-actions">
+                  <HeadlessButton @click="close">取消</HeadlessButton>
+                  <HeadlessButton type="submit" variant="primary" :disabled="saving" class="btn-save">
+                    <span v-if="saving" class="modal-spinner" aria-hidden="true" />
+                    <span>{{ saving ? "保存中…" : "保存" }}</span>
+                  </HeadlessButton>
+                </div>
+              </div>
+            </form>
+          </DialogPanel>
+        </TransitionChild>
+      </div>
 
-    <!-- 模板选择器：必须嵌套在本 Dialog 内部，作为组件树后代。
-         HeadlessUI 的堆栈机制在子 Dialog 打开时会把父 Dialog 的计数加一，
-         从而禁用父 Dialog 的「外部点击关闭」，否则点击模板卡片会被父弹窗
-         判定为外部点击而把整个新增弹窗关掉。 -->
-    <TemplateSelector
-      :model-value="showTemplateSelector"
-      @update:model-value="showTemplateSelector = $event"
-      @select="handleTemplateSelect"
-    />
-  </Dialog>
+      <!-- 模板选择器：必须嵌套在本 Dialog 内部，作为组件树后代。
+           HeadlessUI 的堆栈机制在子 Dialog 打开时会把父 Dialog 的计数加一，
+           从而禁用父 Dialog 的「外部点击关闭」，否则点击模板卡片会被父弹窗
+           判定为外部点击而把整个新增弹窗关掉。 -->
+      <TemplateSelector
+        :model-value="showTemplateSelector"
+        @update:model-value="showTemplateSelector = $event"
+        @select="handleTemplateSelect"
+      />
+    </Dialog>
+  </TransitionRoot>
 </template>
 
 <style scoped>
@@ -427,7 +485,6 @@ function handleTemplateSelect(template) {
   background: rgba(0, 0, 0, 0.4);
   -webkit-backdrop-filter: blur(3px);
   backdrop-filter: blur(3px);
-  animation: modal-fade-in var(--dur-quick) ease-out;
 }
 
 :global(.modal-dialog-container) {
@@ -441,6 +498,24 @@ function handleTemplateSelect(template) {
   pointer-events: none;
 }
 
+/* ---------------- 遮罩过渡 ---------------- */
+:global(.modal-backdrop-enter),
+.modal-backdrop-enter {
+  transition: opacity var(--dur-base) ease-out;
+}
+:global(.modal-backdrop-from),
+.modal-backdrop-from {
+  opacity: 0;
+}
+:global(.modal-backdrop-to),
+.modal-backdrop-to {
+  opacity: 1;
+}
+:global(.modal-backdrop-leave),
+.modal-backdrop-leave {
+  transition: opacity var(--dur-quick) ease-in;
+}
+
 /* ---------------- 弹窗卡片 ---------------- */
 .modal-dialog-container .modal-card {
   pointer-events: auto;
@@ -452,17 +527,43 @@ function handleTemplateSelect(template) {
   border: 1px solid var(--ios-card-border);
   border-radius: 18px;
   box-shadow: var(--ios-shadow-panel);
-  animation: modal-zoom-in var(--dur-base) var(--ease-decelerate);
 }
 
-@keyframes modal-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+/* 移动端抓手（桌面隐藏） */
+.modal-grabber {
+  display: none;
+  flex: none;
+  width: 36px;
+  height: 5px;
+  margin: 10px auto 0;
+  border-radius: var(--radius-full);
+  background: var(--ios-separator);
 }
 
-@keyframes modal-zoom-in {
-  from { opacity: 0; transform: scale(0.96); }
-  to { opacity: 1; transform: scale(1); }
+:global(.modal-panel-enter),
+.modal-panel-enter {
+  transition: opacity var(--dur-slow) var(--ease-decelerate),
+              transform var(--dur-slow) var(--ease-decelerate);
+}
+:global(.modal-panel-from),
+.modal-panel-from {
+  opacity: 0;
+  transform: scale(0.93) translateY(12px);
+}
+:global(.modal-panel-to),
+.modal-panel-to {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+:global(.modal-panel-leave),
+.modal-panel-leave {
+  transition: opacity var(--dur-fast) var(--ease-accelerate),
+              transform var(--dur-fast) var(--ease-accelerate);
+}
+:global(.modal-panel-leave-to),
+.modal-panel-leave-to {
+  opacity: 0;
+  transform: scale(0.96) translateY(8px);
 }
 
 /* ---------------- 头部 ---------------- */
@@ -702,20 +803,121 @@ function handleTemplateSelect(template) {
   box-shadow: 0 0 0 3px var(--ios-blue-soft);
 }
 
+.modal-foot :deep(.btn-save) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.modal-spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: modal-spin 0.6s linear infinite;
+  flex: none;
+}
+
+@keyframes modal-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 模板套用高亮反馈动效 */
+.name-input.input-template-highlight,
+input.input-template-highlight {
+  animation: input-highlight-pulse 1.2s var(--ease-decelerate);
+}
+
+@keyframes input-highlight-pulse {
+  0% {
+    border-color: var(--ios-blue) !important;
+    box-shadow: 0 0 0 3px var(--ios-blue-soft) !important;
+    background-color: var(--ios-blue-soft) !important;
+  }
+  50% {
+    border-color: var(--ios-blue) !important;
+    box-shadow: 0 0 0 3px var(--ios-blue-soft) !important;
+    background-color: var(--ios-blue-soft) !important;
+  }
+  100% {
+    border-color: transparent;
+    box-shadow: none;
+  }
+}
+
+/* 自定义周期折叠/展开过渡 */
+.modal-field-expand-enter-active {
+  transition: opacity var(--dur-medium) var(--ease-decelerate),
+              transform var(--dur-medium) var(--ease-decelerate),
+              max-height var(--dur-medium) var(--ease-decelerate);
+  overflow: hidden;
+}
+.modal-field-expand-leave-active {
+  transition: opacity var(--dur-quick) var(--ease-accelerate),
+              transform var(--dur-quick) var(--ease-accelerate),
+              max-height var(--dur-quick) var(--ease-accelerate);
+  overflow: hidden;
+}
+.modal-field-expand-enter-from,
+.modal-field-expand-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+  max-height: 0;
+}
+.modal-field-expand-enter-to,
+.modal-field-expand-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+  max-height: 90px;
+}
+
 /* ---------------- 移动端适配 (<=860px) ---------------- */
 @media (max-width: 860px) {
   :global(.modal-dialog-container) {
-    align-items: center;
-    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+    align-items: flex-end;
+    padding: 0;
   }
 
   .modal-card {
     width: 100%;
     max-width: 100%;
-    border-radius: 18px;
+    border-radius: 20px 20px 0 0;
     max-height: 90vh;
     max-height: 90dvh;
     overflow: hidden;
+  }
+
+  .modal-grabber {
+    display: block;
+  }
+
+  :global(.modal-panel-enter),
+  .modal-panel-enter {
+    transition: opacity var(--dur-medium) ease-out,
+                transform var(--dur-slow) var(--ease-sheet);
+  }
+  :global(.modal-panel-from),
+  .modal-panel-from {
+    opacity: 0.6;
+    transform: translateY(100%);
+  }
+  :global(.modal-panel-to),
+  .modal-panel-to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  :global(.modal-panel-leave),
+  .modal-panel-leave {
+    transition: opacity var(--dur-fast) ease-in,
+                transform var(--dur-quick) var(--ease-accelerate);
+  }
+  :global(.modal-panel-leave-to),
+  .modal-panel-leave-to {
+    opacity: 0;
+    transform: translateY(100%);
   }
 
   .modal-scroll {
@@ -765,9 +967,22 @@ function handleTemplateSelect(template) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :global(.modal-dialog-backdrop),
-  .modal-dialog-container .modal-card {
-    animation: none;
+  :global(.modal-backdrop-enter),
+  :global(.modal-backdrop-leave),
+  :global(.modal-panel-enter),
+  :global(.modal-panel-leave),
+  .modal-backdrop-enter,
+  .modal-backdrop-leave,
+  .modal-panel-enter,
+  .modal-panel-leave,
+  .modal-field-expand-enter-active,
+  .modal-field-expand-leave-active {
+    transition: none !important;
+  }
+  .name-input.input-template-highlight,
+  input.input-template-highlight,
+  .modal-spinner {
+    animation: none !important;
   }
 }
 </style>
