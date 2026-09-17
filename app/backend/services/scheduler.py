@@ -22,6 +22,7 @@ from ..utils.channels.email import EMAIL_PATTERN
 
 send_email = channels.send_email
 send_pushplus = channels.send_pushplus
+render_email_template = channels.render_email_template
 
 
 DEFAULT_PUSH_TIME = "09:00"  # 每日固定推送时刻默认值（24h 制 HH:MM）
@@ -102,20 +103,23 @@ def _send_channels(settings: dict, sub: dict, title: str, body: str) -> None:
                 port = int(port_raw) if port_raw is not None else 465
             except (ValueError, TypeError):
                 port = 465
+            email_tpl = settings.get("email_template") or "default"
+            mail_subject, mail_text, mail_html = render_email_template(email_tpl, sub)
             _run_channel(
                 sub_id,
                 "email",
                 lambda: send_email(
                     to_address,
-                    title,
-                    body,
+                    mail_subject,
+                    mail_text,
+                    body_html=mail_html,
                     host=settings.get("smtp_host"),
                     port=port,
                     username=settings.get("smtp_username"),
                     password=settings.get("smtp_password"),
                     from_address=settings.get("smtp_from_address"),
                 ),
-                f"已发送: {title}",
+                f"已发送: {mail_subject}",
             )
 
     if settings.get("pushplus_enabled") and settings.get("pushplus_token"):

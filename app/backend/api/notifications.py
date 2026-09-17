@@ -11,6 +11,7 @@ from ..services import notifications
 from ..services import settings as settings_service
 from ..utils.channels import email as email_sender
 from ..utils.channels import pushplus
+from ..utils.channels.email_templates import render_email_template
 from ..web.response import ok
 
 bp = Blueprint("api_notifications", __name__, url_prefix="/api")
@@ -50,18 +51,15 @@ def test_email():
     if not to_address:
         raise ValidationError("请提供测试接收邮箱（或配置发件人/用户名）")
 
-    subject = "【订阅管理】邮件通知测试"
-    content = (
-        "这是一封来自订阅管理系统的测试邮件。\n\n"
-        f"发送时间：{date.today().isoformat()}\n"
-        "如果您看到这封邮件，说明您的 SMTP 邮件通知配置正确并已成功生效。"
-    )
+    tpl_id = payload.get("email_template") or settings.get("email_template") or "default"
+    subject, content, content_html = render_email_template(tpl_id, is_test=True)
 
     try:
         email_sender.send_email(
             to_address=to_address,
             subject=subject,
             body=content,
+            body_html=content_html,
             host=host,
             port=port,
             username=username,

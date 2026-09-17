@@ -10,6 +10,7 @@ import logging
 import re
 import smtplib
 from email.header import Header
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 logger = logging.getLogger(__name__)
@@ -32,18 +33,20 @@ def send_email(
     subject: str,
     body: str,
     *,
+    body_html: str | None = None,
     host: str | None = None,
     port: int | None = None,
     username: str | None = None,
     password: str | None = None,
     from_address: str | None = None,
 ) -> None:
-    """通过 SMTP 发送单封文本邮件（host 必填）。
+    """通过 SMTP 发送单封邮件（host 必填，支持纯文本或 HTML 多部件）。
 
     Args:
         to_address: 收件人邮箱地址
         subject: 邮件主题
         body: 邮件正文（纯文本）
+        body_html: 邮件正文（HTML，可选）
         host: SMTP 服务器地址（必填）
         port: SMTP 端口号，默认 465（SSL）
         username: SMTP 用户名
@@ -78,10 +81,18 @@ def send_email(
     # 验证发件人地址
     _validate_email(smtp_from, "发件人")
 
-    msg = MIMEText(body, "plain", "utf-8")
-    msg["Subject"] = Header(subject, "utf-8")
-    msg["From"] = smtp_from
-    msg["To"] = to_address
+    if body_html:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = Header(subject, "utf-8")
+        msg["From"] = smtp_from
+        msg["To"] = to_address
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+        msg.attach(MIMEText(body_html, "html", "utf-8"))
+    else:
+        msg = MIMEText(body, "plain", "utf-8")
+        msg["Subject"] = Header(subject, "utf-8")
+        msg["From"] = smtp_from
+        msg["To"] = to_address
 
     logger.info(
         "准备发送邮件: from=%s, to=%s, host=%s:%s", smtp_from, to_address, smtp_host, smtp_port

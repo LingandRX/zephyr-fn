@@ -145,6 +145,7 @@ const form = reactive({
   smtp_password: "",
   smtp_password_configured: false,
   smtp_from_address: "",
+  email_template: "minimal",
   pushplus_enabled: false,
   pushplus_token: "",
   pushplus_token_configured: false,
@@ -227,6 +228,7 @@ async function loadAll() {
       smtp_password: "",
       smtp_password_configured: !!s.smtp_password_configured,
       smtp_from_address: s.smtp_from_address || "",
+      email_template: "minimal",
       pushplus_enabled: !!s.pushplus_enabled,
       pushplus_token: s.pushplus_token_configured ? (s.pushplus_token_masked || "***") : "",
       pushplus_token_configured: !!s.pushplus_token_configured,
@@ -266,6 +268,7 @@ const SCOPE_FIELDS = {
   smtp: [
     "email_enabled", "smtp_host", "smtp_port", "smtp_username",
     "smtp_password", "smtp_password_configured", "smtp_from_address",
+    "email_template",
   ],
   pushplus: [
     "pushplus_enabled", "pushplus_token", "pushplus_token_configured",
@@ -339,6 +342,7 @@ watch(
           smtp_host: form.smtp_host || null,
           smtp_username: form.smtp_username || null,
           smtp_from_address: form.smtp_from_address || null,
+          email_template: form.email_template || "minimal",
           // PushPlus SMTP 配置
           pushplus_smtp_host: form.pushplus_smtp_host || null,
           pushplus_smtp_port: form.pushplus_smtp_port ? parseInt(form.pushplus_smtp_port, 10) : null,
@@ -430,6 +434,7 @@ function onPushplusInput(e) {
   }
 }
 
+
 async function testEmail() {
   if (testingEmail.value) return;
   testingEmail.value = true;
@@ -439,6 +444,7 @@ async function testEmail() {
       smtp_port: form.smtp_port ? parseInt(form.smtp_port, 10) : undefined,
       smtp_username: form.smtp_username || undefined,
       smtp_from_address: form.smtp_from_address || undefined,
+      email_template: form.email_template || "minimal",
       to_address: testEmailTarget.value.trim() || undefined,
     };
     if (isSecretUpdate(form.smtp_password)) {
@@ -720,7 +726,7 @@ onMounted(loadAll);
                 @click="testEmail"
               >
                 {{ testingEmail ? "发送中..." : "" }}
-                <svg v-if="!testingEmail" class="test-btn-icon" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M874.666667 181.333333H149.333333c-40.533333 0-74.666667 34.133333-74.666666 74.666667v512c0 40.533333 34.133333 74.666667 74.666666 74.666667h725.333334c40.533333 0 74.666667-34.133333 74.666666-74.666667V256c0-40.533333-34.133333-74.666667-74.666666-74.666667z m-725.333334 64h725.333334c6.4 0 10.666667 4.266667 10.666666 10.666667v25.6L512 516.266667l-373.333333-234.666667V256c0-6.4 4.266667-10.666667 10.666666-10.666667z m725.333334 533.333334H149.333333c-6.4 0-10.666667-4.266667-10.666666-10.666667V356.266667l356.266666 224c4.266667 4.266667 10.666667 4.266667 17.066667 4.266666s12.8-2.133333 17.066667-4.266666l356.266666-224V768c0 6.4-4.266667 10.666667-10.666666 10.666667z"/></svg>
+                <svg v-if="!testingEmail" class="test-btn-icon" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true"><path d="M874.666667 181.333333H149.333333c-40.533333 0-74.666667 34.133333-74.666666 74.666667v512c0 40.533333 34.133333 74.666667 74.666666 74.666667h725.333334c40.533333 0 74.666667-34.133333 74.666666-74.666667V256c0-40.533333-34.133333-74.666667-74.666666-74.666667z m-725.333334 64h725.333334c6.4 0 10.666667 4.266667 10.666666 10.666667v25.6L512 516.266667l-373.333333-234.666667V256c0-6.4 4.266667-10.666667 10.666666-10.666667z m725.333334 533.333334H149.333333c-6.4 0-10.666667-4.266667-10.666666-10.666667V356.266667l356.266666 224c4.266667 4.266667 10.666667 4.266667 17.066667 4.266666s12.8-2.133333 17.066667-4.266666l356.266666-224V768c0 6.4-4.266667 10.666667-10.666666 10.666666z"/></svg>
                 <span>发送测试邮件</span>
               </HeadlessButton>
             </div>
@@ -903,6 +909,7 @@ onMounted(loadAll);
         </div>
       </Dialog>
     </TransitionRoot>
+
   </div>
 </template>
 
@@ -1232,6 +1239,7 @@ onMounted(loadAll);
 .save-status-badge.saving {
   color: var(--ios-gray);
 }
+
 
 /* 测试按钮行 */
 .test-row {

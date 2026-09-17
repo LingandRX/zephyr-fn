@@ -307,6 +307,7 @@ class TestSettingsAPI:
             json={
                 "notification_days": 14,
                 "default_currency": "USD",
+                "email_template": "minimal",
             },
         )
         assert resp.status_code == 200
@@ -317,6 +318,32 @@ class TestSettingsAPI:
         data2 = _json(resp2)["data"]
         assert data2["notification_days"] == 14
         assert data2["default_currency"] == "USD"
+        assert data2["email_template"] == "minimal"
+
+    def test_test_email_with_template(self, client):
+        from unittest.mock import patch
+
+        with patch("backend.utils.channels.email.send_email") as mock_send:
+            resp = client.post(
+                "/api/notifications/test-email",
+                json={
+                    "smtp_host": "smtp.example.com",
+                    "smtp_port": 465,
+                    "smtp_username": "test@example.com",
+                    "smtp_from_address": "test@example.com",
+                    "email_template": "minimal",
+                    "to_address": "target@example.com",
+                },
+            )
+            assert resp.status_code == 200
+            body = _json(resp)
+            _assert_ok(body)
+            assert body["data"]["ok"] is True
+            mock_send.assert_called_once()
+            call_kwargs = mock_send.call_args[1]
+            assert "极简文本" in call_kwargs["subject"]
+            assert call_kwargs["body_html"] is not None
+            assert "Netflix" in call_kwargs["body"]
 
 
 # --------------------------------------------------------------------------- #
