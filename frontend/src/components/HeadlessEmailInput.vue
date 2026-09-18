@@ -66,6 +66,9 @@ const filteredSuggestions = computed(() => {
   if (atIndex === -1) return [];
 
   const prefix = val.slice(0, atIndex);
+  // @ 前为空（尚未输入用户名）时不予联想，避免生成纯 @domain 导致无效邮箱
+  if (!prefix.trim()) return [];
+
   const query = val.slice(atIndex + 1).toLowerCase();
 
   // 若存在多个 @，不予联想
@@ -84,6 +87,11 @@ function updateDropdownState(val) {
   const text = String(val || "");
   const atIndex = text.indexOf("@");
   if (atIndex === -1) {
+    isOpen.value = false;
+    return;
+  }
+  const prefix = text.slice(0, atIndex);
+  if (!prefix.trim()) {
     isOpen.value = false;
     return;
   }

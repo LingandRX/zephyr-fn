@@ -326,7 +326,11 @@ function onUsernameBlur() {
 
 function onFromAddressBlur() {
   const val = String(form.smtp_from_address || "").trim();
-  if (val && (selectedEmailPreset.value === "custom" || !form.smtp_host)) {
+  if (!val) return;
+  if (!form.smtp_username) {
+    form.smtp_username = val;
+  }
+  if (selectedEmailPreset.value === "custom" || !form.smtp_host) {
     tryMatchPresetByDomain(val);
   }
 }
@@ -335,6 +339,10 @@ function onEmailSelected(field, val) {
   if (field === "username") {
     if (!form.smtp_from_address) {
       form.smtp_from_address = val;
+    }
+  } else if (field === "from") {
+    if (!form.smtp_username) {
+      form.smtp_username = val;
     }
   }
   if (selectedEmailPreset.value === "custom" || !form.smtp_host) {
@@ -620,25 +628,69 @@ function onPushplusInput(e) {
 }
 
 
+function humanizeClientError(msg) {
+  if (!msg) return "";
+  let s = String(msg);
+  s = s.replace(/b['"](.*?)['"]/g, "$1");
+  return s;
+}
+
 async function testEmail() {
   if (testingEmail.value) return;
+
+  const host = (form.smtp_host || "").trim();
+  const target = (testEmailTarget.value || "").trim();
+  const fromAddr = (form.smtp_from_address || "").trim();
+  const username = (form.smtp_username || "").trim();
+  const to = target || fromAddr || username;
+
+  if (!host) {
+    toast("请先填写或选择 SMTP 服务器", "err");
+    return;
+  }
+  if (!username && !fromAddr) {
+    toast("请填写 SMTP 用户名或发件人地址", "err");
+    return;
+  }
+  const hasPassword = isSecretUpdate(form.smtp_password) || form.smtp_password_configured;
+  if (!hasPassword) {
+    toast("请填写 SMTP 密码或授权码（QQ/163 等邮箱需使用专用客户端授权码）", "err");
+    return;
+  }
+  if (!to) {
+    toast("请提供测试接收邮箱（或配置发件人/用户名）", "err");
+    return;
+  }
+  if (!to.includes("@") || to.startsWith("@") || to.endsWith("@")) {
+    toast("请输入有效的完整收件人邮箱地址（包含账号与域名）", "err");
+    return;
+  }
+  if (fromAddr && (!fromAddr.includes("@") || fromAddr.startsWith("@") || fromAddr.endsWith("@"))) {
+    toast("发件人地址格式无效（缺少账号或域名）", "err");
+    return;
+  }
+
   testingEmail.value = true;
   try {
     const payload = {
-      smtp_host: form.smtp_host || undefined,
+      smtp_host: host || undefined,
       smtp_port: form.smtp_port ? parseInt(form.smtp_port, 10) : undefined,
       smtp_username: form.smtp_username || undefined,
       smtp_from_address: form.smtp_from_address || undefined,
       email_template: form.email_template || "minimal",
-      to_address: testEmailTarget.value.trim() || undefined,
+      to_address: target || undefined,
     };
     if (isSecretUpdate(form.smtp_password)) {
       payload.smtp_password = form.smtp_password;
     }
     const res = await testEmailNotification(payload);
+    if (!res || res.ok === false || res.error) {
+      toast(humanizeClientError(res?.error) || "测试邮件发送失败", "err");
+      return;
+    }
     toast(res.message || "测试邮件发送成功");
   } catch (err) {
-    toast(err.message, "err");
+    toast(humanizeClientError(err.message), "err");
   } finally {
     testingEmail.value = false;
   }
@@ -646,6 +698,13 @@ async function testEmail() {
 
 async function testPushPlus() {
   if (testingPushplus.value) return;
+
+  const hasToken = isSecretUpdate(form.pushplus_token) || form.pushplus_token_configured;
+  if (!hasToken) {
+    toast("请先填写 PushPlus Token", "err");
+    return;
+  }
+
   testingPushplus.value = true;
   try {
     const payload = {
@@ -669,9 +728,13 @@ async function testPushPlus() {
       payload.smtp_password = form.smtp_password;
     }
     const res = await testPushPlusNotification(payload);
+    if (!res || res.ok === false || res.error) {
+      toast(humanizeClientError(res?.error) || "测试推送发送失败", "err");
+      return;
+    }
     toast(res.message || "测试推送发送成功");
   } catch (err) {
-    toast(err.message, "err");
+    toast(humanizeClientError(err.message), "err");
   } finally {
     testingPushplus.value = false;
   }
@@ -951,7 +1014,7 @@ onMounted(loadAll);
                 />
               </label>
               <HeadlessButton
-                :disabled="testingEmail || (!form.smtp_host && !form.smtp_username)"
+                :disabled="testingEmail || (!form.smtp_host && !form.smtp_username && !form.smtp_from_address)"
                 @click="testEmail"
               >
                 {{ testingEmail ? "发送中..." : "" }}

@@ -160,3 +160,87 @@ class TestGenerateNotificationContent:
                     "next_due_date": "not-a-date",
                 }
             )
+
+
+# --------------------------------------------------------------------------- #
+# format_email_error & format_pushplus_error
+# --------------------------------------------------------------------------- #
+
+
+class TestFormatChannelErrors:
+    def test_format_email_error_503_need_auth(self):
+        import smtplib
+        from backend.utils.channels.email import format_email_error
+
+        exc = smtplib.SMTPSenderRefused(503, b"Error: need EHLO and AUTH first !", "222@qq.com")
+        msg = format_email_error(exc)
+        assert "503" in msg
+        assert "AUTH" in msg
+        assert "授权码" in msg
+        assert "b'" not in msg
+        assert "b\"" not in msg
+
+    def test_format_email_error_535_auth_failed(self):
+        import smtplib
+        from backend.utils.channels.email import format_email_error
+
+        exc = smtplib.SMTPAuthenticationError(535, b"Error: authentication failed")
+        msg = format_email_error(exc)
+        assert "535" in msg
+        assert "授权码" in msg
+        assert "POP3/SMTP" in msg
+        assert "b'" not in msg
+
+    def test_format_email_error_550_recipient_refused(self):
+        import smtplib
+        from backend.utils.channels.email import format_email_error
+
+        exc = smtplib.SMTPRecipientsRefused({"bad@example.com": (550, b"User not found")})
+        msg = format_email_error(exc)
+        assert "550" in msg
+        assert "bad@example.com" in msg
+        assert "User not found" in msg
+        assert "b'" not in msg
+
+    def test_format_email_error_553_sender_mismatch(self):
+        import smtplib
+        from backend.utils.channels.email import format_email_error
+
+        exc = smtplib.SMTPSenderRefused(553, b"Mail from must equal authorized user", "user@qq.com")
+        msg = format_email_error(exc)
+        assert "553" in msg
+        assert "发件人地址" in msg
+        assert "完全一致" in msg
+
+    def test_format_email_error_network_issues(self):
+        import socket
+        import smtplib
+        from backend.utils.channels.email import format_email_error
+
+        disc = smtplib.SMTPServerDisconnected("Connection unexpectedly closed")
+        assert "中断" in format_email_error(disc)
+
+        timeout = TimeoutError("Connection timed out")
+        assert "超时" in format_email_error(timeout)
+
+        gai = socket.gaierror(8, "nodename nor servname provided, or not known")
+        assert "域名解析失败" in format_email_error(gai)
+
+    def test_format_email_error_raw_repr_fallback(self):
+        from backend.utils.channels.email import format_email_error
+
+        # 传入字符串形式的异常
+        raw_exc = Exception("(503, b'Error: need EHLO and AUTH first !', '222@qq.com')")
+        msg = format_email_error(raw_exc)
+        assert "503" in msg
+        assert "b'" not in msg
+
+    def test_format_pushplus_error(self):
+        from backend.utils.channels.pushplus import format_pushplus_error
+
+        err_900 = RuntimeError("PushPlus 推送失败（900）：Token 无效或未关注「PushPlus推送加」微信公众号（用户未关注）")
+        assert "未关注" in format_pushplus_error(err_900)
+
+        err_timeout = TimeoutError("timed out")
+        assert "超时" in format_pushplus_error(err_timeout)
+

@@ -36,8 +36,14 @@ def test_email():
         port = int(port_raw)
     except (ValueError, TypeError):
         port = 465
-    username = payload.get("smtp_username") or settings.get("smtp_username")
-    from_address = payload.get("smtp_from_address") or settings.get("smtp_from_address") or username
+    username = (payload.get("smtp_username") or settings.get("smtp_username") or "").strip() or None
+    from_address = (payload.get("smtp_from_address") or settings.get("smtp_from_address") or "").strip() or None
+
+    # 智能互填：发件人与用户名在绝大多数邮箱中相同，若只填了一项则自动互补
+    if not username and from_address:
+        username = from_address
+    if not from_address and username:
+        from_address = username
 
     password_draft = payload.get("smtp_password")
     if password_draft and not _is_secret_placeholder(password_draft):
@@ -46,7 +52,9 @@ def test_email():
         password = settings.get("smtp_password")
 
     to_address = (
-        payload.get("to_address") or payload.get("smtp_to_address") or from_address or username
+        (payload.get("to_address") or payload.get("smtp_to_address") or "").strip()
+        or from_address
+        or username
     )
     if not to_address:
         raise ValidationError("请提供测试接收邮箱（或配置发件人/用户名）")
@@ -67,7 +75,8 @@ def test_email():
             from_address=from_address,
         )
     except Exception as exc:
-        return ok({"ok": False, "error": f"邮件发送失败: {exc}"})
+        friendly_err = email_sender.format_email_error(exc)
+        return ok({"ok": False, "error": friendly_err})
 
     return ok({"ok": True, "message": f"测试邮件已发送至 {to_address}"})
 
@@ -116,14 +125,20 @@ def test_pushplus():
         or settings.get("pushplus_smtp_username")
         or payload.get("smtp_username")
         or settings.get("smtp_username")
-    )
+        or ""
+    ).strip() or None
     smtp_from_address = (
         payload.get("pushplus_smtp_from_address")
         or settings.get("pushplus_smtp_from_address")
         or payload.get("smtp_from_address")
         or settings.get("smtp_from_address")
         or smtp_username
-    )
+        or ""
+    ).strip() or None
+    if not smtp_username and smtp_from_address:
+        smtp_username = smtp_from_address
+    if not smtp_from_address and smtp_username:
+        smtp_from_address = smtp_username
     password_draft = payload.get("pushplus_smtp_password") or payload.get("smtp_password")
     if password_draft and not _is_secret_placeholder(password_draft):
         smtp_password = password_draft
@@ -142,7 +157,8 @@ def test_pushplus():
             from_address=smtp_from_address,
         )
     except Exception as exc:
-        return ok({"ok": False, "error": f"PushPlus 发送失败: {exc}"})
+        friendly_err = pushplus.format_pushplus_error(exc)
+        return ok({"ok": False, "error": friendly_err})
 
     return ok({"ok": True, "message": "测试推送已发送成功"})
 

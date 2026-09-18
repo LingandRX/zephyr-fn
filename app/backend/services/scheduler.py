@@ -76,8 +76,9 @@ def _run_channel(sub_id: str, channel: str, sender: Callable[[], None], success_
         _logger().warning("到期提醒 [%s] 配置错误，已标记为废弃: %s", channel, exc)
     except Exception as exc:  # noqa: BLE001
         # 暂时性失败（网络/SMTP 错误）：记录为 failed，下次可重试
-        notifications.complete_notification(claim_id, sub_id, channel, "failed", str(exc))
-        _logger().warning("到期提醒 [%s] 发送失败（将重试）: %s", channel, exc)
+        err_msg = channels.format_email_error(exc) if channel == "email" else str(exc)
+        notifications.complete_notification(claim_id, sub_id, channel, "failed", err_msg)
+        _logger().warning("到期提醒 [%s] 发送失败（将重试）: %s", channel, err_msg)
     else:
         notifications.complete_notification(claim_id, sub_id, channel, "sent")
         _logger().info("到期提醒 [%s] %s", channel, success_log)
@@ -105,6 +106,8 @@ def _send_channels(settings: dict, sub: dict, title: str, body: str) -> None:
                 port = 465
             email_tpl = settings.get("email_template") or "default"
             mail_subject, mail_text, mail_html = render_email_template(email_tpl, sub)
+            mail_user = settings.get("smtp_username") or settings.get("smtp_from_address")
+            mail_from = settings.get("smtp_from_address") or settings.get("smtp_username")
             _run_channel(
                 sub_id,
                 "email",
@@ -115,9 +118,9 @@ def _send_channels(settings: dict, sub: dict, title: str, body: str) -> None:
                     body_html=mail_html,
                     host=settings.get("smtp_host"),
                     port=port,
-                    username=settings.get("smtp_username"),
+                    username=mail_user,
                     password=settings.get("smtp_password"),
-                    from_address=settings.get("smtp_from_address"),
+                    from_address=mail_from,
                 ),
                 f"已发送: {mail_subject}",
             )
@@ -130,10 +133,17 @@ def _send_channels(settings: dict, sub: dict, title: str, body: str) -> None:
             pp_port = int(pp_port_raw) if pp_port_raw is not None else 465
         except (ValueError, TypeError):
             pp_port = 465
-        pp_username = settings.get("pushplus_smtp_username") or settings.get("smtp_username")
+        pp_username = (
+            settings.get("pushplus_smtp_username")
+            or settings.get("smtp_username")
+            or settings.get("pushplus_smtp_from_address")
+            or settings.get("smtp_from_address")
+        )
         pp_password = settings.get("pushplus_smtp_password") or settings.get("smtp_password")
-        pp_from_address = settings.get("pushplus_smtp_from_address") or settings.get(
-            "smtp_from_address"
+        pp_from_address = (
+            settings.get("pushplus_smtp_from_address")
+            or settings.get("smtp_from_address")
+            or pp_username
         )
 
         # PushPlus SMTP 模式：host 有值时走邮件通道，需预校验发件人地址
