@@ -23,9 +23,7 @@ def _assert_ok(data, code=0):
 class TestTemplateValidation:
     def test_valid_payload(self):
         payload = {
-            "categories": {
-                "video": {"label": "视频", "icon": "🎬"}
-            },
+            "categories": {"video": {"label": "视频", "icon": "🎬"}},
             "templates": [
                 {
                     "name": "测试会员",
@@ -35,7 +33,7 @@ class TestTemplateValidation:
                     "auto_renew": True,
                     "notes": "备注信息",
                 }
-            ]
+            ],
         }
         validated = templates_service.validate_template_payload(payload)
         assert len(validated["templates"]) == 1
@@ -54,23 +52,17 @@ class TestTemplateValidation:
             templates_service.validate_template_payload({"templates": []})
 
     def test_missing_name(self):
-        payload = {
-            "templates": [{"amount": 100, "period_type": "month"}]
-        }
+        payload = {"templates": [{"amount": 100, "period_type": "month"}]}
         with pytest.raises(ValidationError, match="缺少服务名称"):
             templates_service.validate_template_payload(payload)
 
     def test_invalid_amount(self):
-        payload = {
-            "templates": [{"name": "VIP", "amount": -10, "period_type": "month"}]
-        }
+        payload = {"templates": [{"name": "VIP", "amount": -10, "period_type": "month"}]}
         with pytest.raises(ValidationError, match="金额无效"):
             templates_service.validate_template_payload(payload)
 
     def test_invalid_period_type(self):
-        payload = {
-            "templates": [{"name": "VIP", "amount": 100, "period_type": "decade"}]
-        }
+        payload = {"templates": [{"name": "VIP", "amount": 100, "period_type": "decade"}]}
         with pytest.raises(ValidationError, match="周期无效"):
             templates_service.validate_template_payload(payload)
 
@@ -101,13 +93,15 @@ class TestTemplateServiceSyncAndReset:
                     "period_type": "year",
                     "currency": "CNY",
                 }
-            ]
+            ],
         }
         mock_resp = MagicMock()
         mock_resp.read.side_effect = [json.dumps(mock_data).encode("utf-8"), b""]
         mock_urlopen.return_value.__enter__.return_value = mock_resp
 
-        result = templates_service.sync_remote_templates(url="https://example.com/test_templates.json")
+        result = templates_service.sync_remote_templates(
+            url="https://example.com/test_templates.json"
+        )
         assert result["source"] == "remote"
         assert result["count"] == 1
         assert result["data"]["templates"][0]["name"] == "远程测试工具会员"

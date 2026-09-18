@@ -6,7 +6,7 @@ import json
 import logging
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +41,7 @@ def _builtin_templates_path() -> Path:
 
 def validate_template_payload(data: Any) -> dict[str, Any]:
     """严格校验模板数据结构与类型。
-    
+
     必须包含 templates 数组，且每项必须具备合法的 name、amount、period_type。
     """
     if not isinstance(data, dict):
@@ -74,8 +74,8 @@ def validate_template_payload(data: Any) -> dict[str, Any]:
             amount = int(raw_amount)
             if amount < 0:
                 raise ValueError()
-        except (TypeError, ValueError):
-            raise ValidationError(f"模板「{name}」金额无效：必须为非负整数（单位：分）")
+        except (TypeError, ValueError) as err:
+            raise ValidationError(f"模板「{name}」金额无效：必须为非负整数（单位：分）") from err
 
         period_type = str(item.get("period_type") or "month").strip().lower()
         if period_type not in VALID_PERIOD_TYPES:
@@ -116,7 +116,7 @@ def validate_template_payload(data: Any) -> dict[str, Any]:
 
 def get_active_templates() -> dict[str, Any]:
     """获取当前生效的模板列表。
-    
+
     优先返回本地远程缓存；若不存在或已损坏则降级回退至内置底包。
     """
     cache_path = _remote_cache_path()
@@ -218,7 +218,7 @@ def sync_remote_templates(url: str | None = None) -> dict[str, Any]:
             temp_path.unlink(missing_ok=True)
         raise ValidationError(f"保存模板文件失败: {err}") from err
 
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
     with db.session.begin():
         repositories.update_app_settings({"template_last_synced_at": now_iso})
 

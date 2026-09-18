@@ -197,7 +197,12 @@ def format_email_error(exc: Exception) -> str:
             )
 
         # 554: 触发垃圾邮件拦截或事务失败
-        if code == 554 or "spam" in raw_lower or "reject by content" in raw_lower or "transaction failed" in raw_lower:
+        if (
+            code == 554
+            or "spam" in raw_lower
+            or "reject by content" in raw_lower
+            or "transaction failed" in raw_lower
+        ):
             return f"邮件被服务器拒绝（554）：触发反垃圾邮件规则或发信频次过高（{raw_text}）。请检查邮件内容或稍后再试。"
 
         # 501 / 502: 语法或参数错误
@@ -222,23 +227,29 @@ def format_email_error(exc: Exception) -> str:
 
     # 4. 连接超时
     if isinstance(exc, (TimeoutError, socket.timeout)) or "timed out" in err_str.lower():
-        return (
-            "连接 SMTP 服务器超时：请检查服务器地址和端口是否正确。若运行在云服务器（如阿里云、腾讯云），请注意服务商可能已封禁邮件常用端口。"
-        )
+        return "连接 SMTP 服务器超时：请检查服务器地址和端口是否正确。若运行在云服务器（如阿里云、腾讯云），请注意服务商可能已封禁邮件常用端口。"
 
     # 5. 连接被拒绝
     if isinstance(exc, ConnectionRefusedError) or "connection refused" in err_str.lower():
         return "SMTP 服务器拒绝连接：目标主机未开放此端口或服务未运行，请检查服务器地址与端口号。"
 
     # 6. DNS 域名解析错误
-    if isinstance(exc, socket.gaierror) or "nodename nor servname provided" in err_str.lower() or "name or service not known" in err_str.lower():
-        return "SMTP 服务器域名解析失败：无法找到该服务器，请检查服务器地址拼写（例如 smtp.qq.com）。"
+    if (
+        isinstance(exc, socket.gaierror)
+        or "nodename nor servname provided" in err_str.lower()
+        or "name or service not known" in err_str.lower()
+    ):
+        return (
+            "SMTP 服务器域名解析失败：无法找到该服务器，请检查服务器地址拼写（例如 smtp.qq.com）。"
+        )
 
     # 7. SSL / TLS 握手错误
-    if isinstance(exc, ssl.SSLError) or "wrong version number" in err_str.lower() or "certificate" in err_str.lower():
-        return (
-            f"SSL/TLS 加密握手失败：端口与加密协议可能不匹配（465 端口通常为 SSL 加密，587/25 为 STARTTLS）。({err_str})"
-        )
+    if (
+        isinstance(exc, ssl.SSLError)
+        or "wrong version number" in err_str.lower()
+        or "certificate" in err_str.lower()
+    ):
+        return f"SSL/TLS 加密握手失败：端口与加密协议可能不匹配（465 端口通常为 SSL 加密，587/25 为 STARTTLS）。({err_str})"
 
     # 8. 参数与业务校验错误
     if isinstance(exc, (ValueError, RuntimeError)):

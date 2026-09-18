@@ -170,6 +170,7 @@ class TestGenerateNotificationContent:
 class TestFormatChannelErrors:
     def test_format_email_error_503_need_auth(self):
         import smtplib
+
         from backend.utils.channels.email import format_email_error
 
         exc = smtplib.SMTPSenderRefused(503, b"Error: need EHLO and AUTH first !", "222@qq.com")
@@ -178,10 +179,11 @@ class TestFormatChannelErrors:
         assert "AUTH" in msg
         assert "授权码" in msg
         assert "b'" not in msg
-        assert "b\"" not in msg
+        assert 'b"' not in msg
 
     def test_format_email_error_535_auth_failed(self):
         import smtplib
+
         from backend.utils.channels.email import format_email_error
 
         exc = smtplib.SMTPAuthenticationError(535, b"Error: authentication failed")
@@ -193,6 +195,7 @@ class TestFormatChannelErrors:
 
     def test_format_email_error_550_recipient_refused(self):
         import smtplib
+
         from backend.utils.channels.email import format_email_error
 
         exc = smtplib.SMTPRecipientsRefused({"bad@example.com": (550, b"User not found")})
@@ -204,6 +207,7 @@ class TestFormatChannelErrors:
 
     def test_format_email_error_553_sender_mismatch(self):
         import smtplib
+
         from backend.utils.channels.email import format_email_error
 
         exc = smtplib.SMTPSenderRefused(553, b"Mail from must equal authorized user", "user@qq.com")
@@ -213,8 +217,9 @@ class TestFormatChannelErrors:
         assert "完全一致" in msg
 
     def test_format_email_error_network_issues(self):
-        import socket
         import smtplib
+        import socket
+
         from backend.utils.channels.email import format_email_error
 
         disc = smtplib.SMTPServerDisconnected("Connection unexpectedly closed")
@@ -238,9 +243,10 @@ class TestFormatChannelErrors:
     def test_format_pushplus_error(self):
         from backend.utils.channels.pushplus import format_pushplus_error
 
-        err_900 = RuntimeError("PushPlus 推送失败（900）：Token 无效或未关注「PushPlus推送加」微信公众号（用户未关注）")
+        err_900 = RuntimeError(
+            "PushPlus 推送失败（900）：Token 无效或未关注「PushPlus推送加」微信公众号（用户未关注）"
+        )
         assert "未关注" in format_pushplus_error(err_900)
 
         err_timeout = TimeoutError("timed out")
         assert "超时" in format_pushplus_error(err_timeout)
-

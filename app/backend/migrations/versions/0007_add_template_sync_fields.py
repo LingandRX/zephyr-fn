@@ -32,7 +32,9 @@ def upgrade() -> None:
         op.execute("ALTER TABLE app_settings ADD COLUMN template_sync_url TEXT")
 
     if not _column_exists("app_settings", "template_auto_sync"):
-        op.execute("ALTER TABLE app_settings ADD COLUMN template_auto_sync INTEGER NOT NULL DEFAULT 0")
+        op.execute(
+            "ALTER TABLE app_settings ADD COLUMN template_auto_sync INTEGER NOT NULL DEFAULT 0"
+        )
 
     if not _column_exists("app_settings", "template_last_synced_at"):
         op.execute("ALTER TABLE app_settings ADD COLUMN template_last_synced_at TEXT")

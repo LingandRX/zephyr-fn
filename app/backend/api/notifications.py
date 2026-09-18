@@ -37,7 +37,9 @@ def test_email():
     except (ValueError, TypeError):
         port = 465
     username = (payload.get("smtp_username") or settings.get("smtp_username") or "").strip() or None
-    from_address = (payload.get("smtp_from_address") or settings.get("smtp_from_address") or "").strip() or None
+    from_address = (
+        payload.get("smtp_from_address") or settings.get("smtp_from_address") or ""
+    ).strip() or None
 
     # 智能互填：发件人与用户名在绝大多数邮箱中相同，若只填了一项则自动互补
     if not username and from_address:

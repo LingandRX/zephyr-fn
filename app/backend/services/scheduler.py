@@ -11,7 +11,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from flask import Flask
 
@@ -79,7 +79,7 @@ def _check_template_auto_sync() -> None:
     else:
         try:
             last_dt = datetime.fromisoformat(last_synced.replace("Z", "+00:00"))
-            now_dt = datetime.now(timezone.utc)
+            now_dt = datetime.now(UTC)
             if (now_dt - last_dt).total_seconds() >= 7 * 86400:
                 should_sync = True
         except Exception:
@@ -88,6 +88,7 @@ def _check_template_auto_sync() -> None:
     if should_sync:
         try:
             from . import templates as templates_service
+
             templates_service.sync_remote_templates()
             _logger().info("后台自动同步远程订阅模板成功")
         except Exception as err:

@@ -63,7 +63,9 @@ def send_pushplus(
         code = body.get("code")
         msg = body.get("msg") or "未知错误"
         if code == 900:
-            raise RuntimeError(f"PushPlus 推送失败（900）：Token 无效或未关注「PushPlus推送加」微信公众号（{msg}）")
+            raise RuntimeError(
+                f"PushPlus 推送失败（900）：Token 无效或未关注「PushPlus推送加」微信公众号（{msg}）"
+            )
         elif code == 903:
             raise RuntimeError(f"PushPlus 推送失败（903）：今日推送次数已达上限或积分不足（{msg}）")
         elif code == 999:
@@ -79,6 +81,7 @@ def format_pushplus_error(exc: Exception) -> str:
 
     import smtplib
     import urllib.error
+
     from .email import format_email_error
 
     if isinstance(exc, (smtplib.SMTPException, ConnectionRefusedError)):
@@ -92,4 +95,3 @@ def format_pushplus_error(exc: Exception) -> str:
         return "连接 PushPlus 服务器超时，请检查网络或稍后再试"
 
     return str(exc)
-
