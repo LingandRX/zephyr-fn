@@ -244,6 +244,7 @@ const form = reactive({
 
 // ---------- 邮件模板与自动填充 ----------
 const selectedEmailPreset = ref("custom");
+const isPresetLocked = computed(() => selectedEmailPreset.value !== "custom");
 
 const currentPreset = computed(() => {
   return EMAIL_PRESET_OPTIONS.find((opt) => opt.value === selectedEmailPreset.value);
@@ -340,13 +341,6 @@ function onEmailSelected(field, val) {
     tryMatchPresetByDomain(val);
   }
 }
-
-watch(
-  () => form.smtp_host,
-  () => {
-    syncTemplateFromHost();
-  }
-);
 
 const newCat = reactive({ name: "" });
 const adding = ref(false);
@@ -893,13 +887,29 @@ onMounted(loadAll);
               <span>{{ currentPresetHelp }}</span>
             </div>
             <div class="form-row">
-              <label class="field flex-2">
-                <span>SMTP 服务器</span>
-                <input v-model="form.smtp_host" placeholder="smtp.example.com" />
+              <label class="field flex-2" :class="{ 'is-locked': isPresetLocked }">
+                <span class="field-label-with-lock">
+                  <span>SMTP 服务器</span>
+                  <span v-if="isPresetLocked" class="locked-badge" title="已由所选邮件模板自动锁定">已锁定</span>
+                </span>
+                <input
+                  v-model="form.smtp_host"
+                  :disabled="isPresetLocked"
+                  placeholder="smtp.example.com"
+                  :title="isPresetLocked ? '已由所选邮件模板自动设定，切换至「自定义配置」后可修改' : ''"
+                />
               </label>
-              <label class="field flex-1">
-                <span>SMTP 端口</span>
-                <input v-model="form.smtp_port" placeholder="465" />
+              <label class="field flex-1" :class="{ 'is-locked': isPresetLocked }">
+                <span class="field-label-with-lock">
+                  <span>SMTP 端口</span>
+                  <span v-if="isPresetLocked" class="locked-badge" title="已由所选邮件模板自动锁定">已锁定</span>
+                </span>
+                <input
+                  v-model="form.smtp_port"
+                  :disabled="isPresetLocked"
+                  placeholder="465"
+                  :title="isPresetLocked ? '已由所选邮件模板自动设定，切换至「自定义配置」后可修改' : ''"
+                />
               </label>
             </div>
             <div class="form-row">
@@ -1338,6 +1348,22 @@ onMounted(loadAll);
   font-size: 13px;
 }
 
+.field-label-with-lock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.locked-badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--ios-fill);
+  color: var(--ios-gray);
+  line-height: 1.4;
+}
+
 .field.checkbox {
   flex-direction: row;
   align-items: center;
@@ -1375,6 +1401,12 @@ onMounted(loadAll);
 
 .settings-section input::placeholder {
   color: var(--ios-gray);
+}
+
+.settings-section input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  user-select: none;
 }
 
 /* iOS 绿开关 */
