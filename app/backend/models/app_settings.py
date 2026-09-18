@@ -39,6 +39,9 @@ class AppSettings(db.Model):
     pushplus_smtp_from_address = Column(String(255), nullable=True)
     last_check_date = Column(String(16), nullable=True)
     last_rate_update = Column(String(32), nullable=True)
+    template_sync_url = Column(String(1024), nullable=True)
+    template_auto_sync = Column(Integer, nullable=False, default=0)
+    template_last_synced_at = Column(String(32), nullable=True)
     created_at = Column(String(32), nullable=False)
     updated_at = Column(String(32), nullable=False)
 
@@ -49,6 +52,7 @@ class AppSettings(db.Model):
         "email_enabled",
         "notification_enabled",
         "pushplus_enabled",
+        "template_auto_sync",
     )
 
     def to_dict(self) -> dict:

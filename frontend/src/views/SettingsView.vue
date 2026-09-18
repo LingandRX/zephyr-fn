@@ -11,7 +11,9 @@ import {
   getSettings, saveSettings, getCategories, createCategory, deleteCategory,
   importCsv, download,
   testEmailNotification, testPushPlusNotification,
+  getTemplates, syncTemplates, resetTemplates,
 } from "../services/api.js";
+import { fetchRemoteTemplates } from "../data/subscriptionTemplates.js";
 import { toast } from "../utils/ui.js";
 
 import HeadlessListbox from "../components/HeadlessListbox.vue";
@@ -240,6 +242,8 @@ const form = reactive({
   pushplus_smtp_password: "",
   pushplus_smtp_password_configured: false,
   pushplus_smtp_from_address: "",
+  template_sync_url: "",
+  template_auto_sync: false,
 });
 
 // ---------- 邮件模板与自动填充 ----------
@@ -350,6 +354,80 @@ function onEmailSelected(field, val) {
   }
 }
 
+// ---------- 订阅模板源管理 ----------
+const templateSyncing = ref(false);
+const templateResetting = ref(false);
+const showResetConfirm = ref(false);
+const templateInfo = reactive({
+  source: "builtin",
+  synced_at: null,
+  count: 0,
+});
+
+function formatSyncTime(isoStr) {
+  if (!isoStr) return "";
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return isoStr;
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  } catch {
+    return isoStr;
+  }
+}
+
+async function loadTemplateStatus() {
+  try {
+    const res = await getTemplates();
+    if (res && res.data) {
+      templateInfo.source = res.source || "builtin";
+      templateInfo.synced_at = res.synced_at || null;
+      templateInfo.count = Array.isArray(res.data.templates) ? res.data.templates.length : 0;
+    }
+  } catch (err) {
+    console.warn("读取模板状态失败:", err);
+  }
+}
+
+async function handleSyncTemplates() {
+  if (templateSyncing.value) return;
+  const url = (form.template_sync_url || "").trim();
+  if (!url) {
+    return toast("请先输入模板源地址 (URL)", "err");
+  }
+  templateSyncing.value = true;
+  try {
+    await saveSettings({
+      template_sync_url: url,
+      template_auto_sync: !!form.template_auto_sync,
+    });
+    const res = await syncTemplates(url);
+    await fetchRemoteTemplates();
+    await loadTemplateStatus();
+    toast(`模板同步成功，已加载 ${res.count || templateInfo.count} 个模板`, "ok");
+  } catch (err) {
+    toast(err.message || "同步失败，请检查网络或模板格式", "err");
+  } finally {
+    templateSyncing.value = false;
+  }
+}
+
+async function handleResetTemplates() {
+  if (templateResetting.value) return;
+  templateResetting.value = true;
+  try {
+    const res = await resetTemplates();
+    await fetchRemoteTemplates();
+    await loadTemplateStatus();
+    showResetConfirm.value = false;
+    toast(`已恢复出厂默认模板（共 ${res.count || templateInfo.count} 个）`, "ok");
+  } catch (err) {
+    toast(err.message || "恢复默认失败", "err");
+  } finally {
+    templateResetting.value = false;
+  }
+}
+
 const newCat = reactive({ name: "" });
 const adding = ref(false);
 const nameErr = ref("");
@@ -431,10 +509,13 @@ async function loadAll() {
       pushplus_smtp_password: "",
       pushplus_smtp_password_configured: !!s.pushplus_smtp_password_configured,
       pushplus_smtp_from_address: s.pushplus_smtp_from_address || "",
+      template_sync_url: s.template_sync_url || "",
+      template_auto_sync: !!s.template_auto_sync,
     });
     savedForm = snapshotForm();
     cats.value = c;
     syncTemplateFromHost();
+    loadTemplateStatus();
     await nextTick();
     loaded.value = true;
   } catch (err) {
@@ -457,6 +538,9 @@ const SCOPE_FIELDS = {
   reminder: [
     "notification_days", "notification_time", "notification_enabled",
     "do_not_disturb_start", "do_not_disturb_end",
+  ],
+  template: [
+    "template_sync_url", "template_auto_sync",
   ],
   smtp: [
     "email_enabled", "smtp_host", "smtp_port", "smtp_username",
@@ -920,6 +1004,59 @@ onMounted(loadAll);
           <span v-if="saveStatusText && saveScopes.has('reminder')" class="save-status-badge" :class="{ saving }">{{ saveStatusText }}</span>
         </div>
       </div>
+
+      <div class="card">
+        <div class="section-header">
+          <h3>订阅模板源</h3>
+          <span v-if="saveStatusText && saveScopes.has('template')" class="save-status-badge" :class="{ saving }">{{ saveStatusText }}</span>
+        </div>
+        <label class="field">
+          <span>模板源地址 (URL)</span>
+          <input
+            v-model="form.template_sync_url"
+            type="url"
+            placeholder="例如: https://raw.githubusercontent.com/.../templates.json"
+          />
+        </label>
+        <HeadlessSwitch
+          v-model="form.template_auto_sync"
+          label="每周自动检查更新"
+        />
+
+        <div class="template-sync-box">
+          <div class="template-sync-info">
+            <span class="template-source-badge" :class="templateInfo.source === 'remote' ? 'is-remote' : 'is-builtin'">
+              {{ templateInfo.source === 'remote' ? '远程源同步' : '系统内置' }}
+            </span>
+            <span class="template-sync-desc">
+              当前有效模板：<strong>{{ templateInfo.count }}</strong> 款
+              <span v-if="templateInfo.synced_at" class="template-sync-time">（同步于：{{ formatSyncTime(templateInfo.synced_at) }}）</span>
+            </span>
+          </div>
+          <div class="template-sync-btns">
+            <HeadlessButton
+              @click="handleSyncTemplates"
+              variant="primary"
+              :disabled="templateSyncing"
+              class="btn-sync"
+            >
+              <span v-if="templateSyncing" class="action-spinner" aria-hidden="true" />
+              <span>{{ templateSyncing ? "正在同步…" : "立即同步" }}</span>
+            </HeadlessButton>
+            <HeadlessButton
+              v-if="templateInfo.source === 'remote'"
+              @click="showResetConfirm = true"
+              :disabled="templateResetting || templateSyncing"
+            >
+              恢复内置默认
+            </HeadlessButton>
+          </div>
+        </div>
+
+        <div class="sub-hint-row">
+          <div class="muted sub-hint">配置自定义远程源同步社区最新的服务价格；源异常或未配置时将自动使用出厂内置模板</div>
+        </div>
+      </div>
     </TabPanel>
 
         <!-- 子页面 2：通知渠道 -->
@@ -1200,6 +1337,50 @@ onMounted(loadAll);
                 <button type="button" class="set-dialog-btn" :disabled="delCatBusy" @click="closeDelCat">取消</button>
                 <button type="button" class="set-dialog-btn is-destructive" :disabled="delCatBusy" @click="confirmDelCat">
                   {{ delCatBusy ? "删除中…" : "删除" }}
+                </button>
+              </div>
+            </DialogPanel>
+          </TransitionChild>
+        </div>
+      </Dialog>
+    </TransitionRoot>
+
+    <!-- 恢复内置模板确认弹窗（Headless UI Dialog · iOS 弹窗样式） -->
+    <TransitionRoot :show="showResetConfirm" as="template">
+      <Dialog as="div" class="set-dialog-root" @close="showResetConfirm = false">
+        <TransitionChild
+          as="template"
+          enter="set-dialog-backdrop-enter"
+          enter-from="set-dialog-backdrop-from"
+          enter-to="set-dialog-backdrop-to"
+          leave="set-dialog-backdrop-leave"
+          leave-from="set-dialog-backdrop-to"
+          leave-to="set-dialog-backdrop-from"
+        >
+          <div class="set-dialog-backdrop" aria-hidden="true" />
+        </TransitionChild>
+
+        <div class="set-dialog-container">
+          <TransitionChild
+            as="template"
+            enter="set-dialog-panel-enter"
+            enter-from="set-dialog-panel-from"
+            enter-to="set-dialog-panel-to"
+            leave="set-dialog-panel-leave"
+            leave-from="set-dialog-panel-to"
+            leave-to="set-dialog-panel-from"
+          >
+            <DialogPanel class="set-dialog-panel">
+              <div class="set-dialog-body">
+                <DialogTitle as="h2" class="set-dialog-title">恢复内置默认模板</DialogTitle>
+                <p class="set-dialog-text">
+                  确认清除已同步的远程模板缓存并恢复出厂内置模板？已有订阅记录不受任何影响。
+                </p>
+              </div>
+              <div class="set-dialog-actions">
+                <button type="button" class="set-dialog-btn" :disabled="templateResetting" @click="showResetConfirm = false">取消</button>
+                <button type="button" class="set-dialog-btn is-destructive" :disabled="templateResetting" @click="handleResetTemplates">
+                  {{ templateResetting ? "恢复中…" : "确认恢复" }}
                 </button>
               </div>
             </DialogPanel>
@@ -1622,6 +1803,84 @@ onMounted(loadAll);
 .test-btn-icon {
   width: 14px;
   height: 14px;
+}
+
+/* ---------------- 订阅模板源 ---------------- */
+.template-sync-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  margin-top: 6px;
+  border-radius: 12px;
+  background: var(--ios-fill);
+  border: 1px solid var(--ios-separator);
+}
+
+@media (min-width: 640px) {
+  .template-sync-box {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.template-sync-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.template-source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+.template-source-badge.is-builtin {
+  background: var(--ios-separator);
+  color: var(--ios-gray);
+}
+
+.template-source-badge.is-remote {
+  background: var(--ios-blue-soft);
+  color: var(--ios-blue);
+}
+
+.template-sync-desc {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.template-sync-time {
+  color: var(--ios-gray);
+  margin-left: 4px;
+}
+
+.template-sync-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.action-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: action-spin 0.8s linear infinite;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+@keyframes action-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ---------------- 分类管理 ---------------- */

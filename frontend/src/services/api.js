@@ -97,3 +97,11 @@ export const importCsv = (text) =>
     text,
     headers: { "Content-Type": "text/csv" },
   });
+
+// ---------- 模板同步与管理 ----------
+export const getTemplates = () => api("/templates");
+export const syncTemplates = (url) =>
+  api("/templates/sync", { method: "POST", body: url ? { url } : {} });
+export const resetTemplates = () =>
+  api("/templates/reset", { method: "POST" });
+

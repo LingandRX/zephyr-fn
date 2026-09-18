@@ -11,7 +11,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from flask import Flask
 
@@ -62,6 +62,36 @@ def _check_reminders(reminder_days: int | None = None) -> None:
         _send_channels(settings, sub, title, body)
         if i < len(subs) - 1:
             time.sleep(1)
+
+
+def _check_template_auto_sync() -> None:
+    settings = repositories.get_app_settings()
+    if not settings.get("template_auto_sync"):
+        return
+    url = (settings.get("template_sync_url") or "").strip()
+    if not url:
+        return
+
+    last_synced = settings.get("template_last_synced_at")
+    should_sync = False
+    if not last_synced:
+        should_sync = True
+    else:
+        try:
+            last_dt = datetime.fromisoformat(last_synced.replace("Z", "+00:00"))
+            now_dt = datetime.now(timezone.utc)
+            if (now_dt - last_dt).total_seconds() >= 7 * 86400:
+                should_sync = True
+        except Exception:
+            should_sync = True
+
+    if should_sync:
+        try:
+            from . import templates as templates_service
+            templates_service.sync_remote_templates()
+            _logger().info("后台自动同步远程订阅模板成功")
+        except Exception as err:
+            _logger().warning("后台自动同步远程订阅模板失败: %s", err)
 
 
 def _run_channel(sub_id: str, channel: str, sender: Callable[[], None], success_log: str) -> None:
@@ -225,6 +255,7 @@ def _loop(app: Flask, reminder_days: int | None) -> None:
             try:
                 with app.app_context():
                     _check_reminders(reminder_days)
+                    _check_template_auto_sync()
             except Exception:  # noqa: BLE001
                 _logger().exception("定时任务执行出错")
             # 计算下一个推送时刻（读取最新配置，允许配置变更实时生效）

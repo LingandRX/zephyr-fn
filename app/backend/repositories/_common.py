@@ -113,6 +113,9 @@ SETTINGS_FIELDS = (
     "pushplus_smtp_from_address",
     "last_check_date",
     "last_rate_update",
+    "template_sync_url",
+    "template_auto_sync",
+    "template_last_synced_at",
 )
 
 _SECRET_SETTING_FIELDS = frozenset(

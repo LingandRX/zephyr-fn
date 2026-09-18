@@ -25,6 +25,7 @@ _BOOL_FIELDS = (
     "email_enabled",
     "notification_enabled",
     "pushplus_enabled",
+    "template_auto_sync",
 )
 
 

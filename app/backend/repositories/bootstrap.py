@@ -24,7 +24,7 @@ from . import new_id, now_utc
 
 logger = logging.getLogger("subscription.db")
 
-CURRENT_LEGACY_DB_VERSION = 13
+CURRENT_LEGACY_DB_VERSION = 14
 
 # app_settings 的字段定义集中维护，迁移与 SETTINGS_FIELDS 共用这份清单，
 # 避免新增设置字段后忘记补 schema。
@@ -56,6 +56,9 @@ _SETTINGS_COLUMN_DEFINITIONS = {
     "pushplus_smtp_from_address": "TEXT",
     "last_check_date": "TEXT",
     "last_rate_update": "TEXT",
+    "template_sync_url": "TEXT",
+    "template_auto_sync": "INTEGER NOT NULL DEFAULT 0",
+    "template_last_synced_at": "TEXT",
 }
 
 _VALID_TABLE_NAMES = frozenset(
@@ -223,6 +226,15 @@ ALTER TABLE subscriptions ADD COLUMN cancelled_at TEXT;
 ALTER TABLE subscriptions ADD COLUMN paused_at TEXT;
 CREATE INDEX IF NOT EXISTS idx_sub_period
   ON subscriptions(current_period_start, current_period_end);
+""",
+    ),
+    # v14：订阅模板远程源同步字段
+    (
+        14,
+        """
+ALTER TABLE app_settings ADD COLUMN template_sync_url TEXT;
+ALTER TABLE app_settings ADD COLUMN template_auto_sync INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE app_settings ADD COLUMN template_last_synced_at TEXT;
 """,
     ),
 ]

@@ -13,6 +13,7 @@ import {
   getTemplatesByCategory,
   searchTemplates,
   getAllCategories,
+  fetchRemoteTemplates,
 } from "../data/subscriptionTemplates.js";
 
 const props = defineProps({
@@ -70,11 +71,12 @@ watch(chipsRef, (el) => {
 });
 onBeforeUnmount(() => chipsRO?.disconnect());
 
-// 每次打开：重算渐隐 + 让选中分类回到视野
+// 每次打开：重算渐隐 + 让选中分类回到视野 + 刷新最新生效模板
 watch(
   () => props.modelValue,
   async (open) => {
     if (!open) return;
+    fetchRemoteTemplates();
     await nextTick();
     updateChipsScrollState();
     scrollActiveChipIntoView();

@@ -1,0 +1,656 @@
+{
+  "categories": {
+    "video": { "label": "视频", "icon": "🎬" },
+    "music": { "label": "音乐", "icon": "🎵" },
+    "cloud": { "label": "云存储", "icon": "☁️" },
+    "reading": { "label": "阅读", "icon": "📚" },
+    "shopping": { "label": "电商", "icon": "🛒" },
+    "social": { "label": "社交", "icon": "💬" },
+    "tools": { "label": "工具", "icon": "🔧" },
+    "gaming": { "label": "游戏", "icon": "🎮" },
+    "education": { "label": "教育", "icon": "🎓" },
+    "other": { "label": "其他", "icon": "📱" }
+  },
+  "templates": [
+    {
+      "id": "bilibili",
+      "name": "哔哩哔哩大会员",
+      "category": "video",
+      "currency": "CNY",
+      "amount": 17800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "B站大会员，享受1080P高清、专属表情、会员购优惠等",
+      "popular": true
+    },
+    {
+      "id": "bilibili_month",
+      "name": "哔哩哔哩大会员（月卡）",
+      "category": "video",
+      "currency": "CNY",
+      "amount": 2500,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "B站大会员月卡"
+    },
+    {
+      "id": "iqiyi",
+      "name": "爱奇艺VIP会员",
+      "category": "video",
+      "currency": "CNY",
+      "amount": 21800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "爱奇艺黄金VIP会员，免广告、1080P、热门剧集抢先看",
+      "popular": true
+    },
+    {
+      "id": "iqiyi_month",
+      "name": "爱奇艺VIP会员（月卡）",
+      "category": "video",
+      "currency": "CNY",
+      "amount": 2500,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "爱奇艺黄金VIP月卡"
+    },
+    {
+      "id": "youku",
+      "name": "优酷VIP会员",
+      "category": "video",
+      "currency": "CNY",
+      "amount": 19800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "优酷VIP会员，免广告、1080P画质",
+      "popular": true
+    },
+    {
+      "id": "tencent_video",
+      "name": "腾讯视频VIP",
+      "category": "video",
+      "currency": "CNY",
+      "amount": 19800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "腾讯视频VIP会员，热剧抢先看、院线新片",
+      "popular": true
+    },
+    {
+      "id": "mgtv",
+      "name": "芒果TV会员",
+      "category": "video",
+      "currency": "CNY",
+      "amount": 17800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "芒果TV全屏会员，独播综艺、电视剧",
+      "popular": true
+    },
+    {
+      "id": "migu_video",
+      "name": "咪咕视频会员",
+      "category": "video",
+      "currency": "CNY",
+      "amount": 12800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "咪咕视频钻石会员，体育赛事直播"
+    },
+    {
+      "id": "netease_music",
+      "name": "网易云音乐黑胶VIP",
+      "category": "music",
+      "currency": "CNY",
+      "amount": 12800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "网易云音乐黑胶VIP，高品质音效、免费下载、专属皮肤",
+      "popular": true
+    },
+    {
+      "id": "netease_music_month",
+      "name": "网易云音乐黑胶VIP（月卡）",
+      "category": "music",
+      "currency": "CNY",
+      "amount": 1500,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "网易云音乐黑胶VIP月卡"
+    },
+    {
+      "id": "qq_music",
+      "name": "QQ音乐绿钻豪华版",
+      "category": "music",
+      "currency": "CNY",
+      "amount": 14800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "QQ音乐绿钻豪华版，无损音质、付费歌曲免费听",
+      "popular": true
+    },
+    {
+      "id": "qq_music_month",
+      "name": "QQ音乐绿钻豪华版（月卡）",
+      "category": "music",
+      "currency": "CNY",
+      "amount": 1500,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "QQ音乐绿钻豪华版月卡"
+    },
+    {
+      "id": "kugou",
+      "name": "酷狗音乐VIP",
+      "category": "music",
+      "currency": "CNY",
+      "amount": 10800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "酷狗音乐VIP会员，海量歌曲免费听"
+    },
+    {
+      "id": "kuwo",
+      "name": "酷我音乐VIP",
+      "category": "music",
+      "currency": "CNY",
+      "amount": 10800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "酷我音乐VIP会员"
+    },
+    {
+      "id": "apple_music",
+      "name": "Apple Music",
+      "category": "music",
+      "currency": "CNY",
+      "amount": 11000,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "Apple Music个人订阅",
+      "popular": true
+    },
+    {
+      "id": "spotify",
+      "name": "Spotify Premium",
+      "category": "music",
+      "currency": "CNY",
+      "amount": 9800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "Spotify高级版（港区价格）"
+    },
+    {
+      "id": "baidu_netdisk",
+      "name": "百度网盘超级会员",
+      "category": "cloud",
+      "currency": "CNY",
+      "amount": 26300,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "百度网盘超级会员，5T空间、极速下载",
+      "popular": true
+    },
+    {
+      "id": "baidu_netdisk_month",
+      "name": "百度网盘超级会员（月卡）",
+      "category": "cloud",
+      "currency": "CNY",
+      "amount": 2500,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "百度网盘超级会员月卡"
+    },
+    {
+      "id": "aliyun_disk",
+      "name": "阿里云盘会员",
+      "category": "cloud",
+      "currency": "CNY",
+      "amount": 15800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "阿里云盘超级会员，6T空间、极速下载",
+      "popular": true
+    },
+    {
+      "id": "115",
+      "name": "115网盘会员",
+      "category": "cloud",
+      "currency": "CNY",
+      "amount": 50000,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "115网盘VIP会员"
+    },
+    {
+      "id": "tencent_doc",
+      "name": "腾讯文档会员",
+      "category": "cloud",
+      "currency": "CNY",
+      "amount": 11800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "腾讯文档超级会员，更多模板、更大空间"
+    },
+    {
+      "id": "wps",
+      "name": "WPS会员",
+      "category": "cloud",
+      "currency": "CNY",
+      "amount": 17800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "WPS超级会员，PDF转Word、思维导图、模板等",
+      "popular": true
+    },
+    {
+      "id": "xunlei",
+      "name": "迅雷会员",
+      "category": "cloud",
+      "currency": "CNY",
+      "amount": 19900,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "迅雷超级会员，高速下载、离线下载"
+    },
+    {
+      "id": "wechat_read",
+      "name": "微信读书无限卡",
+      "category": "reading",
+      "currency": "CNY",
+      "amount": 22800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "微信读书无限卡，全场书籍免费读",
+      "popular": true
+    },
+    {
+      "id": "wechat_read_month",
+      "name": "微信读书无限卡（月卡）",
+      "category": "reading",
+      "currency": "CNY",
+      "amount": 2500,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "微信读书无限卡月卡"
+    },
+    {
+      "id": "zhihu",
+      "name": "知乎盐选会员",
+      "category": "reading",
+      "currency": "CNY",
+      "amount": 23800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "知乎盐选会员，免费看盐选专栏、电子书",
+      "popular": true
+    },
+    {
+      "id": "zhihu_month",
+      "name": "知乎盐选会员（月卡）",
+      "category": "reading",
+      "currency": "CNY",
+      "amount": 2500,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "知乎盐选会员月卡"
+    },
+    {
+      "id": "douban",
+      "name": "豆瓣时间会员",
+      "category": "reading",
+      "currency": "CNY",
+      "amount": 19800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "豆瓣时间VIP"
+    },
+    {
+      "id": "fanqie",
+      "name": "番茄小说VIP",
+      "category": "reading",
+      "currency": "CNY",
+      "amount": 9800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "番茄小说VIP会员，免费看付费章节"
+    },
+    {
+      "id": "qimao",
+      "name": "七猫小说VIP",
+      "category": "reading",
+      "currency": "CNY",
+      "amount": 8800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "七猫小说VIP会员"
+    },
+    {
+      "id": "taobao_88",
+      "name": "淘宝88VIP",
+      "category": "shopping",
+      "currency": "CNY",
+      "amount": 8800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "淘宝88VIP，享优酷、饿了么、网易云音乐等会员权益",
+      "popular": true
+    },
+    {
+      "id": "jd_plus",
+      "name": "京东PLUS会员",
+      "category": "shopping",
+      "currency": "CNY",
+      "amount": 9900,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "京东PLUS会员，免运费、专属优惠、爱奇艺VIP",
+      "popular": true
+    },
+    {
+      "id": "pdd_member",
+      "name": "拼多多省钱月卡",
+      "category": "shopping",
+      "currency": "CNY",
+      "amount": 590,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "拼多多省钱月卡，享优惠券"
+    },
+    {
+      "id": "meituan",
+      "name": "美团会员",
+      "category": "shopping",
+      "currency": "CNY",
+      "amount": 9900,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "美团会员，享外卖红包、酒店优惠"
+    },
+    {
+      "id": "eleme",
+      "name": "饿了么超级会员",
+      "category": "shopping",
+      "currency": "CNY",
+      "amount": 10800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "饿了么超级会员，每月领红包"
+    },
+    {
+      "id": "vip",
+      "name": "唯品会超级VIP",
+      "category": "shopping",
+      "currency": "CNY",
+      "amount": 9900,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "唯品会超级VIP，折上折"
+    },
+    {
+      "id": "weibo",
+      "name": "微博会员",
+      "category": "social",
+      "currency": "CNY",
+      "amount": 9800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "微博会员，专属皮肤、评论上头条"
+    },
+    {
+      "id": "zhihu_member",
+      "name": "知乎会员",
+      "category": "social",
+      "currency": "CNY",
+      "amount": 19800,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "知乎会员，标识、评论发图"
+    },
+    {
+      "id": "douyin",
+      "name": "抖音粉丝团",
+      "category": "social",
+      "currency": "CNY",
+      "amount": 100,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "抖音粉丝团灯牌（价格因主播而异）"
+    },
+    {
+      "id": "tencent_cloud",
+      "name": "腾讯云会员",
+      "category": "tools",
+      "currency": "CNY",
+      "amount": 0,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "腾讯云服务器，按需计费"
+    },
+    {
+      "id": "aliyun",
+      "name": "阿里云会员",
+      "category": "tools",
+      "currency": "CNY",
+      "amount": 0,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "阿里云服务器，按需计费"
+    },
+    {
+      "id": "huawei_cloud",
+      "name": "华为云会员",
+      "category": "tools",
+      "currency": "CNY",
+      "amount": 0,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "华为云服务器，按需计费"
+    },
+    {
+      "id": "chatgpt_plus",
+      "name": "ChatGPT Plus",
+      "category": "tools",
+      "currency": "USD",
+      "amount": 2000,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "ChatGPT Plus订阅，GPT-4访问权限",
+      "popular": true
+    },
+    {
+      "id": "claude_pro",
+      "name": "Claude Pro",
+      "category": "tools",
+      "currency": "USD",
+      "amount": 2000,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "Claude Pro订阅"
+    },
+    {
+      "id": "notion",
+      "name": "Notion Plus",
+      "category": "tools",
+      "currency": "USD",
+      "amount": 9600,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "Notion Plus计划"
+    },
+    {
+      "id": "github_copilot",
+      "name": "GitHub Copilot",
+      "category": "tools",
+      "currency": "USD",
+      "amount": 1000,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "GitHub Copilot AI编程助手",
+      "popular": true
+    },
+    {
+      "id": "1password",
+      "name": "1Password",
+      "category": "tools",
+      "currency": "USD",
+      "amount": 3500,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "1Password密码管理器"
+    },
+    {
+      "id": "adobe_cc",
+      "name": "Adobe Creative Cloud",
+      "category": "tools",
+      "currency": "USD",
+      "amount": 59988,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "Adobe Creative Cloud全套软件"
+    },
+    {
+      "id": "canva",
+      "name": "Canva Pro",
+      "category": "tools",
+      "currency": "USD",
+      "amount": 11999,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "Canva Pro设计工具"
+    },
+    {
+      "id": "xbox_gamepass",
+      "name": "Xbox Game Pass Ultimate",
+      "category": "gaming",
+      "currency": "USD",
+      "amount": 1699,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "Xbox Game Pass终极版，含金会员、EA Play、云游戏",
+      "popular": true
+    },
+    {
+      "id": "ps_plus",
+      "name": "PlayStation Plus",
+      "category": "gaming",
+      "currency": "USD",
+      "amount": 5999,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "PlayStation Plus Essential",
+      "popular": true
+    },
+    {
+      "id": "nintendo_online",
+      "name": "Nintendo Switch Online",
+      "category": "gaming",
+      "currency": "USD",
+      "amount": 1999,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "Nintendo Switch Online个人会员"
+    },
+    {
+      "id": "steam",
+      "name": "Steam（按需充值）",
+      "category": "gaming",
+      "currency": "CNY",
+      "amount": 0,
+      "period_type": "once",
+      "auto_renew": false,
+      "notes": "Steam游戏购买，按需充值"
+    },
+    {
+      "id": "bilibili_course",
+      "name": "哔哩哔哩课堂",
+      "category": "education",
+      "currency": "CNY",
+      "amount": 0,
+      "period_type": "once",
+      "auto_renew": false,
+      "notes": "B站付费课程，按课程购买"
+    },
+    {
+      "id": "getcourse",
+      "name": "极客时间",
+      "category": "education",
+      "currency": "CNY",
+      "amount": 0,
+      "period_type": "once",
+      "auto_renew": false,
+      "notes": "极客时间专栏，按课程购买"
+    },
+    {
+      "id": "imooc",
+      "name": "慕课网会员",
+      "category": "education",
+      "currency": "CNY",
+      "amount": 24900,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "慕课网超级会员，免费看课程"
+    },
+    {
+      "id": "icloud",
+      "name": "iCloud+",
+      "category": "other",
+      "currency": "CNY",
+      "amount": 600,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "iCloud+ 50GB存储空间",
+      "popular": true
+    },
+    {
+      "id": "icloud_200",
+      "name": "iCloud+ 200GB",
+      "category": "other",
+      "currency": "CNY",
+      "amount": 2100,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "iCloud+ 200GB存储空间"
+    },
+    {
+      "id": "youtube_premium",
+      "name": "YouTube Premium",
+      "category": "video",
+      "currency": "USD",
+      "amount": 1399,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "YouTube Premium，无广告、后台播放、YouTube Music"
+    },
+    {
+      "id": "netflix",
+      "name": "Netflix",
+      "category": "video",
+      "currency": "USD",
+      "amount": 1549,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "Netflix标准版，1080P双设备"
+    },
+    {
+      "id": "disney_plus",
+      "name": "Disney+",
+      "category": "video",
+      "currency": "USD",
+      "amount": 799,
+      "period_type": "month",
+      "auto_renew": true,
+      "notes": "Disney+ Basic（含广告）"
+    },
+    {
+      "id": "amazon_prime",
+      "name": "Amazon Prime",
+      "category": "shopping",
+      "currency": "USD",
+      "amount": 13900,
+      "period_type": "year",
+      "auto_renew": true,
+      "notes": "Amazon Prime会员，免运费、Prime Video、Prime Music"
+    }
+  ]
+}

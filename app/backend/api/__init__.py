@@ -16,6 +16,7 @@ from . import (
     settings,
     statistics,
     subscriptions,
+    templates,
     web,
 )
 
@@ -25,6 +26,7 @@ def register_blueprints(app) -> None:
     app.register_blueprint(subscriptions.bp)
     app.register_blueprint(categories.bp)
     app.register_blueprint(settings.bp)
+    app.register_blueprint(templates.bp)
     app.register_blueprint(statistics.bp)
     app.register_blueprint(backup.bp)
     app.register_blueprint(notifications.bp)
