@@ -27,6 +27,11 @@ $ErrorActionPreference = "Stop"
 # ---- 进入项目根目录 ----
 $RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RootDir
+ 
+# ---- 自动激活项目 Git Hook 门禁 ----
+if ((Test-Path ".githooks") -and (Get-Command git -ErrorAction SilentlyContinue)) {
+    try { & git config core.hooksPath .githooks 2>$null | Out-Null } catch {}
+}
 
 $BackendProc = $null
 

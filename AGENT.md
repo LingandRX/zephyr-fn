@@ -27,6 +27,14 @@
 # 本地热开发（后端 :3001 + 前端 :5173）
 ./dev.sh
 
+# 一键本地代码质量门禁（推流前运行，完全对齐 CI）
+./check.sh
+# 快速检查（仅检查格式与 Lint，跳过耗时测试）
+./check.sh --fast
+
+# 激活本地 Git Hook（提交时自动 format 与 check，启动 ./dev.sh 时也会自动激活）
+git config core.hooksPath .githooks
+
 # 后端测试
 pytest tests/ -v
 # 或指定虚拟环境

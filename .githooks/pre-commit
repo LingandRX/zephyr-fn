@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# ================================================================
+#  项目轻量本地 Git Hook: pre-commit
+#  提交前自动执行代码检查与格式化，杜绝违规代码推向远端 CI。
+#
+#  启用方式（只需执行一次，或启动 ./dev.sh 自动启用）：
+#    git config core.hooksPath .githooks
+# ================================================================
+set -euo pipefail
+
+# 获取暂存区变动的文件列表（仅限新增、复制、修改）
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM || true)
+if [ -z "$STAGED_FILES" ]; then
+    exit 0
+fi
+
+# 1. 检查与自动修复 Python 文件
+PYTHON_FILES=$(echo "$STAGED_FILES" | grep -E '\.py$' || true)
+
+if [ -n "$PYTHON_FILES" ]; then
+    echo "🔍 [pre-commit] 检测到 Python 变动文件，执行代码检查与格式化..."
+
+    # 寻找可用的 ruff 工具
+    RUFF_CMD=""
+    if command -v ruff >/dev/null 2>&1; then
+        RUFF_CMD="ruff"
+    elif [ -x ".venv/bin/ruff" ]; then
+        RUFF_CMD=".venv/bin/ruff"
+    elif command -v uvx >/dev/null 2>&1; then
+        RUFF_CMD="uvx ruff"
+    elif command -v uv >/dev/null 2>&1; then
+        RUFF_CMD="uv run ruff"
+    elif python3 -m ruff --version >/dev/null 2>&1; then
+        RUFF_CMD="python3 -m ruff"
+    fi
+
+    if [ -n "$RUFF_CMD" ]; then
+        # 自动修复可自动解决的代码风格与导入排序
+        $RUFF_CMD check --fix $PYTHON_FILES
+
+        # 自动统一代码格式
+        $RUFF_CMD format $PYTHON_FILES
+
+        # 将自动修复/格式化后的改动重新加入暂存区
+        for f in $PYTHON_FILES; do
+            if [ -f "$f" ]; then
+                git add "$f"
+            fi
+        done
+
+        # 再次执行检查，拦截无法自动修复的严重语法/规范问题
+        if ! $RUFF_CMD check $PYTHON_FILES; then
+            echo "" >&2
+            echo "❌ [pre-commit] Python 代码规范检查未通过，已阻止提交。" >&2
+            echo "💡 请根据上述提示修复代码后重新执行 git commit。" >&2
+            exit 1
+        fi
+        echo "✅ [pre-commit] Python 代码检查与格式化通过！"
+    else
+        echo "⚠️  [pre-commit] 未找到 ruff 工具，跳过 Python 代码风格校验。"
+    fi
+fi
+
+# 2. 检查前端文件
+FRONTEND_FILES=$(echo "$STAGED_FILES" | grep -E '^frontend/src/.*\.(vue|js|jsx|cjs|mjs)$' || true)
+
+if [ -n "$FRONTEND_FILES" ]; then
+    if command -v npm >/dev/null 2>&1 && [ -d "frontend/node_modules" ]; then
+        echo "🔍 [pre-commit] 检测到前端变动文件，执行 ESLint 校验..."
+        if ! (cd frontend && npm run lint --silent); then
+            echo "" >&2
+            echo "❌ [pre-commit] 前端 ESLint 校验失败，已阻止提交。" >&2
+            echo "💡 请修复相关问题，或在 frontend 目录下运行 npm run lint:fix 尝试自动修复。" >&2
+            exit 1
+        fi
+        echo "✅ [pre-commit] 前端代码检查通过！"
+    fi
+fi
+
+exit 0

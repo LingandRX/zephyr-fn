@@ -30,6 +30,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# ---- 自动激活项目 Git Hook 门禁 ----
+if [ -d ".githooks" ] && command -v git >/dev/null 2>&1; then
+    git config core.hooksPath .githooks 2>/dev/null || true
+fi
+
 # ---- 退出清理（提前安装，保证任何退出路径都统一收尾）----
 # 注意：只在确实启动过服务时才打印提示，避免 -h / 迁移预检失败时出现无关噪音。
 BACKEND_PID=""

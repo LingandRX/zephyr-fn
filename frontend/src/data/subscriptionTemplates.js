@@ -42,6 +42,7 @@ export async function fetchRemoteTemplates() {
     }
   } catch (err) {
     // 网络异常时静默保持当前已有数据（无感知降级）
+    // eslint-disable-next-line no-console
     console.warn("拉取生效模板失败，保持本地数据:", err);
   }
   return {

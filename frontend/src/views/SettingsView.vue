@@ -385,6 +385,7 @@ async function loadTemplateStatus() {
       templateInfo.count = Array.isArray(res.data.templates) ? res.data.templates.length : 0;
     }
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.warn("读取模板状态失败:", err);
   }
 }
